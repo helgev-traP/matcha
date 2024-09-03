@@ -1,0 +1,13 @@
+[package]
+name = "tea-ui"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.40", features = ["full"] }
+wgpu = "22"
+winit = "0.30"
+pollster = "0.3"
+bytemuck = { version = "1.17", features = ["derive"] }
+cgmath = "0.18"
+image = "0.25"
