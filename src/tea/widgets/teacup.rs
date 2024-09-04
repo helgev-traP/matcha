@@ -7,7 +7,7 @@ pub struct Teacup {
     teacup_rgba: image::RgbaImage,
     size: crate::types::Size,
 
-    device_queue: Option<crate::DeviceQueue>,
+    device_queue: Option<crate::window::DeviceQueue>,
     texture: Option<wgpu::Texture>,
 }
 
@@ -27,7 +27,7 @@ impl Teacup {
 }
 
 impl Widget for Teacup {
-    fn set_device_queue(&mut self, device_queue: crate::DeviceQueue) {
+    fn set_device_queue(&mut self, device_queue: crate::window::DeviceQueue) {
         let size = wgpu::Extent3d {
             width: self.size.width,
             height: self.size.height,

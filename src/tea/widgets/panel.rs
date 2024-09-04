@@ -14,7 +14,7 @@ pub struct Panel {
     pub width: u32,
     pub base_color: [u8; 4],
     // render_pipeline: wgpu::RenderPipeline,
-    device_queue: Option<crate::DeviceQueue>,
+    device_queue: Option<crate::window::DeviceQueue>,
     texture: Option<wgpu::Texture>,
 
     inner_elements: Option<Box<dyn Widget>>,

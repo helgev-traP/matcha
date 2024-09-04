@@ -6,7 +6,7 @@ use winit::{self, event::Event, platform::run_on_demand::EventLoopExtRunOnDemand
 
 use cgmath::prelude::*;
 
-use crate::widgets::Panel;
+use crate::widgets::panel::Panel;
 use crate::widgets::Widget;
 
 #[repr(C)]
@@ -336,7 +336,7 @@ impl<'a> WindowState<'a> {
 
         // set top panel inner elements
 
-        let mut teacup = super::widgets::Teacup::new();
+        let mut teacup = super::widgets::teacup::Teacup::new();
         teacup.set_device_queue(self.clone_device_queue());
 
         self.top_panel.set_device_queue(self.clone_device_queue());
