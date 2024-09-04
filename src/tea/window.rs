@@ -6,10 +6,8 @@ use winit::{self, event::Event, platform::run_on_demand::EventLoopExtRunOnDemand
 
 use cgmath::prelude::*;
 
-use super::{
-    panel::Panel,
-    types::{Rgba64Float, Rgba8Uint},
-};
+use crate::widgets::Panel;
+use crate::widgets::Widget;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -124,8 +122,6 @@ impl<'a> WindowState<'a> {
             .await
             .unwrap();
 
-        println!("Adapter: {:?}", adapter.get_info());
-
         let (device, queue) = adapter
             .request_device(
                 &(wgpu::DeviceDescriptor {
@@ -181,6 +177,8 @@ impl<'a> WindowState<'a> {
         let texture_copy_shader = device_queue
             .get_device()
             .create_shader_module(wgpu::include_wgsl!("./window.wgsl"));
+
+        // pipeline
 
         let top_panel_texture_bind_group_layout = device_queue
             .get_device()
@@ -299,11 +297,9 @@ impl<'a> WindowState<'a> {
                 });
 
         let top_panel = Panel::new(
-            device_queue.clone(),
-            top_panel_texture,
             size.width,
             size.height,
-            Rgba8Uint::new(255, 0, 0, 255),
+            [128, 0, 0, 255],
         );
 
         Self {
@@ -338,12 +334,20 @@ impl<'a> WindowState<'a> {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
+        // set top panel inner elements
+
+        let mut teacup = super::widgets::Teacup::new();
+        teacup.set_device_queue(self.clone_device_queue());
+
+        self.top_panel.set_device_queue(self.clone_device_queue());
+        self.top_panel.set_inner_elements(Box::new(teacup));
+
         // get texture from top panel
 
         let top_panel_texture = self.top_panel.render();
 
         let top_panel_texture_view =
-            top_panel_texture.create_view(&wgpu::TextureViewDescriptor::default());
+            top_panel_texture.as_ref().unwrap().create_view(&wgpu::TextureViewDescriptor::default());
 
         let top_panel_texture_smapler =
             self.device_queue
@@ -391,7 +395,7 @@ impl<'a> WindowState<'a> {
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
                             r: 0.0,
-                            g: 1.0,
+                            g: 0.0,
                             b: 0.0,
                             a: 1.0,
                         }),

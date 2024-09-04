@@ -1,1 +1,2 @@
-pub mod tea;
+mod tea;
+pub use tea::*;

@@ -1,7 +1,9 @@
 mod window;
-use window::Window;
-mod panel;
-mod types;
+pub use window::Window;
+pub use window::DeviceQueue;
+pub mod types;
+pub mod widgets;
+pub use widgets::Widget;
 
 pub struct App<'a> {
     window: Window<'a>,

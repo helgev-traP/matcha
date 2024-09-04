@@ -7,26 +7,21 @@ use winit::{self, event::Event, platform::run_on_demand::EventLoopExtRunOnDemand
 
 use cgmath::prelude::*;
 
-use super::types::Rgba8Uint;
-use super::window::DeviceQueue;
+use super::{super::window::DeviceQueue, Widget};
 
 pub struct Panel {
-    pub device_queue: DeviceQueue,
-    pub texture: wgpu::Texture,
     pub height: u32,
     pub width: u32,
-    pub base_color: Rgba8Uint,
+    pub base_color: [u8; 4],
     // render_pipeline: wgpu::RenderPipeline,
+    device_queue: Option<crate::DeviceQueue>,
+    texture: Option<wgpu::Texture>,
+
+    inner_elements: Option<Box<dyn Widget>>,
 }
 
 impl Panel {
-    pub fn new(
-        device_queue: DeviceQueue,
-        texture: wgpu::Texture,
-        width: u32,
-        height: u32,
-        base_color: Rgba8Uint,
-    ) -> Self {
+    pub fn new(width: u32, height: u32, base_color: [u8; 4]) -> Self {
         /*
         let device = device_queue.get_device();
 
@@ -75,25 +70,63 @@ impl Panel {
         });
         */
         Self {
-            device_queue,
-            texture,
             height,
             width,
             base_color,
             // render_pipeline,
+            device_queue: None,
+            texture: None,
+            inner_elements: None,
         }
     }
 
-    pub fn render(&self) -> &wgpu::Texture {
+    pub fn set_inner_elements(&mut self, inner_elements: Box<dyn Widget>) {
+        self.inner_elements = Some(inner_elements);
+    }
+}
+
+impl Widget for Panel {
+    fn set_device_queue(&mut self, device_queue: DeviceQueue) {
+        let texture = device_queue
+            .get_device()
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some("Teacup Texture"),
+                size: wgpu::Extent3d {
+                    width: self.width,
+                    height: self.height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                usage: wgpu::TextureUsages::COPY_DST
+                    | wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            });
+
+        self.device_queue = Some(device_queue);
+        self.texture = Some(texture);
+    }
+
+    fn size(&self) -> &crate::types::Size {
+        todo!()
+    }
+
+    fn render(&self) -> Option<&wgpu::Texture> {
         let texture_view = self
             .texture
+            .as_ref()?
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        let mut encoder = self.device_queue.get_device().create_command_encoder(
-            &wgpu::CommandEncoderDescriptor {
+        let mut encoder = self
+            .device_queue
+            .as_ref()?
+            .get_device()
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Panel Encoder"),
-            },
-        );
+            });
 
         {
             let render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -102,14 +135,12 @@ impl Panel {
                     view: &texture_view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(
-                            wgpu::Color {
-                                r: self.base_color.0[0] as f64 / 255.0,
-                                g: self.base_color.0[1] as f64 / 255.0,
-                                b: self.base_color.0[2] as f64 / 255.0,
-                                a: self.base_color.0[3] as f64 / 255.0,
-                            },
-                        ),
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.0,
+                            g: 0.0,
+                            b: 0.0,
+                            a: 1.0,
+                        }),
                         store: wgpu::StoreOp::Store,
                     },
                 })],
@@ -119,14 +150,37 @@ impl Panel {
             });
         }
 
+        if self.inner_elements.is_some() {
+            let inner_texture = self.inner_elements.as_ref()?.render();
+
+            let size = self.inner_elements.as_ref()?.size();
+
+            encoder.copy_texture_to_texture(
+                wgpu::ImageCopyTexture {
+                    texture: inner_texture.as_ref()?,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                wgpu::ImageCopyTexture {
+                    texture: self.texture.as_ref()?,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                wgpu::Extent3d {
+                    width: size.width,
+                    height: size.height,
+                    depth_or_array_layers: 1,
+                },
+            )
+        }
+
         self.device_queue
+            .as_ref()?
             .get_queue()
             .submit(std::iter::once(encoder.finish()));
 
-        &self.texture
-    }
-
-    pub fn get_texture(&self) -> &wgpu::Texture {
-        &self.texture
+        self.texture.as_ref()
     }
 }
