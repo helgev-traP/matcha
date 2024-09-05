@@ -7,7 +7,9 @@ use winit::{self, event::Event, platform::run_on_demand::EventLoopExtRunOnDemand
 use cgmath::prelude::*;
 
 use crate::widgets::panel::Panel;
-use crate::widgets::Widget;
+use crate::widgets::Elements;
+
+use super::types::Size;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -91,12 +93,11 @@ struct WindowState<'a> {
     surface: wgpu::Surface<'a>,
     device_queue: DeviceQueue,
     config: wgpu::SurfaceConfiguration,
+    // for texture copy
     render_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
     top_panel_texture_bind_group_layout: wgpu::BindGroupLayout,
-    // panel
-    top_panel: Panel,
 }
 
 impl<'a> WindowState<'a> {
@@ -276,32 +277,6 @@ impl<'a> WindowState<'a> {
 
         let size = winit_window.inner_size();
 
-        let top_panel_texture =
-            device_queue
-                .get_device()
-                .create_texture(&wgpu::TextureDescriptor {
-                    label: Some("Top Panel Texture"),
-                    size: wgpu::Extent3d {
-                        width: size.width,
-                        height: size.height,
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                        | wgpu::TextureUsages::COPY_SRC
-                        | wgpu::TextureUsages::TEXTURE_BINDING,
-                    view_formats: &[],
-                });
-
-        let top_panel = Panel::new(
-            size.width,
-            size.height,
-            [128, 0, 0, 255],
-        );
-
         Self {
             winit_window,
             instance,
@@ -313,7 +288,6 @@ impl<'a> WindowState<'a> {
             vertex_buffer,
             index_buffer,
             top_panel_texture_bind_group_layout,
-            top_panel,
         }
     }
 
@@ -328,26 +302,17 @@ impl<'a> WindowState<'a> {
             .configure(&*self.device_queue.get_device(), &self.config);
     }
 
-    fn render(&mut self) {
+    fn render(&mut self, top_panel_texture: Option<&wgpu::Texture>) {
         let surface_texture = self.surface.get_current_texture().unwrap();
         let surface_view = surface_texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        // set top panel inner elements
-
-        let mut teacup = super::widgets::teacup::Teacup::new();
-        teacup.set_device_queue(self.clone_device_queue());
-
-        self.top_panel.set_device_queue(self.clone_device_queue());
-        self.top_panel.set_inner_elements(Box::new(teacup));
-
         // get texture from top panel
 
-        let top_panel_texture = self.top_panel.render();
-
-        let top_panel_texture_view =
-            top_panel_texture.as_ref().unwrap().create_view(&wgpu::TextureViewDescriptor::default());
+        let top_panel_texture_view = top_panel_texture
+            .unwrap()
+            .create_view(&wgpu::TextureViewDescriptor::default());
 
         let top_panel_texture_smapler =
             self.device_queue
@@ -424,6 +389,7 @@ impl<'a> WindowState<'a> {
 pub struct Window<'a> {
     winit_window: Option<Arc<winit::window::Window>>,
     window: Option<WindowState<'a>>,
+    top_panel: Panel,
 }
 
 impl<'a> Window<'a> {
@@ -431,7 +397,16 @@ impl<'a> Window<'a> {
         Self {
             winit_window: None,
             window: None,
+            top_panel: Panel::new(0, 0, [0.0, 0.0, 0.0, 1.0]),
         }
+    }
+
+    pub fn set_ui_tree(&mut self, ui_tree: Box<dyn Elements>) {
+        self.top_panel.set_inner_elements(ui_tree);
+    }
+
+    pub fn set_background_color(&mut self, color: [f64; 4]) {
+        self.top_panel.set_base_color(color);
     }
 }
 
@@ -448,6 +423,21 @@ impl<'a> winit::application::ApplicationHandler for Window<'a> {
         ));
 
         self.window = Some(window_state);
+
+        let size = self.winit_window.as_ref().unwrap().inner_size();
+
+        self.top_panel.resize(Size {
+            width: size.width,
+            height: size.height,
+        });
+
+        self.top_panel
+            .set_device_queue(self.window.as_ref().unwrap().clone_device_queue());
+
+        self.window
+            .as_mut()
+            .unwrap()
+            .render(self.top_panel.render());
     }
 
     fn window_event(
@@ -461,7 +451,13 @@ impl<'a> winit::application::ApplicationHandler for Window<'a> {
                 event_loop.exit();
             }
             winit::event::WindowEvent::RedrawRequested => {
-                self.window.as_mut().unwrap().render();
+                self.window
+                    .as_mut()
+                    .unwrap()
+                    .render(self.top_panel.render());
+            }
+            winit::event::WindowEvent::Resized(new_size) => {
+                self.window.as_mut().unwrap().resize(new_size);
             }
             _ => {}
         }

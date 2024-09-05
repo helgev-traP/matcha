@@ -1,7 +1,7 @@
 use image::GenericImageView;
 use wgpu::{core::device, util::DeviceExt};
 
-use super::Widget;
+use super::Elements;
 
 pub struct Teacup {
     teacup_rgba: image::RgbaImage,
@@ -26,7 +26,7 @@ impl Teacup {
     }
 }
 
-impl Widget for Teacup {
+impl Elements for Teacup {
     fn set_device_queue(&mut self, device_queue: crate::window::DeviceQueue) {
         let size = wgpu::Extent3d {
             width: self.size.width,
@@ -96,6 +96,9 @@ impl Widget for Teacup {
 
     fn size(&self) -> &crate::types::Size {
         &self.size
+    }
+
+    fn resize(&mut self, size: crate::types::Size) {
     }
 
     fn render(&self) -> Option<&wgpu::Texture> {

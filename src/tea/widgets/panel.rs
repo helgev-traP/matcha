@@ -7,21 +7,21 @@ use winit::{self, event::Event, platform::run_on_demand::EventLoopExtRunOnDemand
 
 use cgmath::prelude::*;
 
-use super::{super::window::DeviceQueue, Widget};
+use super::{super::window::DeviceQueue, Elements};
 
 pub struct Panel {
     pub height: u32,
     pub width: u32,
-    pub base_color: [u8; 4],
+    pub base_color: [f64; 4],
     // render_pipeline: wgpu::RenderPipeline,
     device_queue: Option<crate::window::DeviceQueue>,
     texture: Option<wgpu::Texture>,
 
-    inner_elements: Option<Box<dyn Widget>>,
+    inner_elements: Option<Box<dyn Elements>>,
 }
 
 impl Panel {
-    pub fn new(width: u32, height: u32, base_color: [u8; 4]) -> Self {
+    pub fn new(width: u32, height: u32, base_color: [f64; 4]) -> Self {
         /*
         let device = device_queue.get_device();
 
@@ -80,12 +80,20 @@ impl Panel {
         }
     }
 
-    pub fn set_inner_elements(&mut self, inner_elements: Box<dyn Widget>) {
+    pub fn set_base_color(&mut self, base_color: [f64; 4]) {
+        self.base_color = base_color;
+    }
+
+    pub fn set_inner_elements(&mut self, inner_elements: Box<dyn Elements>) {
         self.inner_elements = Some(inner_elements);
+    }
+
+    pub fn set_inner_elements_device_queue(&mut self, device_queue: DeviceQueue) {
+        self.inner_elements.as_mut().unwrap().set_device_queue(device_queue);
     }
 }
 
-impl Widget for Panel {
+impl Elements for Panel {
     fn set_device_queue(&mut self, device_queue: DeviceQueue) {
         let texture = device_queue
             .get_device()
@@ -106,12 +114,19 @@ impl Widget for Panel {
                 view_formats: &[],
             });
 
+        self.set_inner_elements_device_queue(device_queue.clone());
+
         self.device_queue = Some(device_queue);
         self.texture = Some(texture);
     }
 
     fn size(&self) -> &crate::types::Size {
         todo!()
+    }
+
+    fn resize(&mut self, size: crate::types::Size) {
+        self.width = size.width;
+        self.height = size.height;
     }
 
     fn render(&self) -> Option<&wgpu::Texture> {
@@ -136,10 +151,10 @@ impl Widget for Panel {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.0,
-                            g: 0.0,
-                            b: 0.0,
-                            a: 1.0,
+                            r: self.base_color[0],
+                            g: self.base_color[1],
+                            b: self.base_color[2],
+                            a: self.base_color[3],
                         }),
                         store: wgpu::StoreOp::Store,
                     },
