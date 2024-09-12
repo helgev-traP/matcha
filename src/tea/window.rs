@@ -1,15 +1,18 @@
+use cgmath::prelude::*;
 use std::sync::Arc;
-
 use wgpu::{core::device, util::DeviceExt};
-
 use winit::{self, event::Event, platform::run_on_demand::EventLoopExtRunOnDemand};
 
-use cgmath::prelude::*;
+use crate::application_context::ApplicationContext;
+use crate::cosmic::FontContext;
+use crate::panels::panel::Panel;
+use crate::types::Size;
+use crate::ui::RenderArea;
+use crate::ui::Ui;
+use crate::ui::Widgets;
 
-use crate::widgets::panel::Panel;
-use crate::widgets::Elements;
-
-use super::types::Size;
+use super::widgets;
+use super::widgets::teacup;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -60,30 +63,6 @@ impl TextureCopyVertex {
 
 const INDICES: &[u16] = &[0, 1, 2, 0, 2, 3];
 
-pub struct DeviceQueue {
-    device: Arc<wgpu::Device>,
-    queue: Arc<wgpu::Queue>,
-}
-
-impl DeviceQueue {
-    pub fn get_device(&self) -> &Arc<wgpu::Device> {
-        &self.device
-    }
-
-    pub fn get_queue(&self) -> &Arc<wgpu::Queue> {
-        &self.queue
-    }
-}
-
-impl Clone for DeviceQueue {
-    fn clone(&self) -> Self {
-        Self {
-            device: self.device.clone(),
-            queue: self.queue.clone(),
-        }
-    }
-}
-
 struct WindowState<'a> {
     // winit
     winit_window: Arc<winit::window::Window>,
@@ -91,7 +70,7 @@ struct WindowState<'a> {
     instance: wgpu::Instance,
     adapter: wgpu::Adapter,
     surface: wgpu::Surface<'a>,
-    device_queue: DeviceQueue,
+    app_context: ApplicationContext,
     config: wgpu::SurfaceConfiguration,
     // for texture copy
     render_pipeline: wgpu::RenderPipeline,
@@ -101,7 +80,10 @@ struct WindowState<'a> {
 }
 
 impl<'a> WindowState<'a> {
-    async fn new(winit_window: Arc<winit::window::Window>) -> Self {
+    async fn new(
+        winit_window: Arc<winit::window::Window>,
+        cosmic_context: Option<FontContext>,
+    ) -> Self {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             #[cfg(not(target_arch = "wasm32"))]
             backends: wgpu::Backends::PRIMARY,
@@ -115,7 +97,7 @@ impl<'a> WindowState<'a> {
         let adapter = instance
             .request_adapter(
                 &(wgpu::RequestAdapterOptions {
-                    power_preference: wgpu::PowerPreference::default(),
+                    power_preference: wgpu::PowerPreference::HighPerformance,
                     compatible_surface: Some(&surface),
                     force_fallback_adapter: false,
                 }),
@@ -168,22 +150,14 @@ impl<'a> WindowState<'a> {
 
         surface.configure(&device, &config);
 
-        let device_queue = DeviceQueue {
-            device: Arc::new(device),
-            queue: Arc::new(queue),
-        };
-
         // shader
 
-        let texture_copy_shader = device_queue
-            .get_device()
-            .create_shader_module(wgpu::include_wgsl!("./window.wgsl"));
+        let texture_copy_shader = device.create_shader_module(wgpu::include_wgsl!("./window.wgsl"));
 
         // pipeline
 
-        let top_panel_texture_bind_group_layout = device_queue
-            .get_device()
-            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        let top_panel_texture_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("Top Panel Texture Bind Group Layout"),
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
@@ -206,83 +180,77 @@ impl<'a> WindowState<'a> {
             });
 
         let render_pipeline_layout =
-            device_queue
-                .get_device()
-                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some("Window Render Pipeline Layout"),
-                    bind_group_layouts: &[&top_panel_texture_bind_group_layout],
-                    push_constant_ranges: &[],
-                });
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Window Render Pipeline Layout"),
+                bind_group_layouts: &[&top_panel_texture_bind_group_layout],
+                push_constant_ranges: &[],
+            });
 
-        let render_pipeline =
-            device_queue
-                .get_device()
-                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                    label: Some("Window Render Pipeline"),
-                    layout: Some(&render_pipeline_layout),
-                    vertex: wgpu::VertexState {
-                        module: &texture_copy_shader,
-                        entry_point: "vs_main",
-                        buffers: &[TextureCopyVertex::desc()],
-                        compilation_options: wgpu::PipelineCompilationOptions::default(),
-                    },
-                    fragment: Some(wgpu::FragmentState {
-                        module: &texture_copy_shader,
-                        entry_point: "fs_main",
-                        targets: &[Some(wgpu::ColorTargetState {
-                            format: config.format,
-                            blend: Some(wgpu::BlendState::REPLACE),
-                            write_mask: wgpu::ColorWrites::ALL,
-                        })],
-                        compilation_options: wgpu::PipelineCompilationOptions::default(),
-                    }),
-                    primitive: wgpu::PrimitiveState {
-                        topology: wgpu::PrimitiveTopology::TriangleList,
-                        strip_index_format: None,
-                        front_face: wgpu::FrontFace::Ccw,
-                        cull_mode: Some(wgpu::Face::Back),
-                        polygon_mode: wgpu::PolygonMode::Fill,
-                        conservative: false,
-                        unclipped_depth: false,
-                    },
-                    depth_stencil: None,
-                    multisample: wgpu::MultisampleState {
-                        count: 1,
-                        mask: !0,
-                        alpha_to_coverage_enabled: false,
-                    },
-                    multiview: None,
-                    cache: None,
-                });
+        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Window Render Pipeline"),
+            layout: Some(&render_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &texture_copy_shader,
+                entry_point: "vs_main",
+                buffers: &[TextureCopyVertex::desc()],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &texture_copy_shader,
+                entry_point: "fs_main",
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: config.format,
+                    blend: Some(wgpu::BlendState::REPLACE),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                polygon_mode: wgpu::PolygonMode::Fill,
+                conservative: false,
+                unclipped_depth: false,
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview: None,
+            cache: None,
+        });
 
-        let vertex_buffer =
-            device_queue
-                .get_device()
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Vertex Buffer"),
-                    contents: bytemuck::cast_slice(VERTICES),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Vertex Buffer"),
+            contents: bytemuck::cast_slice(VERTICES),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
 
-        let index_buffer =
-            device_queue
-                .get_device()
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Index Buffer"),
-                    contents: bytemuck::cast_slice(INDICES),
-                    usage: wgpu::BufferUsages::INDEX,
-                });
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Index Buffer"),
+            contents: bytemuck::cast_slice(INDICES),
+            usage: wgpu::BufferUsages::INDEX,
+        });
 
-        // make texture for top panel
+        let app_context;
 
-        let size = winit_window.inner_size();
+        if cosmic_context.is_none() {
+            app_context = ApplicationContext::new(device, queue);
+        } else {
+            app_context =
+                ApplicationContext::new_with_context(device, queue, cosmic_context.unwrap());
+        }
 
         Self {
             winit_window,
             instance,
             adapter,
             surface,
-            device_queue,
+            app_context,
             config,
             render_pipeline,
             vertex_buffer,
@@ -291,15 +259,15 @@ impl<'a> WindowState<'a> {
         }
     }
 
-    fn clone_device_queue(&self) -> DeviceQueue {
-        self.device_queue.clone()
+    fn clone_device_queue(&self) -> ApplicationContext {
+        self.app_context.clone()
     }
 
     fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
         self.config.width = new_size.width;
         self.config.height = new_size.height;
         self.surface
-            .configure(&*self.device_queue.get_device(), &self.config);
+            .configure(&*self.app_context.get_wgpu_device(), &self.config);
     }
 
     fn render(&mut self, top_panel_texture: Option<&wgpu::Texture>) {
@@ -315,8 +283,8 @@ impl<'a> WindowState<'a> {
             .create_view(&wgpu::TextureViewDescriptor::default());
 
         let top_panel_texture_smapler =
-            self.device_queue
-                .get_device()
+            self.app_context
+                .get_wgpu_device()
                 .create_sampler(&wgpu::SamplerDescriptor {
                     address_mode_u: wgpu::AddressMode::ClampToEdge,
                     address_mode_v: wgpu::AddressMode::ClampToEdge,
@@ -328,8 +296,8 @@ impl<'a> WindowState<'a> {
                 });
 
         let top_panel_texture_bind_group =
-            self.device_queue
-                .get_device()
+            self.app_context
+                .get_wgpu_device()
                 .create_bind_group(&wgpu::BindGroupDescriptor {
                     label: Some("Top Panel Texture Bind Group"),
                     layout: &self.top_panel_texture_bind_group_layout,
@@ -345,7 +313,7 @@ impl<'a> WindowState<'a> {
                     ],
                 });
 
-        let mut encoder = self.device_queue.get_device().create_command_encoder(
+        let mut encoder = self.app_context.get_wgpu_device().create_command_encoder(
             &wgpu::CommandEncoderDescriptor {
                 label: Some("WindowState encoder"),
             },
@@ -379,8 +347,8 @@ impl<'a> WindowState<'a> {
             render_pass.draw_indexed(0..INDICES.len() as u32, 0, 0..1);
         }
 
-        self.device_queue
-            .get_queue()
+        self.app_context
+            .get_wgpu_queue()
             .submit(std::iter::once(encoder.finish()));
         surface_texture.present();
     }
@@ -390,6 +358,7 @@ pub struct Window<'a> {
     winit_window: Option<Arc<winit::window::Window>>,
     window: Option<WindowState<'a>>,
     top_panel: Panel,
+    cosmic_context: Option<crate::cosmic::FontContext>,
 }
 
 impl<'a> Window<'a> {
@@ -397,16 +366,17 @@ impl<'a> Window<'a> {
         Self {
             winit_window: None,
             window: None,
-            top_panel: Panel::new(0, 0, [0.0, 0.0, 0.0, 1.0]),
+            top_panel: Panel::new(0.0, 0.0),
+            cosmic_context: None,
         }
     }
 
-    pub fn set_ui_tree(&mut self, ui_tree: Box<dyn Elements>) {
-        self.top_panel.set_inner_elements(ui_tree);
+    pub fn set_cosmic_context(&mut self, cosmic_context: crate::cosmic::FontContext) {
+        self.cosmic_context = Some(cosmic_context);
     }
 
-    pub fn set_background_color(&mut self, color: [f64; 4]) {
-        self.top_panel.set_base_color(color);
+    pub fn get_top_panel(&mut self) -> &mut Panel {
+        &mut self.top_panel
     }
 }
 
@@ -418,8 +388,11 @@ impl<'a> winit::application::ApplicationHandler for Window<'a> {
                 .unwrap(),
         ));
 
+        let context = std::mem::take(&mut self.cosmic_context);
+
         let window_state = pollster::block_on(WindowState::new(
             self.winit_window.as_ref().unwrap().clone(),
+            context,
         ));
 
         self.window = Some(window_state);
@@ -427,17 +400,12 @@ impl<'a> winit::application::ApplicationHandler for Window<'a> {
         let size = self.winit_window.as_ref().unwrap().inner_size();
 
         self.top_panel.resize(Size {
-            width: size.width,
-            height: size.height,
+            width: size.width as f32,
+            height: size.height as f32,
         });
 
         self.top_panel
-            .set_device_queue(self.window.as_ref().unwrap().clone_device_queue());
-
-        self.window
-            .as_mut()
-            .unwrap()
-            .render(self.top_panel.render());
+            .set_application_context(self.window.as_ref().unwrap().clone_device_queue());
     }
 
     fn window_event(
@@ -457,7 +425,13 @@ impl<'a> winit::application::ApplicationHandler for Window<'a> {
                     .render(self.top_panel.render());
             }
             winit::event::WindowEvent::Resized(new_size) => {
-                self.window.as_mut().unwrap().resize(new_size);
+                if new_size.width > 0 && new_size.height > 0 {
+                    self.window.as_mut().unwrap().resize(new_size);
+                    self.top_panel.resize(Size {
+                        width: new_size.width as f32,
+                        height: new_size.height as f32,
+                    });
+                }
             }
             _ => {}
         }

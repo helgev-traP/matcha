@@ -1,21 +1,28 @@
 // Colors
 
 pub struct Rgba8Uint {
-    r: u8,
-    g: u8,
-    b: u8,
-    a: u8,
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+    pub a: u8,
 }
 
 pub struct Rgba64Float {
-    r: f64,
-    g: f64,
-    b: f64,
-    a: f64,
+    pub r: f64,
+    pub g: f64,
+    pub b: f64,
+    pub a: f64,
 }
 
 // size
+pub enum SizeUnit {
+    Pixel(f32),
+    Percent(f32),
+    WindowPercent(f32),
+}
+
+#[derive(Clone, Copy)]
 pub struct Size {
-    pub width: u32,
-    pub height: u32,
+    pub width: f32,
+    pub height: f32,
 }

@@ -1,3 +1,20 @@
 {
-  "cSpell.words": ["srgb", "webgl", "wgpu", "wgsl", "winit"]
+  "cSpell.words": [
+    "bytemuck",
+    "cgmath",
+    "mipmap",
+    "multisample",
+    "multisampled",
+    "multiview",
+    "Rasterizer",
+    "repr",
+    "srgb",
+    "unclipped",
+    "Unorm",
+    "webgl",
+    "wgpu",
+    "wgsl",
+    "winit",
+    "Zeroable"
+  ]
 }

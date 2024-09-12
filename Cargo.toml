@@ -11,3 +11,7 @@ pollster = "0.3"
 bytemuck = { version = "1.17", features = ["derive"] }
 cgmath = "0.18"
 image = "0.25"
+font-kit = "0.14"
+pathfinder_geometry = "0.5.1"
+cosmic-text = "0.12.1"
+
