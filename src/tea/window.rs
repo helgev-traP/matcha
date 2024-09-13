@@ -1,5 +1,6 @@
 use cgmath::prelude::*;
 use std::sync::Arc;
+use wgpu::naga::proc::index;
 use wgpu::{core::device, util::DeviceExt};
 use winit::{self, event::Event, platform::run_on_demand::EventLoopExtRunOnDemand};
 
@@ -11,57 +12,9 @@ use crate::ui::RenderArea;
 use crate::ui::Ui;
 use crate::ui::Widgets;
 
+use super::vertex::TexturedVertex;
 use super::widgets;
 use super::widgets::teacup;
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct TextureCopyVertex {
-    position: [f32; 3],
-    tex_coords: [f32; 2],
-}
-
-const VERTICES: &[TextureCopyVertex] = &[
-    TextureCopyVertex {
-        position: [-1.0, 1.0, 0.0],
-        tex_coords: [0.0, 0.0],
-    },
-    TextureCopyVertex {
-        position: [-1.0, -1.0, 0.0],
-        tex_coords: [0.0, 1.0],
-    },
-    TextureCopyVertex {
-        position: [1.0, -1.0, 0.0],
-        tex_coords: [1.0, 1.0],
-    },
-    TextureCopyVertex {
-        position: [1.0, 1.0, 0.0],
-        tex_coords: [1.0, 0.0],
-    },
-];
-
-impl TextureCopyVertex {
-    fn desc() -> wgpu::VertexBufferLayout<'static> {
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<TextureCopyVertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x3,
-                },
-                wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x2,
-                },
-            ],
-        }
-    }
-}
-
-const INDICES: &[u16] = &[0, 1, 2, 0, 2, 3];
 
 struct WindowState<'a> {
     // winit
@@ -76,6 +29,7 @@ struct WindowState<'a> {
     render_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
+    index_len: u32,
     top_panel_texture_bind_group_layout: wgpu::BindGroupLayout,
 }
 
@@ -192,7 +146,7 @@ impl<'a> WindowState<'a> {
             vertex: wgpu::VertexState {
                 module: &texture_copy_shader,
                 entry_point: "vs_main",
-                buffers: &[TextureCopyVertex::desc()],
+                buffers: &[TexturedVertex::desc()],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -224,18 +178,6 @@ impl<'a> WindowState<'a> {
             cache: None,
         });
 
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(VERTICES),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(INDICES),
-            usage: wgpu::BufferUsages::INDEX,
-        });
-
         let app_context;
 
         if cosmic_context.is_none() {
@@ -244,6 +186,9 @@ impl<'a> WindowState<'a> {
             app_context =
                 ApplicationContext::new_with_context(device, queue, cosmic_context.unwrap());
         }
+
+        let (vertex_buffer, index_buffer, index_len) =
+            TexturedVertex::rectangle_buffer(&app_context, -1.0, 1.0, 2.0, 2.0, false);
 
         Self {
             winit_window,
@@ -255,6 +200,7 @@ impl<'a> WindowState<'a> {
             render_pipeline,
             vertex_buffer,
             index_buffer,
+            index_len,
             top_panel_texture_bind_group_layout,
         }
     }
@@ -344,7 +290,7 @@ impl<'a> WindowState<'a> {
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             render_pass.set_bind_group(0, &top_panel_texture_bind_group, &[]);
-            render_pass.draw_indexed(0..INDICES.len() as u32, 0, 0..1);
+            render_pass.draw_indexed(0..self.index_len as u32, 0, 0..1);
         }
 
         self.app_context

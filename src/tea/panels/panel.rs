@@ -35,8 +35,28 @@ pub struct InnerPanel {
 }
 
 impl Panel {
-    pub fn as_inner_panel(&self) -> InnerPanel {
-        todo!()
+    pub fn as_inner_panel(mut self, position: InnerPanelPosition, thickness: f32) -> InnerPanel {
+        match position {
+            InnerPanelPosition::Top | InnerPanelPosition::Bottom => {
+                self.event(&crate::event::Event::Resize(crate::types::Size {
+                    width: -1.0,
+                    height: thickness,
+                }));
+            }
+            InnerPanelPosition::Left | InnerPanelPosition::Right => {
+                self.event(&crate::event::Event::Resize(crate::types::Size {
+                    width: thickness,
+                    height: -1.0,
+                }));
+            }
+            InnerPanelPosition::Floating { .. } => (),
+        }
+
+        InnerPanel {
+            position,
+            thickness,
+            panel: self,
+        }
     }
 }
 
@@ -96,6 +116,20 @@ impl InnerPanel {
 
     pub fn add_floating_panel(&mut self, x: f32, y: f32, z: f32, size: Size) -> &mut InnerPanel {
         self.panel.add_floating_panel(x, y, z, size)
+    }
+}
+
+impl Ui for InnerPanel {
+    fn set_application_context(&mut self, context: crate::application_context::ApplicationContext) {
+        self.panel.set_application_context(context);
+    }
+
+    fn size(&self) -> crate::types::Size {
+        self.panel.size()
+    }
+
+    fn event(&mut self, event: &crate::event::Event) {
+        self.panel.event(event);
     }
 }
 
@@ -464,6 +498,26 @@ impl Ui for Panel {
     fn event(&mut self, event: &crate::event::Event) {
         match event {
             crate::event::Event::Resize(size) => {
+                // cuculate sum of thickness
+                let mut sum_of_thickness_vertical = 0.0;
+                let mut sum_of_thickness_horizontal = 0.0;
+                for panel in &self.inner_panels {
+                    match panel.position {
+                        InnerPanelPosition::Top | InnerPanelPosition::Bottom => {
+                            sum_of_thickness_vertical += panel.thickness;
+                        }
+                        InnerPanelPosition::Left | InnerPanelPosition::Right => {
+                            sum_of_thickness_horizontal += panel.thickness;
+                        }
+                        InnerPanelPosition::Floating { .. } => (),
+                    }
+                }
+
+                if size.width <= sum_of_thickness_horizontal || size.height <= sum_of_thickness_vertical
+                {
+                    return;
+                }
+
                 // set info
                 self.size = *size;
 
