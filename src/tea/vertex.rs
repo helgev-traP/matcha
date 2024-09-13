@@ -72,23 +72,21 @@ impl TexturedVertex {
         let vertex_buffer;
 
         if compute {
-            vertex_buffer =
-                device_queue
-                    .get_wgpu_device()
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Vertex Buffer"),
-                        contents: bytemuck::cast_slice(&vertices),
-                        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::STORAGE,
-                    });
+            vertex_buffer = device_queue.get_wgpu_device().create_buffer_init(
+                &wgpu::util::BufferInitDescriptor {
+                    label: Some("Vertex Buffer"),
+                    contents: bytemuck::cast_slice(&vertices),
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::STORAGE,
+                },
+            );
         } else {
-            vertex_buffer =
-                device_queue
-                    .get_wgpu_device()
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Vertex Buffer"),
-                        contents: bytemuck::cast_slice(&vertices),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    });
+            vertex_buffer = device_queue.get_wgpu_device().create_buffer_init(
+                &wgpu::util::BufferInitDescriptor {
+                    label: Some("Vertex Buffer"),
+                    contents: bytemuck::cast_slice(&vertices),
+                    usage: wgpu::BufferUsages::VERTEX,
+                },
+            );
         }
 
         let index_buffer =
@@ -154,6 +152,35 @@ impl ColoredVertex {
         }
     }
 
+    pub fn rectangle_srgb(
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        color: [u8; 4],
+    ) -> ([ColoredVertex; 4], [u16; 6]) {
+        let color = [
+            if color[0] as f32 / 255.0 <= 0.04045 {
+                color[0] as f32 / 255.0 / 12.92
+            } else {
+                ((color[0] as f32 / 255.0 + 0.055) / 1.055).powf(2.4)
+            },
+            if color[1] as f32 / 255.0 <= 0.04045 {
+                color[1] as f32 / 255.0 / 12.92
+            } else {
+                ((color[1] as f32 / 255.0 + 0.055) / 1.055).powf(2.4)
+            },
+            if color[2] as f32 / 255.0 <= 0.04045 {
+                color[2] as f32 / 255.0 / 12.92
+            } else {
+                ((color[2] as f32 / 255.0 + 0.055) / 1.055).powf(2.4)
+            },
+            color[3] as f32 / 255.0,
+        ];
+
+        ColoredVertex::rectangle(x, y, width, height, color)
+    }
+
     pub fn rectangle(
         x: f32,
         y: f32,
@@ -189,41 +216,70 @@ impl ColoredVertex {
         )
     }
 
+    pub fn rectangle_buffer_srgb(
+        app_context: &ApplicationContext,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        color: [u8; 4],
+        compute: bool,
+    ) -> (wgpu::Buffer, wgpu::Buffer, u32) {
+        let color = [
+            if color[0] as f32 / 255.0 <= 0.04045 {
+                color[0] as f32 / 255.0 / 12.92
+            } else {
+                ((color[0] as f32 / 255.0 + 0.055) / 1.055).powf(2.4)
+            },
+            if color[1] as f32 / 255.0 <= 0.04045 {
+                color[1] as f32 / 255.0 / 12.92
+            } else {
+                ((color[1] as f32 / 255.0 + 0.055) / 1.055).powf(2.4)
+            },
+            if color[2] as f32 / 255.0 <= 0.04045 {
+                color[2] as f32 / 255.0 / 12.92
+            } else {
+                ((color[2] as f32 / 255.0 + 0.055) / 1.055).powf(2.4)
+            },
+            color[3] as f32 / 255.0,
+        ];
+
+        ColoredVertex::rectangle_buffer(app_context, x, y, width, height, color, compute)
+    }
+
     pub fn rectangle_buffer(
-        device_queue: &ApplicationContext,
+        app_context: &ApplicationContext,
         x: f32,
         y: f32,
         width: f32,
         height: f32,
         color: [f32; 4],
         compute: bool,
-    ) -> (wgpu::Buffer, wgpu::Buffer) {
+    ) -> (wgpu::Buffer, wgpu::Buffer, u32) {
         let (vertices, indices) = ColoredVertex::rectangle(x, y, width, height, color);
 
         let vertex_buffer;
 
         if compute {
-            vertex_buffer =
-                device_queue
-                    .get_wgpu_device()
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Vertex Buffer"),
-                        contents: bytemuck::cast_slice(&vertices),
-                        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::STORAGE,
-                    });
+            vertex_buffer = app_context.get_wgpu_device().create_buffer_init(
+                &wgpu::util::BufferInitDescriptor {
+                    label: Some("Vertex Buffer"),
+                    contents: bytemuck::cast_slice(&vertices),
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::STORAGE,
+                },
+            );
         } else {
-            vertex_buffer =
-                device_queue
-                    .get_wgpu_device()
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Vertex Buffer"),
-                        contents: bytemuck::cast_slice(&vertices),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    });
+            vertex_buffer = app_context.get_wgpu_device().create_buffer_init(
+                &wgpu::util::BufferInitDescriptor {
+                    label: Some("Vertex Buffer"),
+                    contents: bytemuck::cast_slice(&vertices),
+                    usage: wgpu::BufferUsages::VERTEX,
+                },
+            );
         }
 
         let index_buffer =
-            device_queue
+            app_context
                 .get_wgpu_device()
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("Index Buffer"),
@@ -231,6 +287,6 @@ impl ColoredVertex {
                     usage: wgpu::BufferUsages::INDEX,
                 });
 
-        (vertex_buffer, index_buffer)
+        (vertex_buffer, index_buffer, indices.len() as u32)
     }
 }

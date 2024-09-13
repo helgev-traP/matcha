@@ -21,7 +21,7 @@ pub enum SizeUnit {
     WindowPercent(f32),
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Size {
     pub width: f32,
     pub height: f32,

@@ -1,4 +1,4 @@
-use super::{panels::panel::InnerPanel, ui::Widgets, window::Window};
+use super::{panels::panel::InnerPanel, types::Size, ui::Widgets, window::Window};
 
 pub struct App<'a> {
     // model
@@ -37,19 +37,19 @@ impl<'a> App<'a> {
         self.window.get_top_panel().add_widget(widget);
     }
 
-    pub fn add_top_panel(&mut self, thickness: f32) -> &InnerPanel {
+    pub fn add_top_panel(&mut self, thickness: f32) -> &mut InnerPanel {
         self.window.get_top_panel().add_top_panel(thickness)
     }
 
-    pub fn add_bottom_panel(&mut self, thickness: f32) -> &InnerPanel {
+    pub fn add_bottom_panel(&mut self, thickness: f32) -> &mut InnerPanel {
         self.window.get_top_panel().add_bottom_panel(thickness)
     }
 
-    pub fn add_left_panel(&mut self, thickness: f32) -> &InnerPanel {
+    pub fn add_left_panel(&mut self, thickness: f32) -> &mut InnerPanel {
         self.window.get_top_panel().add_left_panel(thickness)
     }
 
-    pub fn add_right_panel(&mut self, thickness: f32) -> &InnerPanel {
+    pub fn add_right_panel(&mut self, thickness: f32) -> &mut InnerPanel {
         self.window.get_top_panel().add_right_panel(thickness)
     }
 
@@ -58,10 +58,9 @@ impl<'a> App<'a> {
         x: f32,
         y: f32,
         z: f32,
-        width: f32,
-        height: f32,
+        size: Size,
     ) -> &InnerPanel {
-        self.window.get_top_panel().add_floating_panel(x, y, z, width, height)
+        self.window.get_top_panel().add_floating_panel(x, y, z, size)
     }
 
     pub fn run(&mut self) {

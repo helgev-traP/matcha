@@ -366,7 +366,10 @@ impl<'a> Window<'a> {
         Self {
             winit_window: None,
             window: None,
-            top_panel: Panel::new(0.0, 0.0),
+            top_panel: Panel::new(Size {
+                width: -1.0,
+                height: -1.0,
+            }),
             cosmic_context: None,
         }
     }
