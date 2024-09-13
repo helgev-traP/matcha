@@ -10,15 +10,10 @@ use crate::panels::panel::Panel;
 use crate::types::Size;
 use crate::ui::RenderArea;
 use crate::ui::Ui;
-use crate::ui::Widgets;
 
 use super::vertex::TexturedVertex;
-use super::widgets;
-use super::widgets::teacup;
 
 struct WindowState<'a> {
-    // winit
-    winit_window: Arc<winit::window::Window>,
     // wgpu
     instance: wgpu::Instance,
     adapter: wgpu::Adapter,
@@ -27,9 +22,6 @@ struct WindowState<'a> {
     config: wgpu::SurfaceConfiguration,
     // for texture copy
     render_pipeline: wgpu::RenderPipeline,
-    vertex_buffer: wgpu::Buffer,
-    index_buffer: wgpu::Buffer,
-    index_len: u32,
     top_panel_texture_bind_group_layout: wgpu::BindGroupLayout,
 }
 
@@ -187,20 +179,13 @@ impl<'a> WindowState<'a> {
                 ApplicationContext::new_with_context(device, queue, cosmic_context.unwrap());
         }
 
-        let (vertex_buffer, index_buffer, index_len) =
-            TexturedVertex::rectangle_buffer(&app_context, -1.0, 1.0, 2.0, 2.0, false);
-
         Self {
-            winit_window,
             instance,
             adapter,
             surface,
             app_context,
             config,
             render_pipeline,
-            vertex_buffer,
-            index_buffer,
-            index_len,
             top_panel_texture_bind_group_layout,
         }
     }
@@ -216,7 +201,7 @@ impl<'a> WindowState<'a> {
             .configure(&*self.app_context.get_wgpu_device(), &self.config);
     }
 
-    fn render(&mut self, top_panel_texture: Option<&wgpu::Texture>) {
+    fn render(&mut self, top_panel_texture: Option<&wgpu::Texture>, top_panel_size: Size) {
         let surface_texture = self.surface.get_current_texture().unwrap();
         let surface_view = surface_texture
             .texture
@@ -259,6 +244,23 @@ impl<'a> WindowState<'a> {
                     ],
                 });
 
+        let (vertex_buffer, index_buffer, index_len) = TexturedVertex::rectangle_buffer(
+            &self.app_context,
+            -1.0,
+            1.0,
+            if self.config.width as f32 <= top_panel_size.width {
+                2.0 * top_panel_size.width / self.config.width as f32
+            } else {
+                2.0
+            },
+            if self.config.height as f32 <= top_panel_size.height {
+                2.0 * top_panel_size.height / self.config.height as f32
+            } else {
+                2.0
+            },
+            false,
+        );
+
         let mut encoder = self.app_context.get_wgpu_device().create_command_encoder(
             &wgpu::CommandEncoderDescriptor {
                 label: Some("WindowState encoder"),
@@ -287,10 +289,10 @@ impl<'a> WindowState<'a> {
             });
 
             render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+            render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             render_pass.set_bind_group(0, &top_panel_texture_bind_group, &[]);
-            render_pass.draw_indexed(0..self.index_len as u32, 0, 0..1);
+            render_pass.draw_indexed(0..index_len as u32, 0, 0..1);
         }
 
         self.app_context
@@ -372,7 +374,7 @@ impl<'a> winit::application::ApplicationHandler for Window<'a> {
                 self.window
                     .as_mut()
                     .unwrap()
-                    .render(self.top_panel.render());
+                    .render(self.top_panel.render(), self.top_panel.size());
             }
             winit::event::WindowEvent::Resized(new_size) => {
                 if new_size.width > 0 && new_size.height > 0 {

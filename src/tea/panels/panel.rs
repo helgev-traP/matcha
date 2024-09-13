@@ -513,18 +513,15 @@ impl Ui for Panel {
                     }
                 }
 
-                if size.width <= sum_of_thickness_horizontal || size.height <= sum_of_thickness_vertical
-                {
-                    return;
-                }
-
                 // set info
-                self.size = *size;
+
+                self.size.width = size.width.max(sum_of_thickness_horizontal).max(1.0);
+                self.size.height = size.height.max(sum_of_thickness_vertical).max(1.0);
 
                 // resize texture
-                if let Some(gpu_fields) = &self.gpu_fields {
+                if let Some(gpu_fields) = &mut self.gpu_fields {
                     let device = self.app_context.as_ref().unwrap().get_wgpu_device();
-                    let texture = device.create_texture(&wgpu::TextureDescriptor {
+                    gpu_fields.texture = device.create_texture(&wgpu::TextureDescriptor {
                         label: Some("Panel Texture"),
                         size: wgpu::Extent3d {
                             width: self.size.width as u32,
@@ -541,7 +538,6 @@ impl Ui for Panel {
                             | wgpu::TextureUsages::COPY_DST,
                         view_formats: &[],
                     });
-                    self.gpu_fields.as_mut().unwrap().texture = texture;
                 }
 
                 // resize inner panels
@@ -595,11 +591,6 @@ impl Panel {
             .as_ref()
             .expect("context not exist.")
             .get_wgpu_device();
-        let queue = self
-            .app_context
-            .as_ref()
-            .expect("context not exist.")
-            .get_wgpu_queue();
 
         // scissor area
 
