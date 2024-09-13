@@ -461,57 +461,66 @@ impl Ui for Panel {
         self.size
     }
 
-    fn resize(&mut self, size: crate::types::Size) {
-        // set info
-        self.size = size;
+    fn event(&mut self, event: &crate::event::Event) {
+        match event {
+            crate::event::Event::Resize(size) => {
+                // set info
+                self.size = *size;
 
-        // resize texture
-        if let Some(gpu_fields) = &self.gpu_fields {
-            let device = self.app_context.as_ref().unwrap().get_wgpu_device();
-            let texture = device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("Panel Texture"),
-                size: wgpu::Extent3d {
-                    width: self.size.width as u32,
-                    height: self.size.height as u32,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                    | wgpu::TextureUsages::TEXTURE_BINDING
-                    | wgpu::TextureUsages::COPY_SRC
-                    | wgpu::TextureUsages::COPY_DST,
-                view_formats: &[],
-            });
-            self.gpu_fields.as_mut().unwrap().texture = texture;
-        }
-
-        // resize inner panels
-        let mut sum_of_thickness_vertical = 0.0;
-        let mut sum_of_thickness_horizontal = 0.0;
-
-        for inner_panel in &mut self.inner_panels {
-            match inner_panel.position {
-                InnerPanelPosition::Top | InnerPanelPosition::Bottom => {
-                    inner_panel.panel.resize(crate::types::Size {
-                        width: self.size.width - sum_of_thickness_horizontal,
-                        height: inner_panel.thickness,
+                // resize texture
+                if let Some(gpu_fields) = &self.gpu_fields {
+                    let device = self.app_context.as_ref().unwrap().get_wgpu_device();
+                    let texture = device.create_texture(&wgpu::TextureDescriptor {
+                        label: Some("Panel Texture"),
+                        size: wgpu::Extent3d {
+                            width: self.size.width as u32,
+                            height: self.size.height as u32,
+                            depth_or_array_layers: 1,
+                        },
+                        mip_level_count: 1,
+                        sample_count: 1,
+                        dimension: wgpu::TextureDimension::D2,
+                        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                            | wgpu::TextureUsages::TEXTURE_BINDING
+                            | wgpu::TextureUsages::COPY_SRC
+                            | wgpu::TextureUsages::COPY_DST,
+                        view_formats: &[],
                     });
-
-                    sum_of_thickness_vertical += inner_panel.thickness;
+                    self.gpu_fields.as_mut().unwrap().texture = texture;
                 }
-                InnerPanelPosition::Left | InnerPanelPosition::Right => {
-                    inner_panel.panel.resize(crate::types::Size {
-                        width: inner_panel.thickness,
-                        height: self.size.height - sum_of_thickness_vertical,
-                    });
 
-                    sum_of_thickness_horizontal += inner_panel.thickness;
+                // resize inner panels
+                let mut sum_of_thickness_vertical = 0.0;
+                let mut sum_of_thickness_horizontal = 0.0;
+
+                for inner_panel in &mut self.inner_panels {
+                    match inner_panel.position {
+                        InnerPanelPosition::Top | InnerPanelPosition::Bottom => {
+                            inner_panel.panel.event(&crate::event::Event::Resize(
+                                crate::types::Size {
+                                    width: self.size.width - sum_of_thickness_horizontal,
+                                    height: inner_panel.thickness,
+                                },
+                            ));
+
+                            sum_of_thickness_vertical += inner_panel.thickness;
+                        }
+                        InnerPanelPosition::Left | InnerPanelPosition::Right => {
+                            inner_panel.panel.event(&crate::event::Event::Resize(
+                                crate::types::Size {
+                                    width: inner_panel.thickness,
+                                    height: self.size.height - sum_of_thickness_vertical,
+                                },
+                            ));
+
+                            sum_of_thickness_horizontal += inner_panel.thickness;
+                        }
+                        InnerPanelPosition::Floating { .. } => (),
+                    }
                 }
-                InnerPanelPosition::Floating { .. } => (),
             }
+            _ => (),
         }
     }
 }

@@ -1,7 +1,9 @@
+use crate::event::Event;
+
 pub trait Ui {
     fn set_application_context(&mut self, context: crate::application_context::ApplicationContext);
     fn size(&self) -> crate::types::Size;
-    fn resize(&mut self, size: crate::types::Size);
+    fn event(&mut self, event: &Event);
 }
 
 pub struct WidgetRenderObject<'a> {
@@ -88,7 +90,13 @@ impl Ui for Layout {
         }
     }
 
-    fn resize(&mut self, _size: crate::types::Size) {}
+    fn event(&mut self, event: &Event) {
+        match event {
+            Event::Resize(size) => {
+                // todo
+            }
+        }
+    }
 }
 
 impl Widgets for Layout {

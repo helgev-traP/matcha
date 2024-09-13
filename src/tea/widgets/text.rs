@@ -123,76 +123,80 @@ impl<'a> Ui for Text<'a> {
         self.size
     }
 
-    fn resize(&mut self, size: crate::types::Size) {
-        self.size = size;
+    fn event(&mut self, event: &crate::event::Event) {
+        match event {
+            crate::event::Event::Resize(size) => {
+                self.size = *size;
 
-        if self.texture.is_none() {
-            return;
+                if self.texture.is_none() {
+                    return;
+                }
+
+                let texture_new = self
+                    .app_context
+                    .as_ref()
+                    .unwrap()
+                    .get_wgpu_device()
+                    .create_texture(&wgpu::TextureDescriptor {
+                        label: Some("Text Texture"),
+                        size: wgpu::Extent3d {
+                            width: self.size.width as u32,
+                            height: self.size.height as u32,
+                            depth_or_array_layers: 1,
+                        },
+                        mip_level_count: 1,
+                        sample_count: 1,
+                        dimension: wgpu::TextureDimension::D2,
+                        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                        usage: wgpu::TextureUsages::COPY_SRC
+                            | wgpu::TextureUsages::COPY_DST
+                            | wgpu::TextureUsages::TEXTURE_BINDING,
+                        view_formats: &[],
+                    });
+
+                let mut encoder = self
+                    .app_context
+                    .as_ref()
+                    .unwrap()
+                    .get_wgpu_device()
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("Text Texture Encoder"),
+                    });
+                encoder.copy_texture_to_texture(
+                    wgpu::ImageCopyTexture {
+                        texture: self.texture.as_ref().unwrap(),
+                        mip_level: 0,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    wgpu::ImageCopyTexture {
+                        texture: &texture_new,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    wgpu::Extent3d {
+                        width: self.size.width as u32,
+                        height: self.size.height as u32,
+                        depth_or_array_layers: 1,
+                    },
+                );
+
+                let (vertex_buffer, index_buffer, index_len) = TexturedVertex::rectangle_buffer(
+                    &self.app_context.as_ref().unwrap(),
+                    0.0,
+                    0.0,
+                    self.size.width as f32,
+                    self.size.height as f32,
+                    false,
+                );
+
+                self.texture = Some(texture_new);
+                self.vertex_buffer = Some(vertex_buffer);
+                self.index_buffer = Some(index_buffer);
+                self.index_len = index_len;
+            }
         }
-
-        let texture_new = self
-            .app_context
-            .as_ref()
-            .unwrap()
-            .get_wgpu_device()
-            .create_texture(&wgpu::TextureDescriptor {
-                label: Some("Text Texture"),
-                size: wgpu::Extent3d {
-                    width: self.size.width as u32,
-                    height: self.size.height as u32,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                usage: wgpu::TextureUsages::COPY_SRC
-                    | wgpu::TextureUsages::COPY_DST
-                    | wgpu::TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            });
-
-        let mut encoder = self
-            .app_context
-            .as_ref()
-            .unwrap()
-            .get_wgpu_device()
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Text Texture Encoder"),
-            });
-        encoder.copy_texture_to_texture(
-            wgpu::ImageCopyTexture {
-                texture: self.texture.as_ref().unwrap(),
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            wgpu::ImageCopyTexture {
-                texture: &texture_new,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            wgpu::Extent3d {
-                width: self.size.width as u32,
-                height: self.size.height as u32,
-                depth_or_array_layers: 1,
-            },
-        );
-
-        let (vertex_buffer, index_buffer, index_len) = TexturedVertex::rectangle_buffer(
-            &self.app_context.as_ref().unwrap(),
-            0.0,
-            0.0,
-            self.size.width as f32,
-            self.size.height as f32,
-            false,
-        );
-
-        self.texture = Some(texture_new);
-        self.vertex_buffer = Some(vertex_buffer);
-        self.index_buffer = Some(index_buffer);
-        self.index_len = index_len;
     }
 }
 

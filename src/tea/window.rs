@@ -402,10 +402,11 @@ impl<'a> winit::application::ApplicationHandler for Window<'a> {
 
         let size = self.winit_window.as_ref().unwrap().inner_size();
 
-        self.top_panel.resize(Size {
-            width: size.width as f32,
-            height: size.height as f32,
-        });
+        self.top_panel
+            .event(&crate::event::Event::Resize(crate::types::Size {
+                width: size.width as f32,
+                height: size.height as f32,
+            }));
 
         self.top_panel
             .set_application_context(self.window.as_ref().unwrap().clone_device_queue());
@@ -430,10 +431,11 @@ impl<'a> winit::application::ApplicationHandler for Window<'a> {
             winit::event::WindowEvent::Resized(new_size) => {
                 if new_size.width > 0 && new_size.height > 0 {
                     self.window.as_mut().unwrap().resize(new_size);
-                    self.top_panel.resize(Size {
-                        width: new_size.width as f32,
-                        height: new_size.height as f32,
-                    });
+                    self.top_panel
+                        .event(&crate::event::Event::Resize(crate::types::Size {
+                            width: new_size.width as f32,
+                            height: new_size.height as f32,
+                        }));
                 }
             }
             _ => {}

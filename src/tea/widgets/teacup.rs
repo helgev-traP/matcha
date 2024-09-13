@@ -124,22 +124,26 @@ impl Ui for Teacup {
         self.size
     }
 
-    fn resize(&mut self, size: crate::types::Size) {
-        self.size = size;
+    fn event(&mut self, event: &crate::event::Event) {
+        match event {
+            crate::event::Event::Resize(size) => {
+                self.size = *size;
 
-        let (vertex_buffer, index_buffer, index_len) =
-            crate::vertex::TexturedVertex::rectangle_buffer(
-                self.app_context.as_ref().unwrap(),
-                0.0,
-                0.0,
-                self.size.width as f32,
-                self.size.height as f32,
-                false,
-            );
+                let (vertex_buffer, index_buffer, index_len) =
+                    crate::vertex::TexturedVertex::rectangle_buffer(
+                        self.app_context.as_ref().unwrap(),
+                        0.0,
+                        0.0,
+                        self.size.width as f32,
+                        self.size.height as f32,
+                        false,
+                    );
 
-        self.vertex_buffer = Some(vertex_buffer);
-        self.index_buffer = Some(index_buffer);
-        self.index_len = index_len;
+                self.vertex_buffer = Some(vertex_buffer);
+                self.index_buffer = Some(index_buffer);
+                self.index_len = index_len;
+            }
+        }
     }
 }
 
