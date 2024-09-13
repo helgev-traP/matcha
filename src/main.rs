@@ -1,3 +1,4 @@
+use cgmath::num_traits::float;
 use tea_ui::{self, cosmic, types::Size, ui::Layout, widgets::text::Text};
 
 #[tokio::main]
@@ -8,7 +9,7 @@ async fn main() {
                 "Hello, World!".to_string(),
                 Size {
                     width: 1000.0,
-                    height: 100.0,
+                    height: 150.0,
                 },
             )
             .font_size(100.0)
@@ -24,7 +25,7 @@ async fn main() {
             "top panel".to_string(),
             Size {
                 width: 1000.0,
-                height: 100.0,
+                height: 150.0,
             },
         )
         .font_size(100.0)
@@ -40,7 +41,7 @@ async fn main() {
             "left panel".to_string(),
             Size {
                 width: 1000.0,
-                height: 100.0,
+                height: 150.0,
             },
         )
         .font_size(100.0)
@@ -55,12 +56,30 @@ async fn main() {
             "bottom".to_string(),
             Size {
                 width: 1000.0,
-                height: 100.0,
+                height: 150.0,
             },
         )
         .font_size(100.0)
         .line_height(100.0)
         .font_color([255, 255, 255, 255]),
+    ));
+
+    let mut floating_panel = app.add_floating_panel(800.0, -400.0, 0.0, Size {
+        width: 800.0,
+        height: 400.0,
+    });
+    floating_panel.set_base_color([255, 255, 255, 255]);
+    floating_panel.add_widget(Box::new(
+        Text::new(
+            "floating panel".to_string(),
+            Size {
+                width: 1000.0,
+                height: 150.0,
+            },
+        )
+        .font_size(100.0)
+        .line_height(100.0)
+        .font_color([0, 0, 0, 255]),
     ));
 
     app.run();

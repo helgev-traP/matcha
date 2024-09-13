@@ -59,7 +59,7 @@ impl<'a> App<'a> {
         y: f32,
         z: f32,
         size: Size,
-    ) -> &InnerPanel {
+    ) -> &mut InnerPanel {
         self.window.get_top_panel().add_floating_panel(x, y, z, size)
     }
 

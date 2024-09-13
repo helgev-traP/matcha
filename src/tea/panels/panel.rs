@@ -16,10 +16,6 @@ struct PannelRenderObject<'a> {
     panels: Vec<PannelRenderObject<'a>>,
 }
 
-trait Panels {
-    // todo
-}
-
 pub enum InnerPanelPosition {
     Top,
     Bottom,
@@ -61,7 +57,7 @@ impl InnerPanel {
         self
     }
 
-    pub(crate) fn set_widgets(&mut self, widgets: Vec<Box<dyn Widgets>>) {
+    pub fn set_widgets(&mut self, widgets: Vec<Box<dyn Widgets>>) {
         if let Layout::Column(w) = &mut self.panel.main_area_widgets {
             *w = widgets
         };
@@ -72,7 +68,7 @@ impl InnerPanel {
         self
     }
 
-    pub(crate) fn set_panels(&mut self, panels: Vec<InnerPanel>) {
+    pub fn set_panels(&mut self, panels: Vec<InnerPanel>) {
         self.panel.inner_panels = panels;
     }
 
@@ -98,13 +94,7 @@ impl InnerPanel {
         self.panel.add_right_panel(thickness)
     }
 
-    pub fn add_floating_panel(
-        &mut self,
-        x: f32,
-        y: f32,
-        z: f32,
-        size: Size,
-    ) -> &mut InnerPanel {
+    pub fn add_floating_panel(&mut self, x: f32, y: f32, z: f32, size: Size) -> &mut InnerPanel {
         self.panel.add_floating_panel(x, y, z, size)
     }
 }
@@ -263,13 +253,7 @@ impl Panel {
         self.inner_panels.last_mut().unwrap()
     }
 
-    pub fn add_floating_panel(
-        &mut self,
-        x: f32,
-        y: f32,
-        z: f32,
-        size: Size,
-    ) -> &mut InnerPanel {
+    pub fn add_floating_panel(&mut self, x: f32, y: f32, z: f32, size: Size) -> &mut InnerPanel {
         self.inner_panels.push(InnerPanel {
             position: InnerPanelPosition::Floating { x, y, z },
             thickness: 0.0,
@@ -540,6 +524,7 @@ impl Panel {
         base_color: [u8; 4],
         position: [f32; 2],
         scissor_size: crate::types::Size,
+        base_panel_size: crate::types::Size,
         widgets: Vec<WidgetRenderObject>,
     ) {
         let device = self
@@ -552,6 +537,17 @@ impl Panel {
             .as_ref()
             .expect("context not exist.")
             .get_wgpu_queue();
+
+        // scissor area
+
+        let scissor_x = position[0].max(0.0) as u32;
+        let scissor_y = (-position[1]).max(0.0) as u32;
+        let scissor_width = (scissor_size.width).min(base_panel_size.width - position[0]) as u32;
+        let scissor_height = (scissor_size.height).min(base_panel_size.height + position[1]) as u32;
+
+        if scissor_width <= 0 || scissor_height <= 0 {
+            return;
+        }
 
         // fill texture with base color
 
@@ -582,12 +578,7 @@ impl Panel {
             });
 
             render_pass.set_pipeline(&self.gpu_fields.as_ref().unwrap().scissor_fill_pipeline);
-            render_pass.set_scissor_rect(
-                position[0] as u32,
-                -position[1] as u32,
-                scissor_size.width as u32,
-                scissor_size.height as u32,
-            );
+            render_pass.set_scissor_rect(scissor_x, scissor_y, scissor_width, scissor_height);
             render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
             render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             render_pass.draw_indexed(0..index_count, 0, 0..1);
@@ -673,12 +664,7 @@ impl Panel {
                     occlusion_query_set: None,
                 });
 
-                render_pass.set_scissor_rect(
-                    position[0] as u32,
-                    -position[1] as u32,
-                    scissor_size.width as u32,
-                    scissor_size.height as u32,
-                );
+                render_pass.set_scissor_rect(scissor_x, scissor_y, scissor_width, scissor_height);
                 render_pass.set_pipeline(&self.gpu_fields.as_ref().unwrap().render_pipeline);
                 render_pass.set_bind_group(0, &affine_bind_group, &[]);
                 render_pass.set_bind_group(1, &texture_bind_group, &[]);
@@ -708,7 +694,7 @@ impl RenderArea for Panel {
                 label: Some("Panel Command Encoder"),
             });
 
-        // 1. render inner panels
+        // 1. render inner side panels
 
         let mut side_offset = [0.0, 0.0, 0.0, 0.0]; // top, bottom, left, right
 
@@ -756,9 +742,27 @@ impl RenderArea for Panel {
                 inner_panel.panel.base_color,
                 render_position,
                 inner_panel.panel.size,
+                self.size,
                 inner_panel.panel.main_area_widgets.render_object()?,
             );
         }
+
+        // 2. render main area widgets
+
+        self.render_widget(
+            &mut encoder,
+            &texture_view,
+            self.base_color,
+            [side_offset[2], -side_offset[0]],
+            Size {
+                width: self.size.width - side_offset[2] - side_offset[3],
+                height: self.size.height - side_offset[0] - side_offset[1],
+            },
+            self.size,
+            self.main_area_widgets.render_object()?,
+        );
+
+        // 3. render floating panels
 
         floatings.sort_by(|a, b| match (&a.position, &b.position) {
             (
@@ -776,28 +780,18 @@ impl RenderArea for Panel {
                     inner_panel.panel.base_color,
                     [x, y],
                     inner_panel.panel.size,
+                    self.size,
                     inner_panel.panel.main_area_widgets.render_object()?,
                 );
             }
         }
 
-        // 2. render main area widgets
-
-        self.render_widget(
-            &mut encoder,
-            &texture_view,
-            self.base_color,
-            [side_offset[2], -side_offset[0]],
-            Size {
-                width: self.size.width - side_offset[2] - side_offset[3],
-                height: self.size.height - side_offset[0] - side_offset[1],
-            },
-            self.main_area_widgets.render_object()?,
-        );
-
         // end wgpu
 
-        self.app_context.as_ref()?.get_wgpu_queue().submit(std::iter::once(encoder.finish()));
+        self.app_context
+            .as_ref()?
+            .get_wgpu_queue()
+            .submit(std::iter::once(encoder.finish()));
 
         Some(&self.gpu_fields.as_ref()?.texture)
     }
