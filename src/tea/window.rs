@@ -17,22 +17,17 @@ use super::widgets;
 use super::widgets::teacup;
 
 struct WindowState<'a> {
-    // winit
-    winit_window: Arc<winit::window::Window>,
-    // wgpu
     instance: wgpu::Instance,
     adapter: wgpu::Adapter,
     surface: wgpu::Surface<'a>,
     app_context: ApplicationContext,
     config: wgpu::SurfaceConfiguration,
-    // for texture copy
-    render_pipeline: wgpu::RenderPipeline,
-    vertex_buffer: wgpu::Buffer,
-    index_buffer: wgpu::Buffer,
-    index_len: u32,
-    top_panel_texture_bind_group_layout: wgpu::BindGroupLayout,
 }
 
+// - new
+// - clone app_context
+// - resize
+// - render
 impl<'a> WindowState<'a> {
     async fn new(
         winit_window: Arc<winit::window::Window>,
@@ -104,80 +99,6 @@ impl<'a> WindowState<'a> {
 
         surface.configure(&device, &config);
 
-        // shader
-
-        let texture_copy_shader = device.create_shader_module(wgpu::include_wgsl!("./window.wgsl"));
-
-        // pipeline
-
-        let top_panel_texture_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Top Panel Texture Bind Group Layout"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
-            });
-
-        let render_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Window Render Pipeline Layout"),
-                bind_group_layouts: &[&top_panel_texture_bind_group_layout],
-                push_constant_ranges: &[],
-            });
-
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Window Render Pipeline"),
-            layout: Some(&render_pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &texture_copy_shader,
-                entry_point: "vs_main",
-                buffers: &[TexturedVertex::desc()],
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &texture_copy_shader,
-                entry_point: "fs_main",
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: config.format,
-                    blend: Some(wgpu::BlendState::REPLACE),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            }),
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
-                polygon_mode: wgpu::PolygonMode::Fill,
-                conservative: false,
-                unclipped_depth: false,
-            },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            multiview: None,
-            cache: None,
-        });
-
         let app_context;
 
         if cosmic_context.is_none() {
@@ -187,25 +108,16 @@ impl<'a> WindowState<'a> {
                 ApplicationContext::new_with_context(device, queue, cosmic_context.unwrap());
         }
 
-        let (vertex_buffer, index_buffer, index_len) =
-            TexturedVertex::rectangle_buffer(&app_context, -1.0, 1.0, 2.0, 2.0, false);
-
         Self {
-            winit_window,
             instance,
             adapter,
             surface,
             app_context,
             config,
-            render_pipeline,
-            vertex_buffer,
-            index_buffer,
-            index_len,
-            top_panel_texture_bind_group_layout,
         }
     }
 
-    fn clone_device_queue(&self) -> ApplicationContext {
+    fn clone_app_context(&self) -> ApplicationContext {
         self.app_context.clone()
     }
 
@@ -216,87 +128,12 @@ impl<'a> WindowState<'a> {
             .configure(&*self.app_context.get_wgpu_device(), &self.config);
     }
 
-    fn render(&mut self, top_panel_texture: Option<&wgpu::Texture>) {
-        let surface_texture = self.surface.get_current_texture().unwrap();
-        let surface_view = surface_texture
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
+    fn get_surface_texture(&mut self) -> wgpu::SurfaceTexture {
+        self.surface.get_current_texture().unwrap()
+    }
 
-        // get texture from top panel
-
-        let top_panel_texture_view = top_panel_texture
-            .unwrap()
-            .create_view(&wgpu::TextureViewDescriptor::default());
-
-        let top_panel_texture_smapler =
-            self.app_context
-                .get_wgpu_device()
-                .create_sampler(&wgpu::SamplerDescriptor {
-                    address_mode_u: wgpu::AddressMode::ClampToEdge,
-                    address_mode_v: wgpu::AddressMode::ClampToEdge,
-                    address_mode_w: wgpu::AddressMode::ClampToEdge,
-                    mag_filter: wgpu::FilterMode::Linear,
-                    min_filter: wgpu::FilterMode::Nearest,
-                    mipmap_filter: wgpu::FilterMode::Nearest,
-                    ..Default::default()
-                });
-
-        let top_panel_texture_bind_group =
-            self.app_context
-                .get_wgpu_device()
-                .create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("Top Panel Texture Bind Group"),
-                    layout: &self.top_panel_texture_bind_group_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: wgpu::BindingResource::TextureView(&top_panel_texture_view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: wgpu::BindingResource::Sampler(&top_panel_texture_smapler),
-                        },
-                    ],
-                });
-
-        let mut encoder = self.app_context.get_wgpu_device().create_command_encoder(
-            &wgpu::CommandEncoderDescriptor {
-                label: Some("WindowState encoder"),
-            },
-        );
-
-        {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Render Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &surface_view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.0,
-                            g: 0.0,
-                            b: 0.0,
-                            a: 1.0,
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            });
-
-            render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.set_bind_group(0, &top_panel_texture_bind_group, &[]);
-            render_pass.draw_indexed(0..self.index_len as u32, 0, 0..1);
-        }
-
-        self.app_context
-            .get_wgpu_queue()
-            .submit(std::iter::once(encoder.finish()));
-        surface_texture.present();
+    fn get_surface_format(&self) -> wgpu::TextureFormat {
+        self.config.format
     }
 }
 
@@ -312,7 +149,7 @@ impl<'a> Window<'a> {
         Self {
             winit_window: None,
             window: None,
-            top_panel: Panel::new(Size {
+            top_panel: Panel::new_as_top(Size {
                 width: -1.0,
                 height: -1.0,
             }),
@@ -326,6 +163,11 @@ impl<'a> Window<'a> {
 
     pub fn get_top_panel(&mut self) -> &mut Panel {
         &mut self.top_panel
+    }
+
+    fn render(&mut self) {
+        self.top_panel
+            .render_to_surface(self.window.as_mut().unwrap().get_surface_texture());
     }
 }
 
@@ -355,7 +197,7 @@ impl<'a> winit::application::ApplicationHandler for Window<'a> {
             }));
 
         self.top_panel
-            .set_application_context(self.window.as_ref().unwrap().clone_device_queue());
+            .set_application_context_top_panel(self.window.as_ref().unwrap().clone_app_context(), self.window.as_ref().unwrap().get_surface_format());
     }
 
     fn window_event(
@@ -369,10 +211,7 @@ impl<'a> winit::application::ApplicationHandler for Window<'a> {
                 event_loop.exit();
             }
             winit::event::WindowEvent::RedrawRequested => {
-                self.window
-                    .as_mut()
-                    .unwrap()
-                    .render(self.top_panel.render());
+                self.render();
             }
             winit::event::WindowEvent::Resized(new_size) => {
                 if new_size.width > 0 && new_size.height > 0 {

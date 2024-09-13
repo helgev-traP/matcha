@@ -141,6 +141,11 @@ struct GpuFields {
     scissor_fill_pipeline: wgpu::RenderPipeline,
 }
 
+enum IsTop {
+    Top(Option<wgpu::TextureFormat>),
+    NotTop,
+}
+
 pub struct Panel {
     size: crate::types::Size,
     base_color: [u8; 4],
@@ -156,6 +161,7 @@ pub struct Panel {
 
     // wgpu
     gpu_fields: Option<GpuFields>,
+    is_top: IsTop,
 }
 
 impl Panel {
@@ -167,6 +173,19 @@ impl Panel {
             inner_panels: Vec::new(),
             app_context: None,
             gpu_fields: None,
+            is_top: IsTop::NotTop,
+        }
+    }
+
+    pub(crate) fn new_as_top(size: Size) -> Self {
+        Self {
+            size,
+            base_color: [0, 0, 0, 0],
+            main_area_widgets: Layout::Column(Vec::new()),
+            inner_panels: Vec::new(),
+            app_context: None,
+            gpu_fields: None,
+            is_top: IsTop::Top(None),
         }
     }
 
@@ -295,6 +314,15 @@ impl Panel {
         });
         self.inner_panels.last_mut().unwrap()
     }
+
+    pub(crate) fn set_application_context_top_panel(
+        &mut self,
+        context: crate::application_context::ApplicationContext,
+        format: wgpu::TextureFormat,
+    ) {
+        self.is_top = IsTop::Top(Some(format));
+        self.set_application_context(context);
+    }
 }
 
 impl Ui for Panel {
@@ -394,7 +422,11 @@ impl Ui for Panel {
                 module: &shader,
                 entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                    format: if let IsTop::Top(format) = self.is_top {
+                        format.unwrap()
+                    } else {
+                        wgpu::TextureFormat::Rgba8UnormSrgb
+                    },
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -447,7 +479,11 @@ impl Ui for Panel {
                     module: &scissor_fill_shader,
                     entry_point: "fs_main",
                     targets: &[Some(wgpu::ColorTargetState {
-                        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                        format: if let IsTop::Top(format) = self.is_top {
+                            format.unwrap()
+                        } else {
+                            wgpu::TextureFormat::Rgba8UnormSrgb
+                        },
                         blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                         write_mask: wgpu::ColorWrites::ALL,
                     })],
@@ -513,7 +549,8 @@ impl Ui for Panel {
                     }
                 }
 
-                if size.width <= sum_of_thickness_horizontal || size.height <= sum_of_thickness_vertical
+                if size.width <= sum_of_thickness_horizontal
+                    || size.height <= sum_of_thickness_vertical
                 {
                     return;
                 }
@@ -522,9 +559,9 @@ impl Ui for Panel {
                 self.size = *size;
 
                 // resize texture
-                if let Some(gpu_fields) = &self.gpu_fields {
+                if let Some(gpu_fields) = &mut self.gpu_fields {
                     let device = self.app_context.as_ref().unwrap().get_wgpu_device();
-                    let texture = device.create_texture(&wgpu::TextureDescriptor {
+                    gpu_fields.texture = device.create_texture(&wgpu::TextureDescriptor {
                         label: Some("Panel Texture"),
                         size: wgpu::Extent3d {
                             width: self.size.width as u32,
@@ -541,7 +578,6 @@ impl Ui for Panel {
                             | wgpu::TextureUsages::COPY_DST,
                         view_formats: &[],
                     });
-                    self.gpu_fields.as_mut().unwrap().texture = texture;
                 }
 
                 // resize inner panels
@@ -587,7 +623,6 @@ impl Panel {
         base_color: [u8; 4],
         position: [f32; 2],
         scissor_size: crate::types::Size,
-        base_panel_size: crate::types::Size,
         widgets: Vec<WidgetRenderObject>,
     ) {
         let device = self
@@ -595,18 +630,13 @@ impl Panel {
             .as_ref()
             .expect("context not exist.")
             .get_wgpu_device();
-        let queue = self
-            .app_context
-            .as_ref()
-            .expect("context not exist.")
-            .get_wgpu_queue();
 
         // scissor area
 
         let scissor_x = position[0].max(0.0) as u32;
         let scissor_y = (-position[1]).max(0.0) as u32;
-        let scissor_width = (scissor_size.width).min(base_panel_size.width - position[0]) as u32;
-        let scissor_height = (scissor_size.height).min(base_panel_size.height + position[1]) as u32;
+        let scissor_width = (scissor_size.width).min(self.size.width - position[0]) as u32;
+        let scissor_height = (scissor_size.height).min(self.size.height + position[1]) as u32;
 
         if scissor_width <= 0 || scissor_height <= 0 {
             return;
@@ -737,18 +767,9 @@ impl Panel {
             }
         }
     }
-}
 
-impl RenderArea for Panel {
-    fn render(&self) -> Option<&wgpu::Texture> {
+    pub(crate) fn render_to_view(&self, texture_view: &wgpu::TextureView) -> Option<()> {
         // begin wgpu
-
-        let texture_view = self
-            .gpu_fields
-            .as_ref()?
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-
         let mut encoder = self
             .app_context
             .as_ref()?
@@ -805,7 +826,6 @@ impl RenderArea for Panel {
                 inner_panel.panel.base_color,
                 render_position,
                 inner_panel.panel.size,
-                self.size,
                 inner_panel.panel.main_area_widgets.render_object()?,
             );
         }
@@ -821,7 +841,6 @@ impl RenderArea for Panel {
                 width: self.size.width - side_offset[2] - side_offset[3],
                 height: self.size.height - side_offset[0] - side_offset[1],
             },
-            self.size,
             self.main_area_widgets.render_object()?,
         );
 
@@ -843,7 +862,6 @@ impl RenderArea for Panel {
                     inner_panel.panel.base_color,
                     [x, y],
                     inner_panel.panel.size,
-                    self.size,
                     inner_panel.panel.main_area_widgets.render_object()?,
                 );
             }
@@ -855,6 +873,32 @@ impl RenderArea for Panel {
             .as_ref()?
             .get_wgpu_queue()
             .submit(std::iter::once(encoder.finish()));
+
+        Some(())
+    }
+
+    pub(crate) fn render_to_surface(&self, surface: wgpu::SurfaceTexture) -> Option<()> {
+        let texture_view = surface
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+
+        self.render_to_view(&texture_view)?;
+
+        surface.present();
+
+        Some(())
+    }
+}
+
+impl RenderArea for Panel {
+    fn render(&self) -> Option<&wgpu::Texture> {
+        let texture_view = self
+            .gpu_fields
+            .as_ref()?
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+
+        self.render_to_view(&texture_view)?;
 
         Some(&self.gpu_fields.as_ref()?.texture)
     }
