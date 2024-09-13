@@ -82,5 +82,5 @@ async fn main() {
         .font_color([0, 0, 0, 255]),
     ));
 
-    app.run();
+    app.run("tea-ui");
 }

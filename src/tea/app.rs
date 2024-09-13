@@ -53,23 +53,21 @@ impl<'a> App<'a> {
         self.window.get_top_panel().add_right_panel(thickness)
     }
 
-    pub fn add_floating_panel(
-        &mut self,
-        x: f32,
-        y: f32,
-        z: f32,
-        size: Size,
-    ) -> &mut InnerPanel {
-        self.window.get_top_panel().add_floating_panel(x, y, z, size)
+    pub fn add_floating_panel(&mut self, x: f32, y: f32, z: f32, size: Size) -> &mut InnerPanel {
+        self.window
+            .get_top_panel()
+            .add_floating_panel(x, y, z, size)
     }
 
-    pub fn run(&mut self) {
+    pub fn run(&mut self, title: &str) {
+        self.window.set_title(title);
         let event_loop = winit::event_loop::EventLoop::new().unwrap();
         event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
         event_loop.run_app(&mut self.window).unwrap();
     }
 
-    pub fn run_with_cosmic_text(&mut self, cosmic_text: crate::cosmic::FontContext) {
+    pub fn run_with_cosmic_text(&mut self, title: &str, cosmic_text: crate::cosmic::FontContext) {
+        self.window.set_title(title);
         let event_loop = winit::event_loop::EventLoop::new().unwrap();
         event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
         event_loop.run_app(&mut self.window).unwrap();

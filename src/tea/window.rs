@@ -305,6 +305,7 @@ impl<'a> WindowState<'a> {
 pub struct Window<'a> {
     winit_window: Option<Arc<winit::window::Window>>,
     window: Option<WindowState<'a>>,
+    title: String,
     top_panel: Panel,
     cosmic_context: Option<crate::cosmic::FontContext>,
 }
@@ -314,12 +315,17 @@ impl<'a> Window<'a> {
         Self {
             winit_window: None,
             window: None,
+            title: "".to_string(),
             top_panel: Panel::new(Size {
                 width: -1.0,
                 height: -1.0,
             }),
             cosmic_context: None,
         }
+    }
+
+    pub fn set_title(&mut self, title: &str) {
+        self.title = title.to_string();
     }
 
     pub fn set_cosmic_context(&mut self, cosmic_context: crate::cosmic::FontContext) {
@@ -338,6 +344,11 @@ impl<'a> winit::application::ApplicationHandler for Window<'a> {
                 .create_window(winit::window::Window::default_attributes())
                 .unwrap(),
         ));
+
+        self.winit_window
+            .as_ref()
+            .unwrap()
+            .set_title(self.title.as_str());
 
         let context = std::mem::take(&mut self.cosmic_context);
 
