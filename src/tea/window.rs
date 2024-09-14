@@ -28,6 +28,7 @@ struct WindowState<'a> {
 impl<'a> WindowState<'a> {
     async fn new(
         winit_window: Arc<winit::window::Window>,
+        power_preference: wgpu::PowerPreference,
         cosmic_context: Option<FontContext>,
     ) -> Self {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -43,7 +44,7 @@ impl<'a> WindowState<'a> {
         let adapter = instance
             .request_adapter(
                 &(wgpu::RequestAdapterOptions {
-                    power_preference: wgpu::PowerPreference::HighPerformance,
+                    power_preference,
                     compatible_surface: Some(&surface),
                     force_fallback_adapter: false,
                 }),
@@ -305,6 +306,7 @@ impl<'a> WindowState<'a> {
 pub struct Window<'a> {
     winit_window: Option<Arc<winit::window::Window>>,
     window: Option<WindowState<'a>>,
+    performance: wgpu::PowerPreference,
     title: String,
     top_panel: Panel,
     cosmic_context: Option<crate::cosmic::FontContext>,
@@ -315,6 +317,7 @@ impl<'a> Window<'a> {
         Self {
             winit_window: None,
             window: None,
+            performance: wgpu::PowerPreference::LowPower,
             title: "".to_string(),
             top_panel: Panel::new(Size {
                 width: -1.0,
@@ -326,6 +329,10 @@ impl<'a> Window<'a> {
 
     pub fn set_title(&mut self, title: &str) {
         self.title = title.to_string();
+    }
+
+    pub fn set_performance(&mut self, performance: wgpu::PowerPreference) {
+        self.performance = performance;
     }
 
     pub fn set_cosmic_context(&mut self, cosmic_context: crate::cosmic::FontContext) {
@@ -354,6 +361,7 @@ impl<'a> winit::application::ApplicationHandler for Window<'a> {
 
         let window_state = pollster::block_on(WindowState::new(
             self.winit_window.as_ref().unwrap().clone(),
+            self.performance,
             context,
         ));
 
