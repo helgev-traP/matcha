@@ -6,6 +6,8 @@
     "multisample",
     "multisampled",
     "multiview",
+    "nalgebra",
+    "powf",
     "Rasterizer",
     "repr",
     "srgb",
