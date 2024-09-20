@@ -1,6 +1,6 @@
 use wgpu::util::DeviceExt;
 
-use super::application_context::ApplicationContext;
+use super::{application_context::ApplicationContext, types::Color};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -152,47 +152,19 @@ impl ColoredVertex {
         }
     }
 
-    pub fn rectangle_srgb(
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-        color: [u8; 4],
-    ) -> ([ColoredVertex; 4], [u16; 6]) {
-        let color = [
-            if color[0] as f32 / 255.0 <= 0.04045 {
-                color[0] as f32 / 255.0 / 12.92
-            } else {
-                ((color[0] as f32 / 255.0 + 0.055) / 1.055).powf(2.4)
-            },
-            if color[1] as f32 / 255.0 <= 0.04045 {
-                color[1] as f32 / 255.0 / 12.92
-            } else {
-                ((color[1] as f32 / 255.0 + 0.055) / 1.055).powf(2.4)
-            },
-            if color[2] as f32 / 255.0 <= 0.04045 {
-                color[2] as f32 / 255.0 / 12.92
-            } else {
-                ((color[2] as f32 / 255.0 + 0.055) / 1.055).powf(2.4)
-            },
-            color[3] as f32 / 255.0,
-        ];
-
-        ColoredVertex::rectangle(x, y, width, height, color)
-    }
-
     pub fn rectangle(
         x: f32,
         y: f32,
         width: f32,
         height: f32,
-        color: [f32; 4],
+        color: &Color,
     ) -> ([ColoredVertex; 4], [u16; 6]) {
         // 0-------3
         // | \     |
         // |   \   |
         // |     \ |
         // 1-------2
+        let color =color.to_rgba_f32();
         (
             [
                 ColoredVertex {
@@ -216,44 +188,13 @@ impl ColoredVertex {
         )
     }
 
-    pub fn rectangle_buffer_srgb(
-        app_context: &ApplicationContext,
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-        color: [u8; 4],
-        compute: bool,
-    ) -> (wgpu::Buffer, wgpu::Buffer, u32) {
-        let color = [
-            if color[0] as f32 / 255.0 <= 0.04045 {
-                color[0] as f32 / 255.0 / 12.92
-            } else {
-                ((color[0] as f32 / 255.0 + 0.055) / 1.055).powf(2.4)
-            },
-            if color[1] as f32 / 255.0 <= 0.04045 {
-                color[1] as f32 / 255.0 / 12.92
-            } else {
-                ((color[1] as f32 / 255.0 + 0.055) / 1.055).powf(2.4)
-            },
-            if color[2] as f32 / 255.0 <= 0.04045 {
-                color[2] as f32 / 255.0 / 12.92
-            } else {
-                ((color[2] as f32 / 255.0 + 0.055) / 1.055).powf(2.4)
-            },
-            color[3] as f32 / 255.0,
-        ];
-
-        ColoredVertex::rectangle_buffer(app_context, x, y, width, height, color, compute)
-    }
-
     pub fn rectangle_buffer(
         app_context: &ApplicationContext,
         x: f32,
         y: f32,
         width: f32,
         height: f32,
-        color: [f32; 4],
+        color: &Color,
         compute: bool,
     ) -> (wgpu::Buffer, wgpu::Buffer, u32) {
         let (vertices, indices) = ColoredVertex::rectangle(x, y, width, height, color);

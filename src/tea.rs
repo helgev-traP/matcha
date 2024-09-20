@@ -9,3 +9,5 @@ pub mod vertex;
 pub mod event;
 pub mod types;
 pub mod ui;
+
+pub mod widgets;

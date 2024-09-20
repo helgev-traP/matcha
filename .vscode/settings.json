@@ -1,7 +1,9 @@
 {
   "cSpell.words": [
+    "Borderless",
     "bytemuck",
     "cgmath",
+    "fullscreen",
     "mipmap",
     "multisample",
     "multisampled",

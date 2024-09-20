@@ -7,7 +7,7 @@ use wgpu::{
 use super::{
     affine,
     application_context::ApplicationContext,
-    types::PxSize,
+    types::{ParentPxSize, PxSize},
     ui::{self, RenderObject, TeaUi},
     vertex::TexturedVertex,
 };
@@ -25,8 +25,6 @@ struct GpuState {
 }
 
 pub struct Renderer {
-    base_color: super::types::Color,
-    uis: Vec<Box<dyn TeaUi>>,
     app_context: Option<ApplicationContext>,
     gpu_state: Option<GpuState>,
 }
@@ -34,26 +32,9 @@ pub struct Renderer {
 impl Renderer {
     pub fn new() -> Self {
         Self {
-            base_color: super::types::Color::default(),
-            uis: Vec::new(),
             app_context: None,
             gpu_state: None,
         }
-    }
-
-    pub fn base_color(self, color: super::types::Color) -> Self {
-        Self {
-            base_color: color,
-            ..self
-        }
-    }
-
-    pub fn ui(self, ui: Vec<Box<dyn TeaUi>>) -> Self {
-        Self { uis: ui, ..self }
-    }
-
-    pub fn push_ui(&mut self, ui: Box<dyn TeaUi>) {
-        self.uis.push(ui);
     }
 }
 
@@ -213,7 +194,7 @@ impl Renderer {
         self.app_context = Some(context);
     }
 
-    pub fn render(&self, surface_view: wgpu::TextureView) -> Result<(), ()> {
+    pub fn render(&self, surface_view: wgpu::TextureView, viewport_size: &PxSize, base_color: &super::types::Color, uis: &Vec<Box<dyn TeaUi>>) -> Result<(), ()> {
         let device = match self.app_context.as_ref() {
             Some(context) => context.get_wgpu_device(),
             None => return Err(()),
@@ -228,7 +209,7 @@ impl Renderer {
             label: Some("Render Encoder"),
         });
 
-        let base_color_f64 = self.base_color.to_rgba_f64();
+        let base_color_f64 = base_color.to_rgba_f64();
 
         encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Panel Render Pass"),
@@ -255,13 +236,15 @@ impl Renderer {
         // let stencil_stacks = Vec::new();
 
         let mut accumulated_height = 0.0;
+        let normalize_matrix = affine::viewport_normalize(viewport_size.width, viewport_size.height);
 
-        for ui in &self.uis {
-            let render_object = ui.render_object()?;
+        for ui in uis {
+            let render_object = ui.render_object((*viewport_size).into())?;
             self.render_objects(
                 &mut encoder,
                 &surface_view,
                 &render_object,
+                normalize_matrix,
                 affine::translate_2d(0.0, accumulated_height) * na::Matrix3::identity(),
             )?;
             accumulated_height += render_object.px_size.height;
@@ -276,6 +259,7 @@ impl Renderer {
         encoder: &mut wgpu::CommandEncoder,
         surface_view: &wgpu::TextureView,
         object: &RenderObject,
+        normalize: na::Matrix3<f32>,
         affine: na::Matrix3<f32>,
     ) -> Result<(), ()> {
         let device = match self.app_context.as_ref() {
@@ -330,7 +314,7 @@ impl Renderer {
                         resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                             buffer: &device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                                 label: Some("Render TexturedVertex Affine Buffer"),
-                                contents: bytemuck::cast_slice(affine.as_slice()),
+                                contents: bytemuck::cast_slice(affine::as_3d(normalize * affine).as_slice()),
                                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                             }),
                             offset: 0,
@@ -354,7 +338,8 @@ impl Renderer {
                     occlusion_query_set: None,
                 });
 
-                render_pass.set_pipeline(&self.gpu_state.as_ref().unwrap().textured_render_pipeline);
+                render_pass
+                    .set_pipeline(&self.gpu_state.as_ref().unwrap().textured_render_pipeline);
                 render_pass.set_bind_group(0, &affine_bind_group, &[]);
                 render_pass.set_bind_group(1, &texture_bind_group, &[]);
                 render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
@@ -374,7 +359,7 @@ impl Renderer {
                         resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                             buffer: &device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                                 label: Some("Render TexturedVertex Affine Buffer"),
-                                contents: bytemuck::cast_slice(affine.as_slice()),
+                                contents: bytemuck::cast_slice(affine::as_3d(normalize * affine).as_slice()),
                                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                             }),
                             offset: 0,
@@ -398,12 +383,14 @@ impl Renderer {
                     occlusion_query_set: None,
                 });
 
-                render_pass.set_pipeline(&self.gpu_state.as_ref().unwrap().textured_render_pipeline);
+                render_pass
+                    .set_pipeline(&self.gpu_state.as_ref().unwrap().textured_render_pipeline);
                 render_pass.set_bind_group(0, &affine_bind_group, &[]);
                 render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
                 render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
                 render_pass.draw_indexed(0..*index_len, 0, 0..1);
-            },
+            }
+            ui::Object::NoObject => (),
         }
 
         // recursively render the sub objects
@@ -413,6 +400,7 @@ impl Renderer {
                 encoder,
                 surface_view,
                 &sub_object.object,
+                normalize,
                 affine * sub_object.affine,
             )?;
         }

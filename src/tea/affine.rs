@@ -42,3 +42,16 @@ pub fn reflect_by_y() -> na::Matrix3<f32> {
                     0.0, 1.0, 0.0,
                     0.0, 0.0, 1.0,)
 }
+
+pub fn viewport_normalize(width: f32, height: f32) -> na::Matrix3<f32> {
+    na::Matrix3::new(2.0 / width, 0.0, -1.0,
+                    0.0, 2.0 / height, 1.0,
+                    0.0, 0.0, 1.0,)
+}
+
+pub fn as_3d(m: na::Matrix3<f32>) -> na::Matrix4<f32> {
+    na::Matrix4::new(m[(0, 0)], m[(0, 1)], 0.0, m[(0, 2)],
+                    m[(1, 0)], m[(1, 1)], 0.0, m[(1, 2)],
+                    0.0, 0.0, 1.0, 0.0,
+                    m[(2, 0)], m[(2, 1)], 0.0, m[(2, 2)],)
+}

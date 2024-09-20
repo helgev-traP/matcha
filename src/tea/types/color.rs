@@ -1,3 +1,4 @@
+#[derive(Debug, Clone)]
 pub enum Color {
     Rgb8USrgb { r: u8, g: u8, b: u8 },
     Rgba8USrgb { r: u8, g: u8, b: u8, a: u8 },
@@ -9,12 +10,12 @@ pub enum Color {
 
 impl Default for Color {
     fn default() -> Self {
-        Color::Rgb8USrgb { r: 0, g: 0, b: 0 }
+        Color::Rgba8USrgb { r: 0, g: 0, b: 0, a: 255 }
     }
 }
 
 // a macro to convert integer to float
-macro_rules! linear_convert {
+macro_rules! convert_linear {
     ($x:expr, $type:ty) => {
         if *$x as $type / 255.0 <= 0.04045 {
             *$x as $type / 255.0 / 12.92
@@ -24,33 +25,72 @@ macro_rules! linear_convert {
     };
 }
 
+macro_rules! convert_srgb_u8 {
+    ($x:expr) => {
+        if *$x <= 0.0031308 {
+            (*$x * 12.92 * 255.0).round() as u8
+        } else {
+            ((1.055 * $x.powf(-2.4) - 0.055) * 255.0).round() as u8
+        }
+    };
+}
+
 impl Color {
-    pub fn to_rgb_f32(&self) -> [f32; 3] {
+    pub fn to_rgba_u8(&self) -> [u8; 4] {
         match self {
-            Color::Rgb8USrgb { r, g, b } | Color::Rgba8USrgb { r, g, b, .. } => [
-                linear_convert!(r, f32),
-                linear_convert!(g, f32),
-                linear_convert!(b, f32),
-            ],
-            Color::RgbF32 { r, g, b } | Color::RgbaF32 { r, g, b, .. } => [*r, *g, *b],
-            Color::RgbF64 { r, g, b } | Color::RgbaF64 { r, g, b, .. } => {
-                [*r as f32, *g as f32, *b as f32]
-            }
+            Color::Rgb8USrgb { r, g, b } => {
+                [*r, *g, *b, 255]
+            },
+            Color::Rgba8USrgb { r, g, b, a } => {
+                [*r, *g, *b, *a]
+            },
+            Color::RgbF32 { r, g, b } => {
+                [
+                    convert_srgb_u8!(r),
+                    convert_srgb_u8!(g),
+                    convert_srgb_u8!(b),
+                    255,
+                ]
+            },
+            Color::RgbaF32 { r, g, b, a } => {
+                [
+                    convert_srgb_u8!(r),
+                    convert_srgb_u8!(g),
+                    convert_srgb_u8!(b),
+                    (a * 255.0).round() as u8,
+                ]
+            },
+            Color::RgbF64 { r, g, b } => {
+                [
+                    convert_srgb_u8!(r),
+                    convert_srgb_u8!(g),
+                    convert_srgb_u8!(b),
+                    255,
+                ]
+            },
+            Color::RgbaF64 { r, g, b, a } => {
+                [
+                    convert_srgb_u8!(r),
+                    convert_srgb_u8!(g),
+                    convert_srgb_u8!(b),
+                    (a * 255.0).round() as u8,
+                ]
+            },
         }
     }
 
     pub fn to_rgba_f32(&self) -> [f32; 4] {
         match self {
             Color::Rgb8USrgb { r, g, b } => [
-                linear_convert!(r, f32),
-                linear_convert!(g, f32),
-                linear_convert!(b, f32),
+                convert_linear!(r, f32),
+                convert_linear!(g, f32),
+                convert_linear!(b, f32),
                 1.0,
             ],
             Color::Rgba8USrgb { r, g, b, a } => [
-                linear_convert!(r, f32),
-                linear_convert!(g, f32),
-                linear_convert!(b, f32),
+                convert_linear!(r, f32),
+                convert_linear!(g, f32),
+                convert_linear!(b, f32),
                 *a as f32 / 255.0,
             ],
             Color::RgbF32 { r, g, b } => [*r, *g, *b, 1.0],
@@ -60,30 +100,18 @@ impl Color {
         }
     }
 
-    pub fn to_rgb_f64(&self) -> [f64; 3] {
-        match self {
-            Color::Rgb8USrgb { r, g, b } | Color::Rgba8USrgb { r, g, b, .. } => [
-                linear_convert!(r, f64),
-                linear_convert!(g, f64),
-                linear_convert!(b, f64),
-            ],
-            Color::RgbF32 { r, g, b } | Color::RgbaF32 { r, g, b, .. } => [*r as f64, *g as f64, *b as f64],
-            Color::RgbF64 { r, g, b } | Color::RgbaF64 { r, g, b, .. } => [*r, *g, *b],
-        }
-    }
-
     pub fn to_rgba_f64(&self) -> [f64; 4] {
         match self {
             Color::Rgb8USrgb { r, g, b } => [
-                linear_convert!(r, f64),
-                linear_convert!(g, f64),
-                linear_convert!(b, f64),
+                convert_linear!(r, f64),
+                convert_linear!(g, f64),
+                convert_linear!(b, f64),
                 1.0,
             ],
             Color::Rgba8USrgb { r, g, b, a } => [
-                linear_convert!(r, f64),
-                linear_convert!(g, f64),
-                linear_convert!(b, f64),
+                convert_linear!(r, f64),
+                convert_linear!(g, f64),
+                convert_linear!(b, f64),
                 *a as f64 / 255.0,
             ],
             Color::RgbF32 { r, g, b } => [*r as f64, *g as f64, *b as f64, 1.0],

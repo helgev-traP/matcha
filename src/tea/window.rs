@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use crate::{application_context::ApplicationContext, cosmic::FontContext};
 
-use super::render::Renderer;
+use super::{render::Renderer, types::PxSize, ui::TeaUi};
 
-pub struct WindowState<'a> {
+struct WindowState<'a> {
     instance: wgpu::Instance,
     adaptor: wgpu::Adapter,
     surface: wgpu::Surface<'a>,
@@ -13,7 +13,7 @@ pub struct WindowState<'a> {
 }
 
 impl<'a> WindowState<'a> {
-    async fn new(
+    pub async fn new(
         winit_window: Arc<winit::window::Window>,
         power_preference: wgpu::PowerPreference,
         cosmic_context: Option<FontContext>,
@@ -96,42 +96,125 @@ impl<'a> WindowState<'a> {
         }
     }
 
-    fn get_app_context(&self) -> ApplicationContext {
+    pub fn get_app_context(&self) -> ApplicationContext {
         self.app_context.clone()
     }
 
-    fn get_current_texture(&self) -> wgpu::TextureView {
-        self.surface
-            .get_current_texture()
-            .unwrap()
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default())
+    pub fn get_current_texture(&self) -> wgpu::SurfaceTexture {
+        self.surface.get_current_texture().unwrap()
+    }
+
+    pub fn get_config(&self) -> &wgpu::SurfaceConfiguration {
+        &self.config
+    }
+
+    pub fn resize(&mut self, size: winit::dpi::PhysicalSize<u32>) {
+        self.config.width = size.width;
+        self.config.height = size.height;
+        self.surface.configure(&self.app_context.device, &self.config);
     }
 }
 
-struct Window<'a> {
+pub struct Window<'a> {
     winit_window: Option<Arc<winit::window::Window>>,
     window: Option<WindowState<'a>>,
     performance: wgpu::PowerPreference,
     title: String,
+    init_size: [u32; 2],
+    maximized: bool,
+    full_screen: bool,
 
     cosmic_context: Option<crate::cosmic::FontContext>,
 
     render: Renderer,
+
+    base_color: super::types::Color,
+    uis: Vec<Box<dyn TeaUi>>,
 }
 
-impl<'a> winit::application::ApplicationHandler for Window<'a> {
+impl Window<'_> {
+    pub fn new() -> Self {
+        Self {
+            winit_window: None,
+            window: None,
+            performance: wgpu::PowerPreference::LowPower,
+            title: "tea-ui".to_string(),
+            init_size: [800, 600],
+            maximized: false,
+            full_screen: false,
+            cosmic_context: None,
+            render: Renderer::new(),
+            base_color: super::types::Color::Rgba8USrgb {
+                r: 0,
+                g: 0,
+                b: 0,
+                a: 255,
+            },
+            uis: Vec::new(),
+        }
+    }
+
+    pub fn performance(&mut self, performance: wgpu::PowerPreference) {
+        self.performance = performance;
+    }
+
+    pub fn title(&mut self, title: &str) {
+        self.title = title.to_string();
+    }
+
+    pub fn init_size(&mut self, width: u32, height: u32) {
+        self.init_size = [width, height];
+    }
+
+    pub fn maximized(&mut self, maximized: bool) {
+        self.maximized = maximized;
+    }
+
+    pub fn full_screen(&mut self, full_screen: bool) {
+        self.full_screen = full_screen;
+    }
+
+    pub fn cosmic_context(&mut self, cosmic_context: crate::cosmic::FontContext) {
+        self.cosmic_context = Some(cosmic_context);
+    }
+
+    pub fn base_color(&mut self, base_color: super::types::Color) {
+        self.base_color = base_color;
+    }
+
+    pub fn ui(&mut self, uis: Vec<Box<dyn TeaUi>>) {
+        self.uis = uis;
+    }
+
+    pub fn add_ui(&mut self, ui: Box<dyn TeaUi>) {
+        self.uis.push(ui);
+    }
+}
+
+impl winit::application::ApplicationHandler for Window<'_> {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        self.winit_window = Some(Arc::new(
+        let mut winit_window = Arc::new(
             event_loop
                 .create_window(winit::window::Window::default_attributes())
                 .unwrap(),
+        );
+
+        winit_window.set_title(self.title.as_str());
+
+        let _ = winit_window.request_inner_size(winit::dpi::PhysicalSize::new(
+            self.init_size[0],
+            self.init_size[1],
         ));
 
-        self.winit_window
-            .as_ref()
-            .unwrap()
-            .set_title(self.title.as_str());
+        if self.maximized {
+            winit_window.set_maximized(true);
+        }
+
+        if self.full_screen {
+            winit_window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+        }
+
+        self.winit_window = Some(winit_window);
 
         let context = std::mem::take(&mut self.cosmic_context);
 
@@ -143,12 +226,14 @@ impl<'a> winit::application::ApplicationHandler for Window<'a> {
 
         self.window = Some(window_state);
 
-        let size = self.winit_window.as_ref().unwrap().inner_size();
-
         // give the render wgpu context
 
         self.render
             .set_application_context(self.window.as_ref().unwrap().get_app_context());
+
+        for item in self.uis.iter_mut() {
+            item.set_application_context(self.window.as_ref().unwrap().get_app_context());
+        }
     }
 
     fn window_event(
@@ -162,10 +247,50 @@ impl<'a> winit::application::ApplicationHandler for Window<'a> {
                 event_loop.exit();
             }
             winit::event::WindowEvent::RedrawRequested => {
+                let size = super::types::PxSize {
+                    width: self.window.as_ref().unwrap().get_config().width as f32,
+                    height: self.window.as_ref().unwrap().get_config().height as f32,
+                };
+                let surface_texture = self.window.as_ref().unwrap().get_current_texture();
+
                 self.render
-                    .render(self.window.as_ref().unwrap().get_current_texture());
+                    .render(
+                        surface_texture
+                            .texture
+                            .create_view(&wgpu::TextureViewDescriptor::default()),
+                        &size,
+                        &self.base_color,
+                        &self.uis,
+                    )
+                    .unwrap();
+
+                surface_texture.present();
             }
-            winit::event::WindowEvent::Resized(size) => {}
+            winit::event::WindowEvent::Resized(new_size) => {
+                if new_size.width > 0 && new_size.height > 0 {
+                    // update the surface configuration
+                    self.window.as_mut().unwrap().resize(new_size);
+                    // render
+                    let size = super::types::PxSize {
+                        width: self.window.as_ref().unwrap().get_config().width as f32,
+                        height: self.window.as_ref().unwrap().get_config().height as f32,
+                    };
+                    let surface_texture = self.window.as_ref().unwrap().get_current_texture();
+
+                    self.render
+                        .render(
+                            surface_texture
+                                .texture
+                                .create_view(&wgpu::TextureViewDescriptor::default()),
+                            &size,
+                            &self.base_color,
+                            &self.uis,
+                        )
+                        .unwrap();
+
+                    surface_texture.present();
+                }
+            }
             _ => {}
         }
     }
