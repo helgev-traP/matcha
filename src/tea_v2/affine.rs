@@ -1,11 +1,5 @@
 use nalgebra as na;
 
-pub fn init_2d() -> na::Matrix3<f32> {
-    na::Matrix3::new(1.0, 0.0, 0.0,
-                    0.0, 1.0, 0.0,
-                    0.0, 0.0, 1.0,)
-}
-
 pub fn translate_2d(x: f32, y: f32) -> na::Matrix3<f32> {
     na::Matrix3::new(1.0, 0.0, x,
                     0.0, 1.0, y,

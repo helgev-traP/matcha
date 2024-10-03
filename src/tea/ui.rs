@@ -1,85 +1,59 @@
-//
-pub mod layout;
-pub use layout::Container;
-pub mod row;
-pub use row::Row;
-pub mod column;
-pub use column::Column;
-pub mod property;
-pub use property::Property;
+pub mod teacup;
 
 use nalgebra as na;
+use std::{any::Any, sync::Arc};
 
-use super::types::ParentPxSize;
+use super::{application_context::ApplicationContext, events::WidgetEvent};
 
-// for ui rendering
-pub enum Object<'a> {
+pub enum Object {
     NoObject,
     Textured {
-        vertex_buffer: Box<wgpu::Buffer>,
-        index_buffer: Box<wgpu::Buffer>,
+        vertex_buffer: Arc<wgpu::Buffer>,
+        index_buffer: Arc<wgpu::Buffer>,
         index_len: u32,
-        texture: Box<&'a wgpu::Texture>,
+        texture: Arc<wgpu::Texture>,
     },
     Colored {
-        vertex_buffer: Box<wgpu::Buffer>,
-        index_buffer: Box<wgpu::Buffer>,
+        vertex_buffer: Arc<wgpu::Buffer>,
+        index_buffer: Arc<wgpu::Buffer>,
         index_len: u32,
     },
 }
 
-pub struct SubObject<'a> {
+pub struct SubObject {
     pub affine: na::Matrix3<f32>,
-    pub object: RenderObject<'a>,
+    pub object: RenderObject,
 }
 
-pub struct RenderObject<'a> {
-    pub object: Object<'a>,
-    pub px_size: super::types::PxSize,
-    pub property: Property,
-    pub sub_objects: Vec<SubObject<'a>>,
+pub struct RenderObject {
+    pub object: Object,
+    pub px_size: super::types::size::PxSize,
+    // pub property: crate::ui::Property,
+    pub sub_objects: Vec<SubObject>,
 }
 
-pub trait UiRendering {
-    fn set_application_context(
-        &mut self,
-        app_context: super::application_context::ApplicationContext,
-    );
-    fn get_style(&self) -> &Property;
-    fn set_style(&mut self, property: Property);
-    // fn render_necessity(&self) -> bool;
-    fn render_object(&self, parent_size: ParentPxSize) -> Result<RenderObject, ()>;
+pub trait DomNode: Any {
+    fn build_render_tree(&self) -> Box<dyn RenderNode>;
+
+    fn always_refresh(&self) -> bool {
+        false
+    }
 }
 
-// for event handling
-pub trait EventHandle {}
+pub trait RenderNode {
+    // for rendering
+    fn render(&mut self, app_context: &ApplicationContext) -> RenderObject;
 
-// for setting the Widget Style
-#[allow(unused_variables)]
-pub trait Style {
-    fn position(&mut self, position: property::Position) {}
-    fn overflow(&mut self, overflow: property::Overflow) {}
-    fn size(&mut self, size: super::types::Size) {}
-    fn margin(&mut self, margin: property::Margin) {}
-    fn padding(&mut self, padding: property::Padding) {}
-    fn border(&mut self, border: property::Border) {}
-    fn box_sizing(&mut self, box_sizing: property::BoxSizing) {}
-    fn text_color(&mut self, text_color: super::types::Color) {}
-    fn background_color(&mut self, background_color: super::types::Color) {}
-    fn font_family(&mut self, font_family: String) {}
-    fn font_size(&mut self, font_size: f32) {}
-    fn line_height_em(&mut self, line_height_em: f32) {}
-    fn letter_spacing(&mut self, letter_spacing: f32) {}
-    fn font_weight(&mut self, font_weight: u32) {}
-    fn font_style(&mut self, font_style: property::FontStyle) {}
-    fn text_align(&mut self, text_align: property::TextAlign) {}
-    fn text_decoration(&mut self, text_decoration: property::TextDecoration) {}
-    fn opacity(&mut self, opacity: u8) {}
-    fn visibility(&mut self, visibility: property::Visibility) {}
-    fn cursor(&mut self, cursor: property::Cursor) {}
+    // widget event
+    fn widget_event(&self, event: &WidgetEvent);
+
+    // for dom handling
+    fn update_render_tree(&self, dom: &dyn DomNode);
+    fn compare(&self, dom: &dyn DomNode) -> DomComPareResult;
 }
 
-// combine
-pub trait TeaUi: UiRendering + EventHandle + Style {}
-
-impl<T: UiRendering + EventHandle + Style> TeaUi for T {}
+pub enum DomComPareResult {
+    Same,
+    Changed,
+    Different,
+}

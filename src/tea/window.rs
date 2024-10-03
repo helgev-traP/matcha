@@ -1,157 +1,53 @@
 use std::sync::Arc;
 
-use crate::{application_context::ApplicationContext, cosmic::FontContext};
+use super::{application_context, component::Component, types::color::Color, ui::RenderNode};
+mod gpu_state;
 
-use super::{render::Renderer, types::PxSize, ui::TeaUi};
-
-struct WindowState<'a> {
-    instance: wgpu::Instance,
-    adaptor: wgpu::Adapter,
-    surface: wgpu::Surface<'a>,
-    app_context: ApplicationContext,
-    config: wgpu::SurfaceConfiguration,
-}
-
-impl<'a> WindowState<'a> {
-    pub async fn new(
-        winit_window: Arc<winit::window::Window>,
-        power_preference: wgpu::PowerPreference,
-        cosmic_context: Option<FontContext>,
-    ) -> Self {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            #[cfg(not(target_arch = "wasm32"))]
-            backends: wgpu::Backends::PRIMARY,
-            #[cfg(target_arch = "wasm32")]
-            backends: wgpu::Backends::GL,
-            ..Default::default()
-        });
-
-        let surface = instance.create_surface(winit_window.clone()).unwrap();
-
-        let adapter = instance
-            .request_adapter(
-                &(wgpu::RequestAdapterOptions {
-                    power_preference,
-                    compatible_surface: Some(&surface),
-                    force_fallback_adapter: false,
-                }),
-            )
-            .await
-            .unwrap();
-
-        let (device, queue) = adapter
-            .request_device(
-                &(wgpu::DeviceDescriptor {
-                    label: None,
-                    required_features: wgpu::Features::empty(),
-                    // WebGL doesn't support all of wgpu's features, so if
-                    // we're building for the web, we'll have to disable some.
-                    required_limits: if cfg!(target_arch = "wasm32") {
-                        wgpu::Limits::downlevel_webgl2_defaults()
-                    } else {
-                        wgpu::Limits::default()
-                    },
-                    memory_hints: wgpu::MemoryHints::default(),
-                }),
-                None, // Trace path
-            )
-            .await
-            .unwrap();
-
-        let surface_caps = surface.get_capabilities(&adapter);
-        // Shader code in this tutorial assumes an sRGB surface texture. Using a different
-        // one will result in all the colors coming out darker. If you want to support non
-        // sRGB surfaces, you'll need to account for that when drawing to the frame.
-        let surface_format = surface_caps
-            .formats
-            .iter()
-            .find(|f| f.is_srgb())
-            .copied()
-            .unwrap_or(surface_caps.formats[0]);
-
-        let size = winit_window.inner_size();
-
-        let config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface_format,
-            width: size.width,
-            height: size.height,
-            present_mode: wgpu::PresentMode::Fifo,
-            desired_maximum_frame_latency: 2,
-            alpha_mode: wgpu::CompositeAlphaMode::Opaque,
-            view_formats: vec![],
-        };
-
-        surface.configure(&device, &config);
-
-        let app_context =
-            ApplicationContext::new(winit_window, device, queue, surface_format, cosmic_context);
-
-        Self {
-            instance,
-            adaptor: adapter,
-            surface,
-            app_context,
-            config,
-        }
-    }
-
-    pub fn get_app_context(&self) -> ApplicationContext {
-        self.app_context.clone()
-    }
-
-    pub fn get_current_texture(&self) -> wgpu::SurfaceTexture {
-        self.surface.get_current_texture().unwrap()
-    }
-
-    pub fn get_config(&self) -> &wgpu::SurfaceConfiguration {
-        &self.config
-    }
-
-    pub fn resize(&mut self, size: winit::dpi::PhysicalSize<u32>) {
-        self.config.width = size.width;
-        self.config.height = size.height;
-        self.surface.configure(&self.app_context.device, &self.config);
-    }
-}
-
-pub struct Window<'a> {
-    winit_window: Option<Arc<winit::window::Window>>,
-    window: Option<WindowState<'a>>,
+pub struct Window<'a, Model, Message: 'static> {
+    // boot status
     performance: wgpu::PowerPreference,
     title: String,
     init_size: [u32; 2],
     maximized: bool,
     full_screen: bool,
 
-    cosmic_context: Option<crate::cosmic::FontContext>,
+    font_context: Option<crate::cosmic::FontContext>,
 
-    render: Renderer,
+    base_color: Color,
+    // rendering
+    winit_window: Option<Arc<winit::window::Window>>,
+    gpu_state: Option<gpu_state::GpuState<'a>>,
 
-    base_color: super::types::Color,
-    uis: Vec<Box<dyn TeaUi>>,
+    render: Option<crate::render::Render>,
+
+    // render tree
+    render_tree: Option<Box<dyn RenderNode>>,
+
+    // root component
+    root_component: Component<Model, Message>, // todo
 }
 
-impl Window<'_> {
-    pub fn new() -> Self {
+// setup
+impl<Model, Message: 'static> Window<'_, Model, Message> {
+    pub fn new(component: Component<Model, Message>) -> Self {
         Self {
-            winit_window: None,
-            window: None,
-            performance: wgpu::PowerPreference::LowPower,
-            title: "tea-ui".to_string(),
+            performance: wgpu::PowerPreference::default(),
+            title: "Tea".to_string(),
             init_size: [800, 600],
             maximized: false,
             full_screen: false,
-            cosmic_context: None,
-            render: Renderer::new(),
-            base_color: super::types::Color::Rgba8USrgb {
-                r: 0,
-                g: 0,
-                b: 0,
-                a: 255,
-            },
-            uis: Vec::new(),
+            font_context: None,
+            base_color: Color::Rgb8USrgb { r: 0, g: 0, b: 0 },
+            winit_window: None,
+            gpu_state: None,
+            render: None,
+            render_tree: None,
+            root_component: component,
         }
+    }
+
+    pub fn base_color(&mut self, color: Color) {
+        self.base_color = color;
     }
 
     pub fn performance(&mut self, performance: wgpu::PowerPreference) {
@@ -162,8 +58,8 @@ impl Window<'_> {
         self.title = title.to_string();
     }
 
-    pub fn init_size(&mut self, width: u32, height: u32) {
-        self.init_size = [width, height];
+    pub fn init_size(&mut self, size: [u32; 2]) {
+        self.init_size = size;
     }
 
     pub fn maximized(&mut self, maximized: bool) {
@@ -174,66 +70,52 @@ impl Window<'_> {
         self.full_screen = full_screen;
     }
 
-    pub fn cosmic_context(&mut self, cosmic_context: crate::cosmic::FontContext) {
-        self.cosmic_context = Some(cosmic_context);
-    }
-
-    pub fn base_color(&mut self, base_color: super::types::Color) {
-        self.base_color = base_color;
-    }
-
-    pub fn ui(&mut self, uis: Vec<Box<dyn TeaUi>>) {
-        self.uis = uis;
-    }
-
-    pub fn add_ui(&mut self, ui: Box<dyn TeaUi>) {
-        self.uis.push(ui);
+    pub fn font_context(&mut self, font_context: crate::cosmic::FontContext) {
+        self.font_context = Some(font_context);
     }
 }
 
-impl winit::application::ApplicationHandler for Window<'_> {
+// winit event handler
+impl<Model, Message: 'static> winit::application::ApplicationHandler<Message>
+    for Window<'_, Model, Message>
+{
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        let mut winit_window = Arc::new(
+        // crate window
+        let winit_window = Arc::new(
             event_loop
                 .create_window(winit::window::Window::default_attributes())
                 .unwrap(),
         );
-
         winit_window.set_title(self.title.as_str());
-
         let _ = winit_window.request_inner_size(winit::dpi::PhysicalSize::new(
             self.init_size[0],
             self.init_size[1],
         ));
-
         if self.maximized {
             winit_window.set_maximized(true);
         }
-
         if self.full_screen {
             winit_window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
         }
-
         self.winit_window = Some(winit_window);
-
-        let context = std::mem::take(&mut self.cosmic_context);
-
-        let window_state = pollster::block_on(WindowState::new(
+        let context = std::mem::take(&mut self.font_context);
+        let gpu_state = pollster::block_on(gpu_state::GpuState::new(
             self.winit_window.as_ref().unwrap().clone(),
             self.performance,
             context,
         ));
+        self.gpu_state = Some(gpu_state);
 
-        self.window = Some(window_state);
+        // set winit control flow
+        event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
 
-        // give the render wgpu context
+        // crate render
+        self.render = Some(crate::render::Render::new(
+            self.gpu_state.as_ref().unwrap().get_app_context(),
+        ));
 
-        self.render
-            .set_application_context(self.window.as_ref().unwrap().get_app_context());
-
-        for item in self.uis.iter_mut() {
-            item.set_application_context(self.window.as_ref().unwrap().get_app_context());
-        }
+        // crate render tree
+        self.render_tree = Some(self.root_component.view().unwrap().build_render_tree());
     }
 
     fn window_event(
@@ -246,51 +128,6 @@ impl winit::application::ApplicationHandler for Window<'_> {
             winit::event::WindowEvent::CloseRequested => {
                 event_loop.exit();
             }
-            winit::event::WindowEvent::RedrawRequested => {
-                let size = super::types::PxSize {
-                    width: self.window.as_ref().unwrap().get_config().width as f32,
-                    height: self.window.as_ref().unwrap().get_config().height as f32,
-                };
-                let surface_texture = self.window.as_ref().unwrap().get_current_texture();
-
-                self.render
-                    .render(
-                        surface_texture
-                            .texture
-                            .create_view(&wgpu::TextureViewDescriptor::default()),
-                        &size,
-                        &self.base_color,
-                        &self.uis,
-                    )
-                    .unwrap();
-
-                surface_texture.present();
-            }
-            winit::event::WindowEvent::Resized(new_size) => {
-                if new_size.width > 0 && new_size.height > 0 {
-                    // update the surface configuration
-                    self.window.as_mut().unwrap().resize(new_size);
-                    // render
-                    let size = super::types::PxSize {
-                        width: self.window.as_ref().unwrap().get_config().width as f32,
-                        height: self.window.as_ref().unwrap().get_config().height as f32,
-                    };
-                    let surface_texture = self.window.as_ref().unwrap().get_current_texture();
-
-                    self.render
-                        .render(
-                            surface_texture
-                                .texture
-                                .create_view(&wgpu::TextureViewDescriptor::default()),
-                            &size,
-                            &self.base_color,
-                            &self.uis,
-                        )
-                        .unwrap();
-
-                    surface_texture.present();
-                }
-            }
             _ => {}
         }
     }
@@ -300,11 +137,43 @@ impl winit::application::ApplicationHandler for Window<'_> {
         event_loop: &winit::event_loop::ActiveEventLoop,
         cause: winit::event::StartCause,
     ) {
-        let _ = (event_loop, cause);
+        match cause {
+            winit::event::StartCause::Init => {}
+            winit::event::StartCause::ResumeTimeReached {
+                start,
+                requested_resume,
+            } => {}
+            winit::event::StartCause::WaitCancelled {
+                start,
+                requested_resume,
+            } => {}
+            winit::event::StartCause::Poll => {
+                // surface
+                let surface = self.gpu_state.as_ref().unwrap().get_current_texture();
+                let surface_texture_view = surface
+                    .texture
+                    .create_view(&wgpu::TextureViewDescriptor::default());
+                let viewport_size = self.gpu_state.as_ref().unwrap().get_viewport_size();
+
+                // render
+                let render = self.render.as_ref().unwrap();
+                let render_tree = self.render_tree.as_mut().unwrap();
+
+                render.render(
+                    surface_texture_view,
+                    &viewport_size,
+                    &self.base_color,
+                    render_tree,
+                );
+
+                // present
+                surface.present();
+            }
+        }
     }
 
-    fn user_event(&mut self, event_loop: &winit::event_loop::ActiveEventLoop, event: ()) {
-        let _ = (event_loop, event);
+    fn user_event(&mut self, event_loop: &winit::event_loop::ActiveEventLoop, event: Message) {
+        self.root_component.update(event);
     }
 
     fn device_event(

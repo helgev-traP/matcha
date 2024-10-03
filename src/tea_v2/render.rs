@@ -1,30 +1,45 @@
 use nalgebra as na;
-use std::sync::Arc;
-
-use wgpu::util::DeviceExt;
-
-use super::{
-    application_context::ApplicationContext, calc, types::{color::Color, size::PxSize}, ui::{Object, RenderNode, RenderObject}
+use wgpu::{
+    core::device::{self, queue},
+    util::DeviceExt,
 };
 
-pub struct Render {
-    // context
-    app_context: ApplicationContext,
+use super::{
+    affine,
+    application_context::ApplicationContext,
+    types::{ParentPxSize, PxSize},
+    ui::{self, RenderObject, TeaUi},
+    vertex::TexturedVertex,
+};
 
-    // wgpu state
-    // texture
+struct GpuState {
+    // Textured Vertex
     texture_bind_group_layout: wgpu::BindGroupLayout,
     textured_render_pipeline: wgpu::RenderPipeline,
 
-    // color
+    // Colored Vertex
     colored_render_pipeline: wgpu::RenderPipeline,
 
     // common
     affine_bind_group_layout: wgpu::BindGroupLayout,
 }
 
-impl Render {
-    pub fn new(context: ApplicationContext) -> Self {
+pub struct Renderer {
+    app_context: Option<ApplicationContext>,
+    gpu_state: Option<GpuState>,
+}
+
+impl Renderer {
+    pub fn new() -> Self {
+        Self {
+            app_context: None,
+            gpu_state: None,
+        }
+    }
+}
+
+impl Renderer {
+    pub fn set_application_context(&mut self, context: ApplicationContext) {
         let device = context.get_wgpu_device();
 
         let surface_format = context.get_surface_format();
@@ -169,29 +184,36 @@ impl Render {
                 cache: None,
             });
 
-        Self {
-            app_context: context,
+        self.gpu_state = Some(GpuState {
             texture_bind_group_layout,
             textured_render_pipeline,
             colored_render_pipeline,
             affine_bind_group_layout,
-        }
+        });
+
+        self.app_context = Some(context);
     }
 
     pub fn render(
         &self,
         surface_view: wgpu::TextureView,
         viewport_size: &PxSize,
-        base_color: &Color,
-        render_tree: &mut Box<dyn RenderNode>,
-    ) {
-        let render_obj = render_tree.render(&self.app_context);
-
-        let queue = self.app_context.get_wgpu_queue();
-
-        let mut encoder = self.app_context.get_wgpu_encoder();
+        base_color: &super::types::Color,
+        uis: &Vec<Box<dyn TeaUi>>,
+    ) -> Result<(), ()> {
+        let device = match self.app_context.as_ref() {
+            Some(context) => context.get_wgpu_device(),
+            None => return Err(()),
+        };
+        let queue = match self.app_context.as_ref() {
+            Some(context) => context.get_wgpu_queue(),
+            None => return Err(()),
+        };
 
         // refresh the screen
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Render Encoder"),
+        });
 
         let base_color_f64 = base_color.to_rgba_f64();
 
@@ -215,22 +237,28 @@ impl Render {
             occlusion_query_set: None,
         });
 
-        // render the render object
-        let normalize = na::Matrix3::new(
-            2.0 / viewport_size.width,
-            0.0,
-            -1.0,
-            0.0,
-            2.0 / viewport_size.height,
-            1.0,
-            0.0,
-            0.0,
-            1.0,
-        );
+        // render the ui
 
-        let affine = na::Matrix3::identity();
+        // let stencil_stacks = Vec::new();
 
-        self.render_objects(&mut encoder, &surface_view, &render_obj, normalize, affine);
+        let mut accumulated_height = 0.0;
+        let normalize_matrix =
+            affine::viewport_normalize(viewport_size.width, viewport_size.height);
+
+        for ui in uis {
+            let render_object = ui.render_object((*viewport_size).into())?;
+            self.render_objects(
+                &mut encoder,
+                &surface_view,
+                &render_object,
+                normalize_matrix,
+                affine::translate_2d(0.0, accumulated_height) * na::Matrix3::identity(),
+            )?;
+            accumulated_height += render_object.px_size.height;
+        }
+
+        queue.submit(std::iter::once(encoder.finish()));
+        Ok(())
     }
 
     fn render_objects(
@@ -240,12 +268,20 @@ impl Render {
         object: &RenderObject,
         normalize: na::Matrix3<f32>,
         affine: na::Matrix3<f32>,
-    ) {
-        let device = self.app_context.get_wgpu_device();
+    ) -> Result<(), ()> {
+        let device = match self.app_context.as_ref() {
+            Some(context) => context.get_wgpu_device(),
+            None => return Err(()),
+        };
+
+        // check gpu state
+        if self.gpu_state.is_none() {
+            return Err(());
+        }
 
         // render the object
         match &object.object {
-            Object::Textured {
+            ui::Object::Textured {
                 vertex_buffer,
                 index_buffer,
                 index_len,
@@ -264,7 +300,7 @@ impl Render {
                 });
                 let texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                     label: Some("Renderer TexturedVertex Texture Bind Group"),
-                    layout: &self.texture_bind_group_layout,
+                    layout: &self.gpu_state.as_ref().unwrap().texture_bind_group_layout,
                     entries: &[
                         wgpu::BindGroupEntry {
                             binding: 0,
@@ -279,14 +315,14 @@ impl Render {
 
                 let affine_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                     label: Some("Renderer TexturedVertex Affine Bind Group"),
-                    layout: &self.affine_bind_group_layout,
+                    layout: &self.gpu_state.as_ref().unwrap().affine_bind_group_layout,
                     entries: &[wgpu::BindGroupEntry {
                         binding: 0,
                         resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                             buffer: &device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                                 label: Some("Render TexturedVertex Affine Buffer"),
                                 contents: bytemuck::cast_slice(
-                                    calc::matrix::as_3d(normalize * affine).as_slice(),
+                                    affine::as_3d(normalize * affine).as_slice(),
                                 ),
                                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                             }),
@@ -312,28 +348,28 @@ impl Render {
                 });
 
                 render_pass
-                    .set_pipeline(&self.textured_render_pipeline);
+                    .set_pipeline(&self.gpu_state.as_ref().unwrap().textured_render_pipeline);
                 render_pass.set_bind_group(0, &affine_bind_group, &[]);
                 render_pass.set_bind_group(1, &texture_bind_group, &[]);
                 render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
                 render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
                 render_pass.draw_indexed(0..*index_len, 0, 0..1);
             }
-            Object::Colored {
+            ui::Object::Colored {
                 vertex_buffer,
                 index_buffer,
                 index_len,
             } => {
                 let affine_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                     label: Some("Renderer TexturedVertex Affine Bind Group"),
-                    layout: &self.affine_bind_group_layout,
+                    layout: &self.gpu_state.as_ref().unwrap().affine_bind_group_layout,
                     entries: &[wgpu::BindGroupEntry {
                         binding: 0,
                         resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                             buffer: &device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                                 label: Some("Render TexturedVertex Affine Buffer"),
                                 contents: bytemuck::cast_slice(
-                                    calc::matrix::as_3d(normalize * affine).as_slice(),
+                                    affine::as_3d(normalize * affine).as_slice(),
                                 ),
                                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                             }),
@@ -359,13 +395,13 @@ impl Render {
                 });
 
                 render_pass
-                    .set_pipeline(&self.textured_render_pipeline);
+                    .set_pipeline(&self.gpu_state.as_ref().unwrap().textured_render_pipeline);
                 render_pass.set_bind_group(0, &affine_bind_group, &[]);
                 render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
                 render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
                 render_pass.draw_indexed(0..*index_len, 0, 0..1);
             }
-            Object::NoObject => (),
+            ui::Object::NoObject => (),
         }
 
         // recursively render the sub objects
@@ -377,7 +413,8 @@ impl Render {
                 &sub_object.object,
                 normalize,
                 affine * sub_object.affine,
-            );
+            )?;
         }
+        Ok(())
     }
 }

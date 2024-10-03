@@ -8,6 +8,7 @@ pub struct ApplicationContext {
     pub queue: Arc<wgpu::Queue>,
     pub surface_format: wgpu::TextureFormat,
 
+
     cosmic_text: FontContext,
 }
 
@@ -26,18 +27,18 @@ impl Clone for ApplicationContext {
 impl ApplicationContext {
     pub fn new(
         winit_window: Arc<winit::window::Window>,
-        device: Arc<wgpu::Device>,
-        queue: Arc<wgpu::Queue>,
+        device: wgpu::Device,
+        queue: wgpu::Queue,
         surface_format: wgpu::TextureFormat,
         cosmic_text: Option<FontContext>,
     ) -> Self {
         Self {
             winit_window,
-            device: device,
-            queue: queue,
+            device: Arc::new(device),
+            queue: Arc::new(queue),
             surface_format,
-            cosmic_text: if let Some(cosmic_text) = cosmic_text {
-                cosmic_text
+            cosmic_text: if cosmic_text.is_some() {
+                cosmic_text.unwrap()
             } else {
                 FontContext::new()
             },
@@ -55,7 +56,7 @@ impl ApplicationContext {
     pub fn get_wgpu_encoder(&self) -> wgpu::CommandEncoder {
         self.device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("App Context Command Encoder"),
+                label: Some("Device Queue Command Encoder"),
             })
     }
 

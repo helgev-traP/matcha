@@ -1,6 +1,6 @@
 use wgpu::util::DeviceExt;
 
-use super::{application_context::ApplicationContext, types::color::Color};
+use super::{application_context::ApplicationContext, types::Color};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
