@@ -178,14 +178,14 @@ impl Render {
         }
     }
 
-    pub fn render(
+    pub fn render<R>(
         &self,
         surface_view: wgpu::TextureView,
         viewport_size: &PxSize,
         base_color: &Color,
-        render_tree: &mut Box<dyn RenderNode>,
+        render_tree: &mut Box<dyn RenderNode<R>>,
     ) {
-        let render_obj = render_tree.render(&self.app_context);
+        let render_obj = render_tree.render(&self.app_context, viewport_size.into());
 
         let queue = self.app_context.get_wgpu_queue();
 
@@ -231,6 +231,8 @@ impl Render {
         let affine = na::Matrix3::identity();
 
         self.render_objects(&mut encoder, &surface_view, &render_obj, normalize, affine);
+
+        queue.submit(std::iter::once(encoder.finish()));
     }
 
     fn render_objects(

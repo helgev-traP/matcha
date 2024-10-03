@@ -19,7 +19,11 @@ pub enum SizeUnit {
 }
 
 impl SizeUnit {
-    pub fn to_px(&self, parent_px_size: Option<f32>, app_context: &ApplicationContext) -> Option<f32> {
+    pub fn to_px(
+        &self,
+        parent_px_size: Option<f32>,
+        app_context: &ApplicationContext,
+    ) -> Option<f32> {
         let parent_px_size = parent_px_size?;
         match self {
             SizeUnit::Pixel(x) => Some(*x),
@@ -30,20 +34,20 @@ impl SizeUnit {
             SizeUnit::Rem(_) => todo!(),
             SizeUnit::Vw(x) => Some(*x * app_context.get_viewport_size().0 as f32 / 100.0),
             SizeUnit::Vh(x) => Some(*x * app_context.get_viewport_size().1 as f32 / 100.0),
-            SizeUnit::VMin(x) => {
-                Some(*x * app_context
+            SizeUnit::VMin(x) => Some(
+                *x * app_context
                     .get_viewport_size()
                     .0
                     .min(app_context.get_viewport_size().1) as f32
-                    / 100.0)
-            }
-            SizeUnit::VMax(x) => {
-                Some(*x * app_context
+                    / 100.0,
+            ),
+            SizeUnit::VMax(x) => Some(
+                *x * app_context
                     .get_viewport_size()
                     .0
                     .max(app_context.get_viewport_size().1) as f32
-                    / 100.0)
-            }
+                    / 100.0,
+            ),
             SizeUnit::Content(_) => None,
         }
     }
@@ -62,7 +66,9 @@ pub struct PxSize {
 }
 
 impl<T> From<[T; 2]> for PxSize
-where T: Into<f32> {
+where
+    T: Into<f32>,
+{
     fn from([width, height]: [T; 2]) -> Self {
         PxSize {
             width: width.into(),
@@ -86,11 +92,11 @@ impl ParentPxSize {
     }
 }
 
-impl From<PxSize> for ParentPxSize {
-    fn from(px_size: PxSize) -> Self {
+impl Into<ParentPxSize> for &PxSize {
+    fn into(self) -> ParentPxSize {
         ParentPxSize {
-            width: Some(px_size.width),
-            height: Some(px_size.height),
+            width: Some(self.width),
+            height: Some(self.height),
         }
     }
 }

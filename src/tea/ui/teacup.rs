@@ -1,7 +1,15 @@
-use std::sync::Arc;
+use std::{
+    any::{Any, TypeId},
+    sync::Arc,
+};
 use wgpu::util::DeviceExt;
 
-use crate::{application_context::ApplicationContext, events::WidgetEvent};
+use crate::{
+    application_context::ApplicationContext,
+    events::WidgetEvent,
+    types::size::{ParentPxSize, PxSize},
+    vertex,
+};
 
 use super::{DomComPareResult, DomNode, RenderNode, RenderObject};
 
@@ -11,8 +19,36 @@ pub struct Teacup {
     rotate_dig: f32,
 }
 
-impl DomNode for Teacup {
-    fn build_render_tree(&self) -> Box<dyn RenderNode> {
+impl Teacup {
+    pub fn new() -> Self {
+        Self {
+            size: crate::types::size::Size {
+                width: crate::types::size::SizeUnit::Pixel(100.0),
+                height: crate::types::size::SizeUnit::Pixel(100.0),
+            },
+            position: [0.0, 0.0],
+            rotate_dig: 0.0,
+        }
+    }
+
+    pub fn size(mut self, size: crate::types::size::Size) -> Self {
+        self.size = size;
+        self
+    }
+
+    pub fn position(mut self, position: [f32; 2]) -> Self {
+        self.position = position;
+        self
+    }
+
+    pub fn rotate(mut self, rotate: f32) -> Self {
+        self.rotate_dig = rotate;
+        self
+    }
+}
+
+impl<R: 'static> DomNode<R> for Teacup {
+    fn build_render_tree(&self) -> Box<dyn RenderNode<R>> {
         let teacup_bytes = include_bytes!("./teacup.png");
         let teacup_image = image::load_from_memory(teacup_bytes).unwrap();
         let teacup_rgba = teacup_image.to_rgba8();
@@ -42,14 +78,20 @@ pub struct TeacupRenderNode {
     rotate: f32,
 
     size: crate::types::size::Size,
+
+    // previous_size: Option<PxSize>,
     texture: Option<Arc<wgpu::Texture>>,
     vertex_buffer: Option<Arc<wgpu::Buffer>>,
     index_buffer: Option<Arc<wgpu::Buffer>>,
     index_len: u32,
 }
 
-impl RenderNode for TeacupRenderNode {
-    fn render(&mut self, app_context: &ApplicationContext) -> RenderObject {
+impl<R: 'static> RenderNode<R> for TeacupRenderNode {
+    fn render(
+        &mut self,
+        app_context: &ApplicationContext,
+        parent_size: ParentPxSize,
+    ) -> RenderObject {
         let device = app_context.get_wgpu_device();
         if self.texture.is_none() {
             let size = wgpu::Extent3d {
@@ -58,31 +100,26 @@ impl RenderNode for TeacupRenderNode {
                 depth_or_array_layers: 1,
             };
 
-            let texture = device
-                .create_texture(&wgpu::TextureDescriptor {
-                    label: Some("Teacup Texture"),
-                    size,
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                    usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
-                    view_formats: &[],
-                });
+            let texture = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("Teacup Texture"),
+                size,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            });
 
-            let buffer = device.create_buffer_init(
-                &wgpu::util::BufferInitDescriptor {
-                    label: Some("Texture Buffer"),
-                    contents: &self.teacup_rgba,
-                    usage: wgpu::BufferUsages::COPY_SRC,
-                },
-            );
+            let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Texture Buffer"),
+                contents: &self.teacup_rgba,
+                usage: wgpu::BufferUsages::COPY_SRC,
+            });
 
-            let mut encoder = device.create_command_encoder(
-                &wgpu::CommandEncoderDescriptor {
-                    label: Some("Texture Command Encoder"),
-                },
-            );
+            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Texture Command Encoder"),
+            });
             encoder.copy_buffer_to_texture(
                 wgpu::ImageCopyBuffer {
                     buffer: &buffer,
@@ -102,18 +139,60 @@ impl RenderNode for TeacupRenderNode {
             );
             app_context.get_wgpu_queue().submit(Some(encoder.finish()));
 
+            let (vertex, index, index_len) = vertex::TexturedVertex::rectangle_buffer(
+                app_context,
+                0.0,
+                0.0,
+                self.size
+                    .width
+                    .to_px(parent_size.width, app_context)
+                    .unwrap(),
+                self.size
+                    .height
+                    .to_px(parent_size.height, app_context)
+                    .unwrap(),
+                false,
+            );
             self.texture = Some(Arc::new(texture));
-
+            self.vertex_buffer = Some(Arc::new(vertex));
+            self.index_buffer = Some(Arc::new(index));
+            self.index_len = index_len;
         }
 
-        todo!()
+        RenderObject {
+            object: crate::ui::Object::Textured {
+                vertex_buffer: self.vertex_buffer.as_ref().unwrap().clone(),
+                index_buffer: self.index_buffer.as_ref().unwrap().clone(),
+                index_len: self.index_len,
+                texture: self.texture.as_ref().unwrap().clone(),
+            },
+            px_size: crate::types::size::PxSize {
+                width: self
+                    .size
+                    .width
+                    .to_px(parent_size.width, app_context)
+                    .unwrap(),
+                height: self
+                    .size
+                    .height
+                    .to_px(parent_size.height, app_context)
+                    .unwrap(),
+            },
+            sub_objects: vec![],
+        }
     }
 
-    fn widget_event(&self, event: &WidgetEvent) {}
+    fn widget_event(&self, event: &WidgetEvent) -> Option<R> {
+        None
+    }
 
-    fn update_render_tree(&self, dom: &dyn DomNode) {}
+    fn update_render_tree(&self, dom: &dyn DomNode<R>) {}
 
-    fn compare(&self, dom: &dyn DomNode) -> DomComPareResult {
-        todo!()
+    fn compare(&self, dom: &dyn DomNode<R>) -> DomComPareResult {
+        if dom.type_id() == TypeId::of::<Teacup>() {
+            DomComPareResult::Same
+        } else {
+            DomComPareResult::Different
+        }
     }
 }

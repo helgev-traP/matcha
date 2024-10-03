@@ -21,15 +21,18 @@ pub struct Window<'a, Model, Message: 'static> {
     render: Option<crate::render::Render>,
 
     // render tree
-    render_tree: Option<Box<dyn RenderNode>>,
+    render_tree: Option<Box<dyn RenderNode<Message>>>,
 
     // root component
-    root_component: Component<Model, Message>, // todo
+    root_component: Component<Model, Message, Message>,
+
+    // debug
+    frame: u64,
 }
 
 // setup
 impl<Model, Message: 'static> Window<'_, Model, Message> {
-    pub fn new(component: Component<Model, Message>) -> Self {
+    pub fn new(component: Component<Model, Message, Message>) -> Self {
         Self {
             performance: wgpu::PowerPreference::default(),
             title: "Tea".to_string(),
@@ -43,6 +46,7 @@ impl<Model, Message: 'static> Window<'_, Model, Message> {
             render: None,
             render_tree: None,
             root_component: component,
+            frame: 0,
         }
     }
 
@@ -72,6 +76,35 @@ impl<Model, Message: 'static> Window<'_, Model, Message> {
 
     pub fn font_context(&mut self, font_context: crate::cosmic::FontContext) {
         self.font_context = Some(font_context);
+    }
+}
+
+impl<Model, Message: 'static> Window<'_, Model, Message> {
+    fn render(&mut self) {
+        // surface
+        let surface = self.gpu_state.as_ref().unwrap().get_current_texture();
+        let surface_texture_view = surface
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let viewport_size = self.gpu_state.as_ref().unwrap().get_viewport_size();
+
+        // render
+        let render = self.render.as_ref().unwrap();
+        let render_tree = self.render_tree.as_mut().unwrap();
+
+        render.render(
+            surface_texture_view,
+            &viewport_size,
+            &self.base_color,
+            render_tree,
+        );
+
+        // present
+        surface.present();
+
+        // frame
+        println!("frame: {}", self.frame);
+        self.frame += 1;
     }
 }
 
@@ -128,6 +161,10 @@ impl<Model, Message: 'static> winit::application::ApplicationHandler<Message>
             winit::event::WindowEvent::CloseRequested => {
                 event_loop.exit();
             }
+            winit::event::WindowEvent::Resized(size) => {
+                self.gpu_state.as_mut().unwrap().resize(size);
+                self.render();
+            }
             _ => {}
         }
     }
@@ -148,26 +185,7 @@ impl<Model, Message: 'static> winit::application::ApplicationHandler<Message>
                 requested_resume,
             } => {}
             winit::event::StartCause::Poll => {
-                // surface
-                let surface = self.gpu_state.as_ref().unwrap().get_current_texture();
-                let surface_texture_view = surface
-                    .texture
-                    .create_view(&wgpu::TextureViewDescriptor::default());
-                let viewport_size = self.gpu_state.as_ref().unwrap().get_viewport_size();
-
-                // render
-                let render = self.render.as_ref().unwrap();
-                let render_tree = self.render_tree.as_mut().unwrap();
-
-                render.render(
-                    surface_texture_view,
-                    &viewport_size,
-                    &self.base_color,
-                    render_tree,
-                );
-
-                // present
-                surface.present();
+                self.render();
             }
         }
     }

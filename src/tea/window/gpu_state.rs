@@ -123,9 +123,11 @@ impl GpuState<'_> {
     }
 
     pub fn resize(&mut self, size: winit::dpi::PhysicalSize<u32>) {
-        self.config.width = size.width;
-        self.config.height = size.height;
-        self.surface
-            .configure(&self.app_context.device, &self.config);
+        if size.width > 0 && size.height > 0 {
+            self.config.width = size.width;
+            self.config.height = size.height;
+            self.surface
+                .configure(&self.app_context.device, &self.config);
+        }
     }
 }

@@ -1,27 +1,26 @@
 use std::sync::Arc;
 
 use super::{
-    application_context::ApplicationContext,
-    ui::{DomComPareResult, DomNode, RenderNode, RenderObject},
+    application_context::ApplicationContext, types::size::ParentPxSize, ui::{DomComPareResult, DomNode, RenderNode, RenderObject}
 };
 
-pub struct Component<Model, Message> {
+pub struct Component<Model, Message, R: 'static> {
     label: Option<String>,
 
     model: Model,
     model_updated: bool,
     fn_update: fn(ComponentAccess<Model>, Message),
-    fn_view: fn(&Model) -> Box<dyn DomNode>,
+    fn_view: fn(&Model) -> Box<dyn DomNode<R>>,
 
-    render_tree: Option<Arc<std::sync::Mutex<Box<dyn RenderNode>>>>,
+    render_tree: Option<Arc<std::sync::Mutex<Box<dyn RenderNode<R>>>>>,
 }
 
-impl<Model, Message> Component<Model, Message> {
+impl<Model, Message, R: 'static> Component<Model, Message, R> {
     pub fn new(
         label: Option<String>,
         model: Model,
         update: fn(ComponentAccess<Model>, Message),
-        view: fn(&Model) -> Box<dyn DomNode>,
+        view: fn(&Model) -> Box<dyn DomNode<R>>,
     ) -> Self {
         Self {
             label,
@@ -62,7 +61,7 @@ impl<Model, Message> Component<Model, Message> {
         }
     }
 
-    pub fn view(&mut self) -> Option<Box<dyn DomNode>> {
+    pub fn view(&mut self) -> Option<Box<dyn DomNode<R>>> {
         if let None = self.render_tree {
             self.update_render_tree();
         }
@@ -88,38 +87,38 @@ impl<Model> ComponentAccess<'_, Model> {
     }
 }
 
-pub struct ComponentDom {
-    render_tree: Arc<std::sync::Mutex<Box<dyn RenderNode>>>,
+pub struct ComponentDom<R: 'static> {
+    render_tree: Arc<std::sync::Mutex<Box<dyn RenderNode<R>>>>,
 }
 
-impl DomNode for ComponentDom {
+impl<R: 'static> DomNode<R> for ComponentDom<R> {
     fn always_refresh(&self) -> bool {
         true
     }
 
-    fn build_render_tree(&self) -> Box<dyn RenderNode> {
+    fn build_render_tree(&self) -> Box<dyn RenderNode<R>> {
         Box::new(ComponentRenderNode {
             node: self.render_tree.clone(),
         })
     }
 }
 
-pub struct ComponentRenderNode {
-    node: Arc<std::sync::Mutex<Box<dyn RenderNode>>>,
+pub struct ComponentRenderNode<R: 'static> {
+    node: Arc<std::sync::Mutex<Box<dyn RenderNode<R>>>>,
 }
 
-impl RenderNode for ComponentRenderNode {
-    fn render(&mut self, app_context: &ApplicationContext) -> RenderObject {
-        self.node.lock().unwrap().render(app_context)
+impl<R: 'static> RenderNode<R> for ComponentRenderNode<R> {
+    fn render(&mut self, app_context: &ApplicationContext, parent_size: ParentPxSize) -> RenderObject {
+        self.node.lock().unwrap().render(app_context, parent_size)
     }
 
-    fn widget_event(&self, event: &super::events::WidgetEvent) {
-        self.node.lock().unwrap().widget_event(event);
+    fn widget_event(&self, event: &super::events::WidgetEvent) -> Option<R> {
+        self.node.lock().unwrap().widget_event(event)
     }
 
-    fn compare(&self, _: &dyn DomNode) -> DomComPareResult {
+    fn compare(&self, _: &dyn DomNode<R>) -> DomComPareResult {
         DomComPareResult::Different
     }
 
-    fn update_render_tree(&self, _: &dyn DomNode) {}
+    fn update_render_tree(&self, _: &dyn DomNode<R>) {}
 }
