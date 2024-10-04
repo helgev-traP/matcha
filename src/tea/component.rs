@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use super::{
-    application_context::ApplicationContext, types::size::ParentPxSize, ui::{DomComPareResult, DomNode, RenderNode, RenderObject}
+    application_context::ApplicationContext, types::size::OptionPxSize, ui::{DomComPareResult, DomNode, RenderNode, RenderObject}
 };
 
 pub struct Component<Model, Message, R: 'static> {
@@ -108,7 +108,7 @@ pub struct ComponentRenderNode<R: 'static> {
 }
 
 impl<R: 'static> RenderNode<R> for ComponentRenderNode<R> {
-    fn render(&mut self, app_context: &ApplicationContext, parent_size: ParentPxSize) -> RenderObject {
+    fn render(&mut self, app_context: &ApplicationContext, parent_size: OptionPxSize) -> RenderObject {
         self.node.lock().unwrap().render(app_context, parent_size)
     }
 

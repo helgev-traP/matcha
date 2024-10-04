@@ -1,4 +1,4 @@
-use crate::{application_context::ApplicationContext, types::size::ParentPxSize};
+use crate::{application_context::ApplicationContext, types::size::OptionPxSize};
 
 use super::{DomNode, RenderNode};
 
@@ -49,7 +49,7 @@ impl<R: 'static> RenderNode<R> for ColumnRenderNode<R> {
     fn render(
         &mut self,
         app_context: &ApplicationContext,
-        parent_size: ParentPxSize,
+        parent_size: OptionPxSize,
     ) -> super::RenderObject {
         todo!()
     }

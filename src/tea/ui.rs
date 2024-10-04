@@ -1,10 +1,14 @@
-pub mod teacup;
 pub mod column;
+pub mod teacup;
 
 use nalgebra as na;
 use std::{any::Any, sync::Arc};
 
-use super::{application_context::ApplicationContext, events::WidgetEvent, types::size::{ParentPxSize, PxSize}};
+use super::{
+    application_context::ApplicationContext,
+    events::WidgetEvent,
+    types::size::{OptionPxSize, PxSize},
+};
 
 pub enum Object {
     NoObject,
@@ -43,11 +47,16 @@ pub trait DomNode<GlobalMessage>: Any + 'static {
 
 pub trait RenderNode<GlobalMessage> {
     // for rendering
-    fn render(&mut self, app_context: &ApplicationContext, parent_size: ParentPxSize) -> RenderObject;
+    fn render(
+        &mut self,
+        app_context: &ApplicationContext,
+        parent_size: OptionPxSize,
+    ) -> RenderObject;
 
     // widget event
     fn widget_event(&self, event: &WidgetEvent) -> Option<GlobalMessage>;
-    // fn size() -> PxSize;
+    // fn size(&self) -> OptionPxSize;
+    // fn default_size(&self) -> PxSize;
 
     // for dom handling
     fn update_render_tree(&self, dom: &dyn DomNode<GlobalMessage>);

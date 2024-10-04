@@ -163,7 +163,6 @@ impl<Model, Message: 'static> winit::application::ApplicationHandler<Message>
             }
             winit::event::WindowEvent::Resized(size) => {
                 self.gpu_state.as_mut().unwrap().resize(size);
-                self.render();
             }
             _ => {}
         }

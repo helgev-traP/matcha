@@ -78,23 +78,23 @@ where
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct ParentPxSize {
+pub struct OptionPxSize {
     pub width: Option<f32>,
     pub height: Option<f32>,
 }
 
-impl ParentPxSize {
-    pub fn current_size(&self, size: &Size, app: &ApplicationContext) -> ParentPxSize {
-        ParentPxSize {
+impl OptionPxSize {
+    pub fn current_size(&self, size: &Size, app: &ApplicationContext) -> OptionPxSize {
+        OptionPxSize {
             width: size.width.to_px(self.width, app),
             height: size.height.to_px(self.height, app),
         }
     }
 }
 
-impl Into<ParentPxSize> for &PxSize {
-    fn into(self) -> ParentPxSize {
-        ParentPxSize {
+impl Into<OptionPxSize> for &PxSize {
+    fn into(self) -> OptionPxSize {
+        OptionPxSize {
             width: Some(self.width),
             height: Some(self.height),
         }

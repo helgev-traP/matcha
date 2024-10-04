@@ -7,7 +7,7 @@ use wgpu::util::DeviceExt;
 use crate::{
     application_context::ApplicationContext,
     events::WidgetEvent,
-    types::size::{ParentPxSize, PxSize},
+    types::size::{OptionPxSize, PxSize},
     vertex,
 };
 
@@ -90,7 +90,7 @@ impl<R: 'static> RenderNode<R> for TeacupRenderNode {
     fn render(
         &mut self,
         app_context: &ApplicationContext,
-        parent_size: ParentPxSize,
+        parent_size: OptionPxSize,
     ) -> RenderObject {
         let device = app_context.get_wgpu_device();
         if self.texture.is_none() {
@@ -181,6 +181,17 @@ impl<R: 'static> RenderNode<R> for TeacupRenderNode {
             sub_objects: vec![],
         }
     }
+
+    // fn default_size(&self) -> PxSize {
+    //     self.picture_size
+    // }
+
+    // fn size(&self) -> OptionPxSize {
+    //     OptionPxSize {
+    //         width: self.size.width,
+    //         height: self.size.height,
+    //     }
+    // }
 
     fn widget_event(&self, event: &WidgetEvent) -> Option<R> {
         None

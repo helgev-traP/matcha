@@ -1,4 +1,8 @@
-use tea_ui::{app::{self, App}, component::{self, Component, ComponentAccess}, ui::{teacup::Teacup, DomNode}};
+use tea_ui::{
+    app::{self, App},
+    component::{self, Component, ComponentAccess},
+    ui::{teacup::Teacup, DomNode},
+};
 
 fn update(component: ComponentAccess<u32>, message: ()) {}
 
