@@ -187,8 +187,9 @@ impl Render {
         viewport_size: &PxSize,
         base_color: &Color,
         render_tree: &mut Box<dyn RenderNode<R>>,
+        frame: u64,
     ) {
-        let render_obj = render_tree.render(&self.app_context, viewport_size.into());
+        let mut render_obj = render_tree.render(&self.app_context, viewport_size.into());
 
         let queue = self.app_context.get_wgpu_queue();
 
@@ -233,23 +234,31 @@ impl Render {
 
         let affine = na::Matrix3::identity();
 
-        self.render_objects(&mut encoder, &surface_view, &render_obj, normalize, affine);
+        self.render_objects(
+            &mut encoder,
+            &surface_view,
+            &mut render_obj,
+            normalize,
+            affine,
+            frame,
+        );
 
         queue.submit(std::iter::once(encoder.finish()));
     }
 
-    fn render_objects<R>(
+    fn render_objects(
         &self,
         encoder: &mut wgpu::CommandEncoder,
         surface_view: &wgpu::TextureView,
-        object: &RenderObject<R>,
+        object: &mut RenderObject,
         normalize: na::Matrix3<f32>,
         affine: na::Matrix3<f32>,
+        frame: u64,
     ) {
         let device = self.app_context.get_wgpu_device();
 
         // render the object
-        match object.object() {
+        match object.object(frame) {
             Object::Textured {
                 vertex_buffer,
                 index_buffer,
@@ -368,30 +377,19 @@ impl Render {
                 render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
                 render_pass.draw_indexed(0..*index_len, 0, 0..1);
             }
-            Object::TexturedIm {
-                vertex_buffer,
-                index_buffer,
-                index_len,
-                texture,
-                render_node,
-            } => todo!(),
-            Object::ColoredIm {
-                vertex_buffer,
-                index_buffer,
-                index_len,
-            } => todo!(),
             Object::NoObject => (),
         }
 
         // recursively render the sub objects
 
-        for sub_object in &object.sub_objects {
+        for sub_object in &mut object.sub_objects {
             self.render_objects(
                 encoder,
                 surface_view,
-                &sub_object.object,
+                &mut sub_object.object,
                 normalize,
                 affine * sub_object.affine,
+                frame,
             );
         }
     }

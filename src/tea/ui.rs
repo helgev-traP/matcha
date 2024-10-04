@@ -10,7 +10,7 @@ use super::{
     types::size::{OptionPxSize, PxSize},
 };
 
-pub enum Object<R> {
+pub enum Object {
     NoObject,
     Textured {
         vertex_buffer: Arc<wgpu::Buffer>,
@@ -23,34 +23,22 @@ pub enum Object<R> {
         index_buffer: Arc<wgpu::Buffer>,
         index_len: u32,
     },
-    TexturedIm {
-        vertex_buffer: Arc<wgpu::Buffer>,
-        index_buffer: Arc<wgpu::Buffer>,
-        index_len: u32,
-        texture: Arc<wgpu::Texture>,
-        render_node: Arc<dyn RenderNode<R>>,
-    },
-    ColoredIm {
-        vertex_buffer: Arc<wgpu::Buffer>,
-        index_buffer: Arc<wgpu::Buffer>,
-        index_len: u32,
-    },
 }
 
-pub struct SubObject<R> {
+pub struct SubObject {
     pub affine: na::Matrix3<f32>,
-    pub object: RenderObject<R>,
+    pub object: RenderObject,
 }
 
-pub struct RenderObject<R> {
-    object: Object<R>,
+pub struct RenderObject {
+    object: Object,
     pub px_size: super::types::size::PxSize,
     // pub property: crate::ui::Property,
-    pub sub_objects: Vec<SubObject<R>>,
+    pub sub_objects: Vec<SubObject>,
 }
 
-impl<R> RenderObject<R> {
-    pub fn new(object: Object<R>, px_size: PxSize, sub_objects: Vec<SubObject<R>>) -> Self {
+impl RenderObject {
+    pub fn new(object: Object, px_size: PxSize, sub_objects: Vec<SubObject>) -> Self {
         Self {
             object,
             px_size,
@@ -58,13 +46,8 @@ impl<R> RenderObject<R> {
         }
     }
 
-    pub fn object(&self) -> &Object<R>{
-        match &self.object {
-            Object::TexturedIm { .. } | Object::ColoredIm { .. } => {
-                todo!()
-            },
-            _ => &self.object,
-        }
+    pub fn object(&mut self, frame: u64) -> &Object{
+            &self.object
     }
 }
 
@@ -82,7 +65,7 @@ pub trait RenderNode<GlobalMessage> {
         &mut self,
         app_context: &ApplicationContext,
         parent_size: OptionPxSize,
-    ) -> RenderObject<GlobalMessage>;
+    ) -> RenderObject;
 
     // widget event
     fn widget_event(&self, event: &WidgetEvent) -> Option<GlobalMessage>;
@@ -93,6 +76,12 @@ pub trait RenderNode<GlobalMessage> {
     fn update_render_tree(&self, dom: &dyn DomNode<GlobalMessage>);
     fn compare(&self, dom: &dyn DomNode<GlobalMessage>) -> DomComPareResult;
 }
+
+pub trait Im {
+    fn poll(&mut self) -> Object;
+}
+
+pub trait RenderNodeIm<GlobalMessage>: RenderNode<GlobalMessage> + Im {}
 
 pub enum DomComPareResult {
     Same,
