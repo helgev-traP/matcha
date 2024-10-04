@@ -50,7 +50,7 @@ impl<R: 'static> RenderNode<R> for ColumnRenderNode<R> {
         &mut self,
         app_context: &ApplicationContext,
         parent_size: OptionPxSize,
-    ) -> super::RenderObject {
+    ) -> super::RenderObject<R> {
         todo!()
     }
 

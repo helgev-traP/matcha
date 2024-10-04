@@ -91,7 +91,7 @@ impl<R: 'static> RenderNode<R> for TeacupRenderNode {
         &mut self,
         app_context: &ApplicationContext,
         parent_size: OptionPxSize,
-    ) -> RenderObject {
+    ) -> RenderObject<R> {
         let device = app_context.get_wgpu_device();
         if self.texture.is_none() {
             let size = wgpu::Extent3d {

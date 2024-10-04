@@ -108,7 +108,7 @@ pub struct ComponentRenderNode<R: 'static> {
 }
 
 impl<R: 'static> RenderNode<R> for ComponentRenderNode<R> {
-    fn render(&mut self, app_context: &ApplicationContext, parent_size: OptionPxSize) -> RenderObject {
+    fn render(&mut self, app_context: &ApplicationContext, parent_size: OptionPxSize) -> RenderObject<R> {
         self.node.lock().unwrap().render(app_context, parent_size)
     }
 

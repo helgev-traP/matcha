@@ -10,7 +10,7 @@ use super::{
     types::size::{OptionPxSize, PxSize},
 };
 
-pub enum Object {
+pub enum Object<R> {
     NoObject,
     Textured {
         vertex_buffer: Arc<wgpu::Buffer>,
@@ -23,18 +23,49 @@ pub enum Object {
         index_buffer: Arc<wgpu::Buffer>,
         index_len: u32,
     },
+    TexturedIm {
+        vertex_buffer: Arc<wgpu::Buffer>,
+        index_buffer: Arc<wgpu::Buffer>,
+        index_len: u32,
+        texture: Arc<wgpu::Texture>,
+        render_node: Arc<dyn RenderNode<R>>,
+    },
+    ColoredIm {
+        vertex_buffer: Arc<wgpu::Buffer>,
+        index_buffer: Arc<wgpu::Buffer>,
+        index_len: u32,
+    },
 }
 
-pub struct SubObject {
+pub struct SubObject<R> {
     pub affine: na::Matrix3<f32>,
-    pub object: RenderObject,
+    pub object: RenderObject<R>,
 }
 
-pub struct RenderObject {
-    pub object: Object,
+pub struct RenderObject<R> {
+    object: Object<R>,
     pub px_size: super::types::size::PxSize,
     // pub property: crate::ui::Property,
-    pub sub_objects: Vec<SubObject>,
+    pub sub_objects: Vec<SubObject<R>>,
+}
+
+impl<R> RenderObject<R> {
+    pub fn new(object: Object<R>, px_size: PxSize, sub_objects: Vec<SubObject<R>>) -> Self {
+        Self {
+            object,
+            px_size,
+            sub_objects,
+        }
+    }
+
+    pub fn object(&self) -> &Object<R>{
+        match &self.object {
+            Object::TexturedIm { .. } | Object::ColoredIm { .. } => {
+                todo!()
+            },
+            _ => &self.object,
+        }
+    }
 }
 
 pub trait DomNode<GlobalMessage>: Any + 'static {
@@ -51,7 +82,7 @@ pub trait RenderNode<GlobalMessage> {
         &mut self,
         app_context: &ApplicationContext,
         parent_size: OptionPxSize,
-    ) -> RenderObject;
+    ) -> RenderObject<GlobalMessage>;
 
     // widget event
     fn widget_event(&self, event: &WidgetEvent) -> Option<GlobalMessage>;

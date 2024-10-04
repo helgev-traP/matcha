@@ -4,7 +4,10 @@ use std::sync::Arc;
 use wgpu::util::DeviceExt;
 
 use super::{
-    application_context::ApplicationContext, calc, types::{color::Color, size::PxSize}, ui::{Object, RenderNode, RenderObject}
+    application_context::ApplicationContext,
+    calc,
+    types::{color::Color, size::PxSize},
+    ui::{Object, RenderNode, RenderObject},
 };
 
 pub struct Render {
@@ -235,18 +238,18 @@ impl Render {
         queue.submit(std::iter::once(encoder.finish()));
     }
 
-    fn render_objects(
+    fn render_objects<R>(
         &self,
         encoder: &mut wgpu::CommandEncoder,
         surface_view: &wgpu::TextureView,
-        object: &RenderObject,
+        object: &RenderObject<R>,
         normalize: na::Matrix3<f32>,
         affine: na::Matrix3<f32>,
     ) {
         let device = self.app_context.get_wgpu_device();
 
         // render the object
-        match &object.object {
+        match object.object() {
             Object::Textured {
                 vertex_buffer,
                 index_buffer,
@@ -313,8 +316,7 @@ impl Render {
                     occlusion_query_set: None,
                 });
 
-                render_pass
-                    .set_pipeline(&self.textured_render_pipeline);
+                render_pass.set_pipeline(&self.textured_render_pipeline);
                 render_pass.set_bind_group(0, &affine_bind_group, &[]);
                 render_pass.set_bind_group(1, &texture_bind_group, &[]);
                 render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
@@ -360,13 +362,24 @@ impl Render {
                     occlusion_query_set: None,
                 });
 
-                render_pass
-                    .set_pipeline(&self.textured_render_pipeline);
+                render_pass.set_pipeline(&self.textured_render_pipeline);
                 render_pass.set_bind_group(0, &affine_bind_group, &[]);
                 render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
                 render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
                 render_pass.draw_indexed(0..*index_len, 0, 0..1);
             }
+            Object::TexturedIm {
+                vertex_buffer,
+                index_buffer,
+                index_len,
+                texture,
+                render_node,
+            } => todo!(),
+            Object::ColoredIm {
+                vertex_buffer,
+                index_buffer,
+                index_len,
+            } => todo!(),
             Object::NoObject => (),
         }
 
