@@ -11,7 +11,7 @@ use crate::{
     vertex,
 };
 
-use super::{DomComPareResult, DomNode, RenderNode, RenderObject};
+use super::{DomComPareResult, DomNode, RenderItem, RenderNode, RenderTrait, SubNode};
 
 pub struct Teacup {
     size: crate::types::size::Size,
@@ -48,7 +48,7 @@ impl Teacup {
 }
 
 impl<R: 'static> DomNode<R> for Teacup {
-    fn build_render_tree(&self) -> Box<dyn RenderNode<R>> {
+    fn build_render_tree(&self) -> RenderNode<R> {
         let teacup_bytes = include_bytes!("./teacup.png");
         let teacup_image = image::load_from_memory(teacup_bytes).unwrap();
         let teacup_rgba = teacup_image.to_rgba8();
@@ -86,12 +86,8 @@ pub struct TeacupRenderNode {
     index_len: u32,
 }
 
-impl<R: 'static> RenderNode<R> for TeacupRenderNode {
-    fn render(
-        &mut self,
-        app_context: &ApplicationContext,
-        parent_size: OptionPxSize,
-    ) -> RenderObject {
+impl<R: 'static> RenderTrait<R> for TeacupRenderNode {
+    fn render(&mut self, app_context: &ApplicationContext, parent_size: PxSize) -> RenderItem {
         let device = app_context.get_wgpu_device();
         if self.texture.is_none() {
             let size = wgpu::Extent3d {
@@ -159,7 +155,7 @@ impl<R: 'static> RenderNode<R> for TeacupRenderNode {
             self.index_len = index_len;
         }
 
-        RenderObject {
+        RenderItem {
             object: crate::ui::Object::Textured {
                 vertex_buffer: self.vertex_buffer.as_ref().unwrap().clone(),
                 index_buffer: self.index_buffer.as_ref().unwrap().clone(),
@@ -178,7 +174,6 @@ impl<R: 'static> RenderNode<R> for TeacupRenderNode {
                     .to_px(parent_size.height, app_context)
                     .unwrap(),
             },
-            sub_objects: vec![],
         }
     }
 
@@ -205,5 +200,17 @@ impl<R: 'static> RenderNode<R> for TeacupRenderNode {
         } else {
             DomComPareResult::Different
         }
+    }
+
+    fn sub_nodes(&self) -> Vec<SubNode<R>> {
+        vec![]
+    }
+
+    fn px_size(&self, parent_size: OptionPxSize, context: &ApplicationContext) -> OptionPxSize {
+        OptionPxSize::from_parent_size(self.size, parent_size, context)
+    }
+
+    fn default_size(&self) -> PxSize {
+        self.picture_size
     }
 }

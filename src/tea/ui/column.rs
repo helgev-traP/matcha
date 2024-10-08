@@ -1,6 +1,6 @@
 use crate::{application_context::ApplicationContext, types::size::OptionPxSize};
 
-use super::{DomNode, RenderNode};
+use super::{DomNode, RenderNode, RenderTrait};
 
 pub struct Column<R: 'static> {
     children: Vec<Box<dyn DomNode<R>>>,
@@ -24,7 +24,7 @@ impl<R: 'static> Column<R> {
 }
 
 impl<R: 'static> DomNode<R> for Column<R> {
-    fn build_render_tree(&self) -> Box<dyn RenderNode<R>> {
+    fn build_render_tree(&self) -> RenderNode<R> {
         let mut render_tree = Vec::new();
 
         for child in &self.children {
@@ -38,10 +38,10 @@ impl<R: 'static> DomNode<R> for Column<R> {
 }
 
 pub struct ColumnRenderNode<R: 'static> {
-    children: Vec<Box<dyn RenderNode<R>>>,
+    children: Vec<RenderNode<R>>,
 }
 
-impl<R: 'static> RenderNode<R> for ColumnRenderNode<R> {
+impl<R: 'static> RenderTrait<R> for ColumnRenderNode<R> {
     fn update_render_tree(&self, _new: &dyn DomNode<R>) {
         unimplemented!()
     }
@@ -50,7 +50,7 @@ impl<R: 'static> RenderNode<R> for ColumnRenderNode<R> {
         &mut self,
         app_context: &ApplicationContext,
         parent_size: OptionPxSize,
-    ) -> super::RenderObject {
+    ) -> super::RenderItem {
         todo!()
     }
 
@@ -59,6 +59,18 @@ impl<R: 'static> RenderNode<R> for ColumnRenderNode<R> {
     }
 
     fn compare(&self, dom: &dyn DomNode<R>) -> super::DomComPareResult {
+        todo!()
+    }
+
+    fn sub_nodes(&self) -> Vec<super::SubNode<R>> {
+        todo!()
+    }
+
+    fn size(&self, parent_size: OptionPxSize, context: &ApplicationContext) -> OptionPxSize {
+        todo!()
+    }
+
+    fn default_size(&self) -> crate::types::size::PxSize {
         todo!()
     }
 }

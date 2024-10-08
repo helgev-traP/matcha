@@ -20,14 +20,13 @@ pub struct Window<'a, Model, Message: 'static> {
 
     render: Option<crate::render::Render>,
 
+    frame: u64,
+
     // render tree
-    render_tree: Option<Box<dyn RenderNode<Message>>>,
+    render_tree: Option<RenderNode<Message>>,
 
     // root component
     root_component: Component<Model, Message, Message>,
-
-    // debug
-    frame: u64,
 }
 
 // setup
@@ -97,6 +96,7 @@ impl<Model, Message: 'static> Window<'_, Model, Message> {
             &viewport_size,
             &self.base_color,
             render_tree,
+            self.frame,
         );
 
         // present

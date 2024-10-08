@@ -1,4 +1,4 @@
-pub mod column;
+// pub mod column;
 pub mod teacup;
 
 use nalgebra as na;
@@ -7,81 +7,83 @@ use std::{any::Any, sync::Arc};
 use super::{
     application_context::ApplicationContext,
     events::WidgetEvent,
-    types::size::{OptionPxSize, PxSize},
+    types::size::{OptionPxSize, PxSize, Size},
 };
+
+// render object
 
 pub enum Object {
     NoObject,
     Textured {
+        affine: na::Matrix4<f32>,
         vertex_buffer: Arc<wgpu::Buffer>,
         index_buffer: Arc<wgpu::Buffer>,
         index_len: u32,
         texture: Arc<wgpu::Texture>,
     },
     Colored {
+        affine: na::Matrix4<f32>,
         vertex_buffer: Arc<wgpu::Buffer>,
         index_buffer: Arc<wgpu::Buffer>,
         index_len: u32,
     },
 }
 
-pub struct SubObject {
-    pub affine: na::Matrix3<f32>,
-    pub object: RenderObject,
-}
-
-pub struct RenderObject {
-    object: Object,
+pub struct RenderItem {
+    object: Vec<Object>,
     pub px_size: super::types::size::PxSize,
     // pub property: crate::ui::Property,
-    pub sub_objects: Vec<SubObject>,
 }
 
-impl RenderObject {
-    pub fn new(object: Object, px_size: PxSize, sub_objects: Vec<SubObject>) -> Self {
-        Self {
-            object,
-            px_size,
-            sub_objects,
-        }
+impl RenderItem {
+    pub fn new(object: Vec<Object>, px_size: PxSize) -> Self {
+        Self { object, px_size }
     }
 
-    pub fn object(&mut self, frame: u64) -> &Object{
-            &self.object
+    pub fn object(&mut self) -> &Vec<Object> {
+        &self.object
     }
 }
 
+pub struct SubNode<R> {
+    pub affine: na::Matrix4<f32>,
+    pub node: RenderNode<R>,
+}
+
+// dom tree node
 pub trait DomNode<GlobalMessage>: Any + 'static {
-    fn build_render_tree(&self) -> Box<dyn RenderNode<GlobalMessage>>;
-
-    fn always_refresh(&self) -> bool {
-        false
-    }
+    fn build_render_tree(&self) -> RenderNode<GlobalMessage>;
 }
 
-pub trait RenderNode<GlobalMessage> {
+// render tree node
+pub type RenderNode<GlobalMessage> = Box<dyn RenderTrait<GlobalMessage>>;
+
+pub trait RenderTrait<GlobalMessage> {
     // for rendering
-    fn render(
-        &mut self,
-        app_context: &ApplicationContext,
-        parent_size: OptionPxSize,
-    ) -> RenderObject;
+    fn sub_nodes(&self) -> Vec<SubNode<GlobalMessage>>;
+
+    fn redraw(&self) -> bool {
+        true
+    }
+
+    /// The size configuration of the widget.
+    fn size(&self) -> Size;
+
+    /// Actual size including its sub widgets with pixel value.
+    fn px_size(&self, parent_size: PxSize, context: &ApplicationContext) -> PxSize;
+
+    /// Default size of widget with pixel value.
+    fn default_size(&self) -> PxSize;
+
+    fn render(&mut self, app_context: &ApplicationContext, parent_size: PxSize) -> RenderItem;
 
     // widget event
     fn widget_event(&self, event: &WidgetEvent) -> Option<GlobalMessage>;
-    // fn size(&self) -> OptionPxSize;
-    // fn default_size(&self) -> PxSize;
 
     // for dom handling
     fn update_render_tree(&self, dom: &dyn DomNode<GlobalMessage>);
     fn compare(&self, dom: &dyn DomNode<GlobalMessage>) -> DomComPareResult;
 }
-
-pub trait Im {
-    fn poll(&mut self) -> Object;
-}
-
-pub trait RenderNodeIm<GlobalMessage>: RenderNode<GlobalMessage> + Im {}
 
 pub enum DomComPareResult {
     Same,

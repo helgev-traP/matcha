@@ -1,7 +1,9 @@
-use std::sync::Arc;
+use std::{borrow::Borrow, cell::RefCell, rc::Rc, sync::Arc};
 
 use super::{
-    application_context::ApplicationContext, types::size::OptionPxSize, ui::{DomComPareResult, DomNode, RenderNode, RenderObject}
+    application_context::ApplicationContext,
+    types::size::OptionPxSize,
+    ui::{DomComPareResult, DomNode, RenderItem, RenderNode, RenderTrait, SubNode},
 };
 
 pub struct Component<Model, Message, R: 'static> {
@@ -10,9 +12,9 @@ pub struct Component<Model, Message, R: 'static> {
     model: Model,
     model_updated: bool,
     fn_update: fn(ComponentAccess<Model>, Message),
-    fn_view: fn(&Model) -> Box<dyn DomNode<R>>,
+    fn_view: fn(&Model) -> Arc<dyn DomNode<R>>,
 
-    render_tree: Option<Arc<std::sync::Mutex<Box<dyn RenderNode<R>>>>>,
+    render_tree: Option<Rc<RefCell<RenderNode<R>>>>,
 }
 
 impl<Model, Message, R: 'static> Component<Model, Message, R> {
@@ -20,7 +22,7 @@ impl<Model, Message, R: 'static> Component<Model, Message, R> {
         label: Option<String>,
         model: Model,
         update: fn(ComponentAccess<Model>, Message),
-        view: fn(&Model) -> Box<dyn DomNode<R>>,
+        view: fn(&Model) -> Arc<dyn DomNode<R>>,
     ) -> Self {
         Self {
             label,
@@ -54,18 +56,18 @@ impl<Model, Message, R: 'static> Component<Model, Message, R> {
     fn update_render_tree(&mut self) {
         let dom = (self.fn_view)(&self.model);
 
-        if let Some(render_tree) = &self.render_tree {
-            render_tree.lock().unwrap().update_render_tree(&*dom);
+        if let Some(ref render_tree) = self.render_tree {
+            (**render_tree).borrow().update_render_tree(&*dom);
         } else {
-            self.render_tree = Some(Arc::new(std::sync::Mutex::new(dom.build_render_tree())));
+            self.render_tree = Some(Rc::new(RefCell::new(dom.build_render_tree())));
         }
     }
 
-    pub fn view(&mut self) -> Option<Box<dyn DomNode<R>>> {
+    pub fn view(&mut self) -> Option<Arc<dyn DomNode<R>>> {
         if let None = self.render_tree {
             self.update_render_tree();
         }
-        Some(Box::new(ComponentDom {
+        Some(Arc::new(ComponentDom {
             render_tree: self.render_tree.as_ref().unwrap().clone(),
         }))
     }
@@ -88,15 +90,11 @@ impl<Model> ComponentAccess<'_, Model> {
 }
 
 pub struct ComponentDom<R: 'static> {
-    render_tree: Arc<std::sync::Mutex<Box<dyn RenderNode<R>>>>,
+    render_tree: Rc<RefCell<RenderNode<R>>>,
 }
 
 impl<R: 'static> DomNode<R> for ComponentDom<R> {
-    fn always_refresh(&self) -> bool {
-        true
-    }
-
-    fn build_render_tree(&self) -> Box<dyn RenderNode<R>> {
+    fn build_render_tree(&self) -> RenderNode<R> {
         Box::new(ComponentRenderNode {
             node: self.render_tree.clone(),
         })
@@ -104,16 +102,20 @@ impl<R: 'static> DomNode<R> for ComponentDom<R> {
 }
 
 pub struct ComponentRenderNode<R: 'static> {
-    node: Arc<std::sync::Mutex<Box<dyn RenderNode<R>>>>,
+    node: Rc<RefCell<RenderNode<R>>>,
 }
 
-impl<R: 'static> RenderNode<R> for ComponentRenderNode<R> {
-    fn render(&mut self, app_context: &ApplicationContext, parent_size: OptionPxSize) -> RenderObject {
-        self.node.lock().unwrap().render(app_context, parent_size)
+impl<R: 'static> RenderTrait<R> for ComponentRenderNode<R> {
+    fn render(
+        &mut self,
+        app_context: &ApplicationContext,
+        parent_size: OptionPxSize,
+    ) -> RenderItem {
+        self.node.borrow_mut().render(app_context, parent_size)
     }
 
     fn widget_event(&self, event: &super::events::WidgetEvent) -> Option<R> {
-        self.node.lock().unwrap().widget_event(event)
+        (*self.node).borrow().widget_event(event)
     }
 
     fn compare(&self, _: &dyn DomNode<R>) -> DomComPareResult {
@@ -121,4 +123,16 @@ impl<R: 'static> RenderNode<R> for ComponentRenderNode<R> {
     }
 
     fn update_render_tree(&self, _: &dyn DomNode<R>) {}
+
+    fn sub_nodes(&self) -> Vec<SubNode<R>> {
+        todo!()
+    }
+
+    fn px_size(&self, parent_size: OptionPxSize, context: &ApplicationContext) -> OptionPxSize {
+        todo!()
+    }
+
+    fn default_size(&self) -> super::types::size::PxSize {
+        todo!()
+    }
 }
