@@ -262,15 +262,9 @@ impl Render {
         parent_redrew: bool,
         frame: u64,
     ) {
-        #[cfg(debug_assertions)]
-        println!("render node");
-
         let device = self.app_context.get_wgpu_device();
 
         // calculate current size
-
-        #[cfg(debug_assertions)]
-        println!("calculate current size");
 
         let current_size = node.read().unwrap().px_size(parent_size, &self.app_context);
 
@@ -284,9 +278,6 @@ impl Render {
         // redraw current node
 
         if parent_redrew || should_be_redraw {
-            #[cfg(debug_assertions)]
-            println!("redraw current node");
-
             let mut render_item = node
                 .write()
                 .unwrap()
@@ -432,9 +423,6 @@ impl Render {
         }
 
         // render sub nodes
-
-        #[cfg(debug_assertions)]
-        println!("render sub nodes");
 
         let sub_nodes = node
             .read()
