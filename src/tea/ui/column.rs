@@ -1,6 +1,10 @@
+use std::{cell::RefCell, sync::{Arc, RwLock}};
+
+use nalgebra as na;
+
 use crate::{application_context::ApplicationContext, types::size::OptionPxSize};
 
-use super::{DomNode, RenderNode, RenderTrait};
+use super::{DomNode, RenderNode, RenderTrait, SubNode};
 
 pub struct Column<R: 'static> {
     children: Vec<Box<dyn DomNode<R>>>,
@@ -31,9 +35,10 @@ impl<R: 'static> DomNode<R> for Column<R> {
             render_tree.push(child.build_render_tree());
         }
 
-        Box::new(ColumnRenderNode {
+        Arc::new(RwLock::new(ColumnRenderNode {
+            redraw: true,
             children: render_tree,
-        })
+        }))
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -42,16 +47,26 @@ impl<R: 'static> DomNode<R> for Column<R> {
 }
 
 pub struct ColumnRenderNode<R: 'static> {
+    redraw: bool,
     children: Vec<RenderNode<R>>,
 }
 
-impl<R: 'static> RenderTrait<R> for ColumnRenderNode<R> {
+impl<'a, R: 'static> RenderTrait<R> for ColumnRenderNode<R> {
     fn redraw(&self) -> bool {
-        true
+        self.redraw
     }
 
-    fn sub_nodes(&self) -> Vec<super::SubNode<R>> {
-        todo!()
+    fn sub_nodes(&self) -> Vec<SubNode<R>> {
+        let mut sub_nodes = Vec::new();
+
+        for child in &self.children {
+            sub_nodes.push(SubNode {
+                affine: na::Matrix4::identity(),
+                node: child.clone(),
+            });
+        }
+
+        sub_nodes
     }
 
     fn size(&self) -> crate::types::size::Size {
@@ -75,7 +90,7 @@ impl<R: 'static> RenderTrait<R> for ColumnRenderNode<R> {
     }
 
     fn render(
-        &mut self,
+        &self,
         app_context: &ApplicationContext,
         parent_size: crate::types::size::PxSize,
     ) -> super::RenderItem {
@@ -86,7 +101,7 @@ impl<R: 'static> RenderTrait<R> for ColumnRenderNode<R> {
         todo!()
     }
 
-    fn update_render_tree(&self, dom: &dyn DomNode<R>) {
+    fn update_render_tree(&mut self, dom: &dyn DomNode<R>) {
         todo!()
     }
 

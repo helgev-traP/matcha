@@ -1,4 +1,5 @@
 use nalgebra as na;
+use std::sync::{Mutex, RwLock};
 use std::{
     any::{Any, TypeId},
     sync::Arc,
@@ -55,7 +56,7 @@ impl<R: 'static> DomNode<R> for Teacup {
         let teacup_rgba = teacup_image.to_rgba8();
         let (width, height) = teacup_rgba.dimensions();
 
-        Box::new(TeacupRenderNode {
+        Arc::new(RwLock::new(TeacupRenderNode {
             teacup_rgba,
             picture_size: crate::types::size::PxSize {
                 width: width as f32,
@@ -64,11 +65,11 @@ impl<R: 'static> DomNode<R> for Teacup {
             position: self.position,
             rotate: self.rotate_dig,
             size: self.size,
-            texture: None,
-            vertex_buffer: None,
-            index_buffer: None,
-            index_len: 0,
-        })
+            texture: None.into(),
+            vertex_buffer: None.into(),
+            index_buffer: None.into(),
+            index_len: 0.into(),
+        }))
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -85,14 +86,14 @@ pub struct TeacupRenderNode {
     size: crate::types::size::Size,
 
     // previous_size: Option<PxSize>,
-    texture: Option<Arc<wgpu::Texture>>,
-    vertex_buffer: Option<Arc<wgpu::Buffer>>,
-    index_buffer: Option<Arc<wgpu::Buffer>>,
-    index_len: u32,
+    texture: Mutex<Option<Arc<wgpu::Texture>>>,
+    vertex_buffer: Mutex<Option<Arc<wgpu::Buffer>>>,
+    index_buffer: Mutex<Option<Arc<wgpu::Buffer>>>,
+    index_len: Mutex<u32>,
 }
 
 impl<R: 'static> RenderTrait<R> for TeacupRenderNode {
-    fn render(&mut self, app_context: &ApplicationContext, parent_size: PxSize) -> RenderItem {
+    fn render(&self, app_context: &ApplicationContext, parent_size: PxSize) -> RenderItem {
         let device = app_context.get_wgpu_device();
 
         // calculate actual size
@@ -106,9 +107,16 @@ impl<R: 'static> RenderTrait<R> for TeacupRenderNode {
 
         let size = size.unwrap();
 
+        // lock
+
+        let mut self_texture = self.texture.lock().unwrap();
+        let mut self_vertex_buffer = self.vertex_buffer.lock().unwrap();
+        let mut self_index_buffer = self.index_buffer.lock().unwrap();
+        let mut self_index_len = self.index_len.lock().unwrap();
+
         // create texture
 
-        if self.texture.is_none() {
+        if self.texture.lock().unwrap().is_none() {
             let texture_size = wgpu::Extent3d {
                 width: self.picture_size.width as u32,
                 height: self.picture_size.height as u32,
@@ -162,18 +170,18 @@ impl<R: 'static> RenderTrait<R> for TeacupRenderNode {
                 size.height,
                 false,
             );
-            self.texture = Some(Arc::new(texture));
-            self.vertex_buffer = Some(Arc::new(vertex));
-            self.index_buffer = Some(Arc::new(index));
-            self.index_len = index_len;
+            *self_texture       = Some(Arc::new(texture));
+            *self_vertex_buffer = Some(Arc::new(vertex));
+            *self_index_buffer  = Some(Arc::new(index));
+            *self_index_len     = index_len;
         }
 
         RenderItem {
             object: vec![crate::ui::Object::Textured {
-                vertex_buffer: self.vertex_buffer.as_ref().unwrap().clone(),
-                index_buffer: self.index_buffer.as_ref().unwrap().clone(),
-                index_len: self.index_len,
-                texture: self.texture.as_ref().unwrap().clone(),
+                vertex_buffer: self.vertex_buffer.lock().unwrap().as_ref().unwrap().clone(),
+                index_buffer: self.index_buffer.lock().unwrap().as_ref().unwrap().clone(),
+                index_len: *self.index_len.lock().unwrap(),
+                texture: self.texture.lock().unwrap().as_ref().unwrap().clone(),
                 affine: na::Matrix4::identity(),
             }],
             px_size: size,
@@ -195,11 +203,18 @@ impl<R: 'static> RenderTrait<R> for TeacupRenderNode {
         None
     }
 
-    fn update_render_tree(&self, dom: &dyn DomNode<R>) {}
+    fn update_render_tree(&mut self, dom: &dyn DomNode<R>) {}
 
     fn compare(&self, dom: &dyn DomNode<R>) -> DomComPareResult {
-        if dom.type_id() == TypeId::of::<Teacup>() {
-            DomComPareResult::Same
+        if let Some(teacup) = dom.as_any().downcast_ref::<Teacup>() {
+            if teacup.size == self.size
+                && teacup.position == self.position
+                && teacup.rotate_dig == self.rotate
+            {
+                DomComPareResult::Same
+            } else {
+                DomComPareResult::Changed
+            }
         } else {
             DomComPareResult::Different
         }

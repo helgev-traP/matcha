@@ -1,6 +1,6 @@
 use crate::application_context::ApplicationContext;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SizeUnit {
     // Absolute units
     Pixel(f32),
@@ -53,7 +53,7 @@ impl SizeUnit {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Size {
     pub width: SizeUnit,
     pub height: SizeUnit,

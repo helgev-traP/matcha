@@ -217,10 +217,22 @@ impl Render {
 
         // render the render object
         let normalize = na::Matrix4::new(
-            2.0 / viewport_size.width as f32, 0.0, 0.0, -1.0,
-            0.0, 2.0 / viewport_size.height as f32, 0.0, 1.0,
-            0.0, 0.0, 1.0, 0.0,
-            0.0, 0.0, 0.0, 1.0,
+            2.0 / viewport_size.width as f32,
+            0.0,
+            0.0,
+            -1.0,
+            0.0,
+            2.0 / viewport_size.height as f32,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
         );
 
         let affine = na::Matrix4::identity();
@@ -252,18 +264,16 @@ impl Render {
     ) {
         let device = self.app_context.get_wgpu_device();
 
-        let sub_nodes = node.sub_nodes();
-
-        let should_be_redraw = sub_nodes.iter().any(|sub| sub.node.redraw()) || node.redraw();
+        let should_be_redraw = node.read().unwrap().redraw() || node.read().unwrap().redraw_sub() || parent_redrew;
 
         // calculate current size
 
-        let current_size = node.px_size(parent_size, &self.app_context);
+        let current_size = node.read().unwrap().px_size(parent_size, &self.app_context);
 
         // redraw current node
 
         if parent_redrew || should_be_redraw {
-            let mut render_item = node.render(&self.app_context, current_size);
+            let mut render_item = node.write().unwrap().render(&self.app_context, current_size);
             for object in render_item.object() {
                 match object {
                     Object::NoObject => (),
@@ -406,6 +416,8 @@ impl Render {
         }
 
         // render sub nodes
+
+        let sub_nodes = node.read().unwrap().sub_nodes();
 
         for mut sub in sub_nodes {
             self.render_node(
