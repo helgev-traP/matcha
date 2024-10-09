@@ -1,3 +1,4 @@
+use nalgebra as na;
 use std::{
     any::{Any, TypeId},
     sync::Arc,
@@ -69,6 +70,10 @@ impl<R: 'static> DomNode<R> for Teacup {
             index_len: 0,
         })
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 pub struct TeacupRenderNode {
@@ -89,8 +94,22 @@ pub struct TeacupRenderNode {
 impl<R: 'static> RenderTrait<R> for TeacupRenderNode {
     fn render(&mut self, app_context: &ApplicationContext, parent_size: PxSize) -> RenderItem {
         let device = app_context.get_wgpu_device();
+
+        // calculate actual size
+
+        let mut size = OptionPxSize::from_parent_size(self.size, parent_size, app_context);
+
+        if size.width.is_none() {
+            size.width = Some(self.picture_size.width);
+            size.height = Some(self.picture_size.height);
+        }
+
+        let size = size.unwrap();
+
+        // create texture
+
         if self.texture.is_none() {
-            let size = wgpu::Extent3d {
+            let texture_size = wgpu::Extent3d {
                 width: self.picture_size.width as u32,
                 height: self.picture_size.height as u32,
                 depth_or_array_layers: 1,
@@ -98,7 +117,7 @@ impl<R: 'static> RenderTrait<R> for TeacupRenderNode {
 
             let texture = device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("Teacup Texture"),
-                size,
+                size: texture_size,
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
@@ -131,7 +150,7 @@ impl<R: 'static> RenderTrait<R> for TeacupRenderNode {
                     origin: wgpu::Origin3d::ZERO,
                     aspect: wgpu::TextureAspect::All,
                 },
-                size,
+                texture_size,
             );
             app_context.get_wgpu_queue().submit(Some(encoder.finish()));
 
@@ -139,14 +158,8 @@ impl<R: 'static> RenderTrait<R> for TeacupRenderNode {
                 app_context,
                 0.0,
                 0.0,
-                self.size
-                    .width
-                    .to_px(parent_size.width, app_context)
-                    .unwrap(),
-                self.size
-                    .height
-                    .to_px(parent_size.height, app_context)
-                    .unwrap(),
+                size.width,
+                size.height,
                 false,
             );
             self.texture = Some(Arc::new(texture));
@@ -156,24 +169,14 @@ impl<R: 'static> RenderTrait<R> for TeacupRenderNode {
         }
 
         RenderItem {
-            object: crate::ui::Object::Textured {
+            object: vec![crate::ui::Object::Textured {
                 vertex_buffer: self.vertex_buffer.as_ref().unwrap().clone(),
                 index_buffer: self.index_buffer.as_ref().unwrap().clone(),
                 index_len: self.index_len,
                 texture: self.texture.as_ref().unwrap().clone(),
-            },
-            px_size: crate::types::size::PxSize {
-                width: self
-                    .size
-                    .width
-                    .to_px(parent_size.width, app_context)
-                    .unwrap(),
-                height: self
-                    .size
-                    .height
-                    .to_px(parent_size.height, app_context)
-                    .unwrap(),
-            },
+                affine: na::Matrix4::identity(),
+            }],
+            px_size: size,
         }
     }
 
@@ -206,11 +209,24 @@ impl<R: 'static> RenderTrait<R> for TeacupRenderNode {
         vec![]
     }
 
-    fn px_size(&self, parent_size: OptionPxSize, context: &ApplicationContext) -> OptionPxSize {
-        OptionPxSize::from_parent_size(self.size, parent_size, context)
+    fn size(&self) -> crate::types::size::Size {
+        self.size
+    }
+
+    fn px_size(&self, parent_size: PxSize, context: &ApplicationContext) -> PxSize {
+        let mut size = OptionPxSize::from_parent_size(self.size, parent_size, context);
+        if size.width.is_none() {
+            size.width = Some(self.picture_size.width);
+            size.height = Some(self.picture_size.height);
+        }
+        size.unwrap()
     }
 
     fn default_size(&self) -> PxSize {
         self.picture_size
+    }
+
+    fn redraw(&self) -> bool {
+        true
     }
 }

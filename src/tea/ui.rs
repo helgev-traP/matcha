@@ -1,4 +1,4 @@
-// pub mod column;
+pub mod column;
 pub mod teacup;
 
 use nalgebra as na;
@@ -7,7 +7,7 @@ use std::{any::Any, sync::Arc};
 use super::{
     application_context::ApplicationContext,
     events::WidgetEvent,
-    types::size::{OptionPxSize, PxSize, Size},
+    types::size::{PxSize, Size},
 };
 
 // render object
@@ -53,6 +53,7 @@ pub struct SubNode<R> {
 // dom tree node
 pub trait DomNode<GlobalMessage>: Any + 'static {
     fn build_render_tree(&self) -> RenderNode<GlobalMessage>;
+    fn as_any(&self) -> &dyn Any;
 }
 
 // render tree node

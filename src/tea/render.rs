@@ -184,6 +184,7 @@ impl Render {
         viewport_size: &PxSize,
         base_color: &Color,
         render_tree: &mut RenderNode<R>,
+        redraw: bool,
         frame: u64,
     ) {
         let queue = self.app_context.get_wgpu_queue();
@@ -231,7 +232,7 @@ impl Render {
             render_tree,
             *viewport_size,
             affine,
-            false,
+            redraw,
             frame,
         );
 
@@ -253,7 +254,7 @@ impl Render {
 
         let sub_nodes = node.sub_nodes();
 
-        let if_sub_nodes_redraw = sub_nodes.iter().any(|sub| sub.node.redraw());
+        let should_be_redraw = sub_nodes.iter().any(|sub| sub.node.redraw()) || node.redraw();
 
         // calculate current size
 
@@ -261,7 +262,7 @@ impl Render {
 
         // redraw current node
 
-        if parent_redrew || if_sub_nodes_redraw {
+        if parent_redrew || should_be_redraw {
             let mut render_item = node.render(&self.app_context, current_size);
             for object in render_item.object() {
                 match object {
@@ -414,7 +415,7 @@ impl Render {
                 &mut sub.node,
                 current_size,
                 node_affine * sub.affine,
-                parent_redrew || if_sub_nodes_redraw,
+                parent_redrew || should_be_redraw,
                 frame,
             );
         }

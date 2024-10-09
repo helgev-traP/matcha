@@ -35,6 +35,10 @@ impl<R: 'static> DomNode<R> for Column<R> {
             children: render_tree,
         })
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
 pub struct ColumnRenderNode<R: 'static> {
@@ -42,14 +46,38 @@ pub struct ColumnRenderNode<R: 'static> {
 }
 
 impl<R: 'static> RenderTrait<R> for ColumnRenderNode<R> {
-    fn update_render_tree(&self, _new: &dyn DomNode<R>) {
-        unimplemented!()
+    fn redraw(&self) -> bool {
+        true
+    }
+
+    fn sub_nodes(&self) -> Vec<super::SubNode<R>> {
+        todo!()
+    }
+
+    fn size(&self) -> crate::types::size::Size {
+        // collect all children size that be able to know the actual size
+        let children_with_percented_size: Vec<&RenderNode<R>> = Vec::new();
+
+        // todo <<<<<<<<<<<<<<<<<<<<< ここから
+        todo!()
+    }
+
+    fn px_size(
+        &self,
+        parent_size: crate::types::size::PxSize,
+        context: &ApplicationContext,
+    ) -> crate::types::size::PxSize {
+        todo!()
+    }
+
+    fn default_size(&self) -> crate::types::size::PxSize {
+        todo!()
     }
 
     fn render(
         &mut self,
         app_context: &ApplicationContext,
-        parent_size: OptionPxSize,
+        parent_size: crate::types::size::PxSize,
     ) -> super::RenderItem {
         todo!()
     }
@@ -58,19 +86,11 @@ impl<R: 'static> RenderTrait<R> for ColumnRenderNode<R> {
         todo!()
     }
 
+    fn update_render_tree(&self, dom: &dyn DomNode<R>) {
+        todo!()
+    }
+
     fn compare(&self, dom: &dyn DomNode<R>) -> super::DomComPareResult {
-        todo!()
-    }
-
-    fn sub_nodes(&self) -> Vec<super::SubNode<R>> {
-        todo!()
-    }
-
-    fn size(&self, parent_size: OptionPxSize, context: &ApplicationContext) -> OptionPxSize {
-        todo!()
-    }
-
-    fn default_size(&self) -> crate::types::size::PxSize {
         todo!()
     }
 }

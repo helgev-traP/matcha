@@ -1,8 +1,8 @@
-use std::{borrow::Borrow, cell::RefCell, rc::Rc, sync::Arc};
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use super::{
     application_context::ApplicationContext,
-    types::size::OptionPxSize,
+    types::size::PxSize,
     ui::{DomComPareResult, DomNode, RenderItem, RenderNode, RenderTrait, SubNode},
 };
 
@@ -12,7 +12,7 @@ pub struct Component<Model, Message, R: 'static> {
     model: Model,
     model_updated: bool,
     fn_update: fn(ComponentAccess<Model>, Message),
-    fn_view: fn(&Model) -> Arc<dyn DomNode<R>>,
+    fn_view: fn(&Model) -> Box<dyn DomNode<R>>,
 
     render_tree: Option<Rc<RefCell<RenderNode<R>>>>,
 }
@@ -22,7 +22,7 @@ impl<Model, Message, R: 'static> Component<Model, Message, R> {
         label: Option<String>,
         model: Model,
         update: fn(ComponentAccess<Model>, Message),
-        view: fn(&Model) -> Arc<dyn DomNode<R>>,
+        view: fn(&Model) -> Box<dyn DomNode<R>>,
     ) -> Self {
         Self {
             label,
@@ -99,6 +99,10 @@ impl<R: 'static> DomNode<R> for ComponentDom<R> {
             node: self.render_tree.clone(),
         })
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
 pub struct ComponentRenderNode<R: 'static> {
@@ -106,10 +110,14 @@ pub struct ComponentRenderNode<R: 'static> {
 }
 
 impl<R: 'static> RenderTrait<R> for ComponentRenderNode<R> {
+    fn redraw(&self) -> bool {
+        (*self.node).borrow().redraw()
+    }
+
     fn render(
         &mut self,
         app_context: &ApplicationContext,
-        parent_size: OptionPxSize,
+        parent_size: PxSize,
     ) -> RenderItem {
         self.node.borrow_mut().render(app_context, parent_size)
     }
@@ -125,14 +133,18 @@ impl<R: 'static> RenderTrait<R> for ComponentRenderNode<R> {
     fn update_render_tree(&self, _: &dyn DomNode<R>) {}
 
     fn sub_nodes(&self) -> Vec<SubNode<R>> {
-        todo!()
+        (*self.node).borrow().sub_nodes()
     }
 
-    fn px_size(&self, parent_size: OptionPxSize, context: &ApplicationContext) -> OptionPxSize {
-        todo!()
+    fn size(&self) -> super::types::size::Size {
+        (*self.node).borrow().size()
+    }
+
+    fn px_size(&self, parent_size: PxSize, context: &ApplicationContext) -> PxSize {
+        (*self.node).borrow().px_size(parent_size, context)
     }
 
     fn default_size(&self) -> super::types::size::PxSize {
-        todo!()
+        (*self.node).borrow().default_size()
     }
 }

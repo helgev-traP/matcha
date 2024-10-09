@@ -79,7 +79,7 @@ impl<Model, Message: 'static> Window<'_, Model, Message> {
 }
 
 impl<Model, Message: 'static> Window<'_, Model, Message> {
-    fn render(&mut self) {
+    fn render(&mut self, redraw: bool) {
         // surface
         let surface = self.gpu_state.as_ref().unwrap().get_current_texture();
         let surface_texture_view = surface
@@ -96,14 +96,17 @@ impl<Model, Message: 'static> Window<'_, Model, Message> {
             &viewport_size,
             &self.base_color,
             render_tree,
+            redraw,
             self.frame,
         );
 
         // present
         surface.present();
 
-        // frame
+        // print frame (debug)
+        #[cfg(debug_assertions)]
         println!("frame: {}", self.frame);
+
         self.frame += 1;
     }
 }
@@ -149,6 +152,9 @@ impl<Model, Message: 'static> winit::application::ApplicationHandler<Message>
 
         // crate render tree
         self.render_tree = Some(self.root_component.view().unwrap().build_render_tree());
+
+        // render
+        self.render(true);
     }
 
     fn window_event(
@@ -184,7 +190,7 @@ impl<Model, Message: 'static> winit::application::ApplicationHandler<Message>
                 requested_resume,
             } => {}
             winit::event::StartCause::Poll => {
-                self.render();
+                self.render(false);
             }
         }
     }

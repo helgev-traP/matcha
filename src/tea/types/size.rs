@@ -98,10 +98,17 @@ impl OptionPxSize {
         }
     }
 
-    pub fn from_parent_size(size: Size, parent_size: OptionPxSize, app: &ApplicationContext) -> OptionPxSize {
+    pub fn from_parent_size(size: Size, parent_size: PxSize, app: &ApplicationContext) -> OptionPxSize {
         OptionPxSize {
-            width: size.width.to_px(parent_size.width, app),
-            height: size.height.to_px(parent_size.height, app),
+            width: size.width.to_px(Some(parent_size.width), app),
+            height: size.height.to_px(Some(parent_size.height), app),
+        }
+    }
+
+    pub fn unwrap(self) -> PxSize {
+        PxSize {
+            width: self.width.unwrap(),
+            height: self.height.unwrap(),
         }
     }
 }
