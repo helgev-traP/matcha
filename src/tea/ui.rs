@@ -2,7 +2,10 @@ pub mod column;
 pub mod teacup;
 
 use nalgebra as na;
-use std::{any::Any, sync::{Arc, Mutex, RwLock}};
+use std::{
+    any::Any,
+    sync::{Arc, Mutex, RwLock},
+};
 
 use super::{
     application_context::ApplicationContext,
@@ -13,7 +16,6 @@ use super::{
 // render object
 
 pub enum Object {
-    NoObject,
     Textured {
         affine: na::Matrix4<f32>,
         vertex_buffer: Arc<wgpu::Buffer>,
@@ -61,15 +63,17 @@ pub type RenderNode<GlobalMessage> = Arc<RwLock<dyn RenderTrait<GlobalMessage>>>
 
 pub trait RenderTrait<GlobalMessage> {
     // for rendering
-    fn sub_nodes(&self) -> Vec<SubNode<GlobalMessage>>;
+    fn sub_nodes(&self, parent_size: PxSize, context: &ApplicationContext) -> Vec<SubNode<GlobalMessage>>;
 
     fn redraw(&self) -> bool {
         // return true here if current widget need to be redrawn
         true
     }
 
-    fn redraw_sub(&self) -> bool {
-        self.sub_nodes().iter().any(|sub_node| sub_node.node.read().unwrap().redraw())
+    fn redraw_sub(&self,parent_size: PxSize, context: &ApplicationContext) -> bool {
+        self.sub_nodes(parent_size, context)
+            .iter()
+            .any(|sub_node| sub_node.node.read().unwrap().redraw())
     }
 
     /// The size configuration of the widget.
@@ -87,7 +91,7 @@ pub trait RenderTrait<GlobalMessage> {
     fn widget_event(&self, event: &WidgetEvent) -> Option<GlobalMessage>;
 
     // for dom handling
-    fn update_render_tree(&mut self, dom: &dyn DomNode<GlobalMessage>);
+    fn update_render_tree(&mut self, dom: &dyn DomNode<GlobalMessage>) -> Result<(), ()>;
     fn compare(&self, dom: &dyn DomNode<GlobalMessage>) -> DomComPareResult;
 }
 

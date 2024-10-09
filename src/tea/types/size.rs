@@ -21,34 +21,40 @@ pub enum SizeUnit {
 impl SizeUnit {
     pub fn to_px(
         &self,
-        parent_px_size: Option<f32>,
+        parent_px_size: StdSizeUnit,
         app_context: &ApplicationContext,
-    ) -> Option<f32> {
-        let parent_px_size = parent_px_size?;
+    ) -> StdSizeUnit {
         match self {
-            SizeUnit::Pixel(x) => Some(*x),
-            SizeUnit::Inch(x) => Some(*x * app_context.get_dpi() as f32),
-            SizeUnit::Point(x) => Some(*x * app_context.get_dpi() as f32 / 72.0),
-            SizeUnit::Percent(x) => Some(*x * parent_px_size / 100.0),
+            SizeUnit::Pixel(x) => StdSizeUnit::Pixel(*x),
+            SizeUnit::Inch(x) => StdSizeUnit::Pixel(*x * app_context.get_dpi() as f32),
+            SizeUnit::Point(x) => StdSizeUnit::Pixel(*x * app_context.get_dpi() as f32 / 72.0),
+            SizeUnit::Percent(x) => match parent_px_size {
+                StdSizeUnit::Pixel(px) => StdSizeUnit::Pixel(px * x / 100.0),
+                _ => StdSizeUnit::None,
+            },
             SizeUnit::Em(_) => todo!(),
             SizeUnit::Rem(_) => todo!(),
-            SizeUnit::Vw(x) => Some(*x * app_context.get_viewport_size().0 as f32 / 100.0),
-            SizeUnit::Vh(x) => Some(*x * app_context.get_viewport_size().1 as f32 / 100.0),
-            SizeUnit::VMin(x) => Some(
+            SizeUnit::Vw(x) => {
+                StdSizeUnit::Pixel(*x * app_context.get_viewport_size().0 as f32 / 100.0)
+            }
+            SizeUnit::Vh(x) => {
+                StdSizeUnit::Pixel(*x * app_context.get_viewport_size().1 as f32 / 100.0)
+            }
+            SizeUnit::VMin(x) => StdSizeUnit::Pixel(
                 *x * app_context
                     .get_viewport_size()
                     .0
                     .min(app_context.get_viewport_size().1) as f32
                     / 100.0,
             ),
-            SizeUnit::VMax(x) => Some(
+            SizeUnit::VMax(x) => StdSizeUnit::Pixel(
                 *x * app_context
                     .get_viewport_size()
                     .0
                     .max(app_context.get_viewport_size().1) as f32
                     / 100.0,
             ),
-            SizeUnit::Content(_) => None,
+            SizeUnit::Content(_) => StdSizeUnit::None,
         }
     }
 }
@@ -65,6 +71,25 @@ pub struct PxSize {
     pub height: f32,
 }
 
+impl PxSize {
+    pub fn from_size_parent_size(
+        size: Size,
+        parent_size: PxSize,
+        context: &ApplicationContext,
+    ) -> PxSize {
+        PxSize {
+            width: size
+                .width
+                .to_px(StdSizeUnit::Pixel(parent_size.width), context)
+                .unwrap_as_pixel(),
+            height: size
+                .height
+                .to_px(StdSizeUnit::Pixel(parent_size.height), context)
+                .unwrap_as_pixel(),
+        }
+    }
+}
+
 impl<T> From<[T; 2]> for PxSize
 where
     T: Into<f32>,
@@ -77,56 +102,106 @@ where
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct OptionPxSize {
-    pub width: Option<f32>,
-    pub height: Option<f32>,
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum StdSizeUnit {
+    None,
+    Pixel(f32),
+    Percent(f32),
 }
 
-impl OptionPxSize {
-    pub fn current_size(&self, size: &Size, app: &ApplicationContext) -> OptionPxSize {
-        OptionPxSize {
-            width: size.width.to_px(self.width, app),
-            height: size.height.to_px(self.height, app),
+impl StdSizeUnit {
+    pub fn is_none(&self) -> bool {
+        match self {
+            StdSizeUnit::None => true,
+            _ => false,
         }
     }
 
-    pub fn from_size(size: Size, app: &ApplicationContext) -> OptionPxSize {
-        OptionPxSize {
-            width: size.width.to_px(None, app),
-            height: size.height.to_px(None, app),
+    pub fn is_pixel(&self) -> bool {
+        match self {
+            StdSizeUnit::Pixel(_) => true,
+            _ => false,
         }
     }
 
-    pub fn from_parent_size(size: Size, parent_size: PxSize, app: &ApplicationContext) -> OptionPxSize {
-        OptionPxSize {
-            width: size.width.to_px(Some(parent_size.width), app),
-            height: size.height.to_px(Some(parent_size.height), app),
+    pub fn is_percent(&self) -> bool {
+        match self {
+            StdSizeUnit::Percent(_) => true,
+            _ => false,
+        }
+    }
+}
+
+impl StdSizeUnit {
+    pub fn unwrap_as_pixel(self) -> f32 {
+        match self {
+            StdSizeUnit::Pixel(x) => x,
+            _ => panic!("unwrap failed: not pixel"),
+        }
+    }
+
+    pub fn unwrap_as_percent(self) -> f32 {
+        match self {
+            StdSizeUnit::Percent(x) => x,
+            _ => panic!("unwrap failed: not percent"),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StdSize {
+    pub width: StdSizeUnit,
+    pub height: StdSizeUnit,
+}
+
+// todo v---- ここから
+
+impl StdSize {
+    pub fn standardize(&self, parent_size: &Size, context: &ApplicationContext) -> StdSize {
+        StdSize {
+            width: parent_size.width.to_px(self.width, context),
+            height: parent_size.height.to_px(self.height, context),
+        }
+    }
+
+    pub fn from_size(size: Size, context: &ApplicationContext) -> StdSize {
+        StdSize {
+            width: size.width.to_px(StdSizeUnit::None, context),
+            height: size.height.to_px(StdSizeUnit::None, context),
+        }
+    }
+
+    pub fn from_parent_size(size: Size, parent_size: PxSize, context: &ApplicationContext) -> StdSize {
+        StdSize {
+            width: size.width.to_px(StdSizeUnit::Pixel(parent_size.width), context),
+            height: size
+                .height
+                .to_px(StdSizeUnit::Pixel(parent_size.height), context),
         }
     }
 
     pub fn unwrap(self) -> PxSize {
         PxSize {
-            width: self.width.unwrap(),
-            height: self.height.unwrap(),
+            width: self.width.unwrap_as_pixel(),
+            height: self.height.unwrap_as_pixel(),
         }
     }
 }
 
-impl From<PxSize> for OptionPxSize {
+impl From<PxSize> for StdSize {
     fn from(size: PxSize) -> Self {
-        OptionPxSize {
-            width: Some(size.width),
-            height: Some(size.height),
+        StdSize {
+            width: StdSizeUnit::Pixel(size.width),
+            height: StdSizeUnit::Pixel(size.height),
         }
     }
 }
 
-impl From<(Size, &ApplicationContext)> for OptionPxSize {
+impl From<(Size, &ApplicationContext)> for StdSize {
     fn from(size: (Size, &ApplicationContext)) -> Self {
-        OptionPxSize {
-            width: size.0.width.to_px(None, &size.1),
-            height: size.0.height.to_px(None, &size.1),
+        StdSize {
+            width: size.0.width.to_px(StdSizeUnit::None, &size.1),
+            height: size.0.height.to_px(StdSizeUnit::None, &size.1),
         }
     }
 }

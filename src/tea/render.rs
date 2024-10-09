@@ -262,21 +262,37 @@ impl Render {
         parent_redrew: bool,
         frame: u64,
     ) {
-        let device = self.app_context.get_wgpu_device();
+        #[cfg(debug_assertions)]
+        println!("render node");
 
-        let should_be_redraw = node.read().unwrap().redraw() || node.read().unwrap().redraw_sub() || parent_redrew;
+        let device = self.app_context.get_wgpu_device();
 
         // calculate current size
 
+        #[cfg(debug_assertions)]
+        println!("calculate current size");
+
         let current_size = node.read().unwrap().px_size(parent_size, &self.app_context);
+
+        let should_be_redraw = node.read().unwrap().redraw()
+            || node
+                .read()
+                .unwrap()
+                .redraw_sub(current_size, &self.app_context)
+            || parent_redrew;
 
         // redraw current node
 
         if parent_redrew || should_be_redraw {
-            let mut render_item = node.write().unwrap().render(&self.app_context, current_size);
+            #[cfg(debug_assertions)]
+            println!("redraw current node");
+
+            let mut render_item = node
+                .write()
+                .unwrap()
+                .render(&self.app_context, current_size);
             for object in render_item.object() {
                 match object {
-                    Object::NoObject => (),
                     Object::Textured {
                         affine,
                         vertex_buffer,
@@ -417,7 +433,13 @@ impl Render {
 
         // render sub nodes
 
-        let sub_nodes = node.read().unwrap().sub_nodes();
+        #[cfg(debug_assertions)]
+        println!("render sub nodes");
+
+        let sub_nodes = node
+            .read()
+            .unwrap()
+            .sub_nodes(current_size, &self.app_context);
 
         for mut sub in sub_nodes {
             self.render_node(

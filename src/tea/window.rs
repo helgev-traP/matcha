@@ -116,7 +116,13 @@ impl<Model, Message: 'static> winit::application::ApplicationHandler<Message>
     for Window<'_, Model, Message>
 {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        #[cfg(debug_assertions)]
+        println!("resumed");
+
         // crate window
+        #[cfg(debug_assertions)]
+        println!("create window");
+
         let winit_window = Arc::new(
             event_loop
                 .create_window(winit::window::Window::default_attributes())
@@ -134,6 +140,10 @@ impl<Model, Message: 'static> winit::application::ApplicationHandler<Message>
             winit_window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
         }
         self.winit_window = Some(winit_window);
+
+        #[cfg(debug_assertions)]
+        println!("create gpu state");
+
         let context = std::mem::take(&mut self.font_context);
         let gpu_state = pollster::block_on(gpu_state::GpuState::new(
             self.winit_window.as_ref().unwrap().clone(),
@@ -143,18 +153,35 @@ impl<Model, Message: 'static> winit::application::ApplicationHandler<Message>
         self.gpu_state = Some(gpu_state);
 
         // set winit control flow
+
+        #[cfg(debug_assertions)]
+        println!("set winit control flow{:?}", winit::event_loop::ControlFlow::Poll);
         event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
 
         // crate render
+
+        #[cfg(debug_assertions)]
+        println!("create render");
+
         self.render = Some(crate::render::Render::new(
             self.gpu_state.as_ref().unwrap().get_app_context(),
         ));
 
         // crate render tree
+
+        #[cfg(debug_assertions)]
+        println!("create render tree");
+
         self.render_tree = Some(self.root_component.view().unwrap().build_render_tree());
 
         // render
+
+        #[cfg(debug_assertions)]
+        print!("first frame rendering");
+
         self.render(true);
+
+        println!("\x08\x08\x08ed");
     }
 
     fn window_event(

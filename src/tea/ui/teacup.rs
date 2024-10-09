@@ -6,10 +6,11 @@ use std::{
 };
 use wgpu::util::DeviceExt;
 
+use crate::types::size::StdSizeUnit;
 use crate::{
     application_context::ApplicationContext,
     events::WidgetEvent,
-    types::size::{OptionPxSize, PxSize},
+    types::size::{PxSize, StdSize},
     vertex,
 };
 
@@ -98,14 +99,7 @@ impl<R: 'static> RenderTrait<R> for TeacupRenderNode {
 
         // calculate actual size
 
-        let mut size = OptionPxSize::from_parent_size(self.size, parent_size, app_context);
-
-        if size.width.is_none() {
-            size.width = Some(self.picture_size.width);
-            size.height = Some(self.picture_size.height);
-        }
-
-        let size = size.unwrap();
+        let size = PxSize::from_size_parent_size(self.size, parent_size, app_context);
 
         // lock
 
@@ -116,7 +110,7 @@ impl<R: 'static> RenderTrait<R> for TeacupRenderNode {
 
         // create texture
 
-        if self.texture.lock().unwrap().is_none() {
+        if self_texture.is_none() {
             let texture_size = wgpu::Extent3d {
                 width: self.picture_size.width as u32,
                 height: self.picture_size.height as u32,
@@ -170,18 +164,18 @@ impl<R: 'static> RenderTrait<R> for TeacupRenderNode {
                 size.height,
                 false,
             );
-            *self_texture       = Some(Arc::new(texture));
+            *self_texture = Some(Arc::new(texture));
             *self_vertex_buffer = Some(Arc::new(vertex));
-            *self_index_buffer  = Some(Arc::new(index));
-            *self_index_len     = index_len;
+            *self_index_buffer = Some(Arc::new(index));
+            *self_index_len = index_len;
         }
 
         RenderItem {
             object: vec![crate::ui::Object::Textured {
-                vertex_buffer: self.vertex_buffer.lock().unwrap().as_ref().unwrap().clone(),
-                index_buffer: self.index_buffer.lock().unwrap().as_ref().unwrap().clone(),
-                index_len: *self.index_len.lock().unwrap(),
-                texture: self.texture.lock().unwrap().as_ref().unwrap().clone(),
+                vertex_buffer: self_vertex_buffer.as_ref().unwrap().clone(),
+                index_buffer: self_index_buffer.as_ref().unwrap().clone(),
+                index_len: *self_index_len,
+                texture: self_texture.as_ref().unwrap().clone(),
                 affine: na::Matrix4::identity(),
             }],
             px_size: size,
@@ -203,7 +197,12 @@ impl<R: 'static> RenderTrait<R> for TeacupRenderNode {
         None
     }
 
-    fn update_render_tree(&mut self, dom: &dyn DomNode<R>) {}
+    fn update_render_tree(&mut self, dom: &dyn DomNode<R>) -> Result<(), ()> {
+        if (*dom).type_id() != (*self).type_id() {
+            return Err(());
+        }
+        Ok(())
+    }
 
     fn compare(&self, dom: &dyn DomNode<R>) -> DomComPareResult {
         if let Some(teacup) = dom.as_any().downcast_ref::<Teacup>() {
@@ -220,7 +219,7 @@ impl<R: 'static> RenderTrait<R> for TeacupRenderNode {
         }
     }
 
-    fn sub_nodes(&self) -> Vec<SubNode<R>> {
+    fn sub_nodes(&self, parent_size: PxSize, context: &ApplicationContext) -> Vec<SubNode<R>> {
         vec![]
     }
 
@@ -229,10 +228,10 @@ impl<R: 'static> RenderTrait<R> for TeacupRenderNode {
     }
 
     fn px_size(&self, parent_size: PxSize, context: &ApplicationContext) -> PxSize {
-        let mut size = OptionPxSize::from_parent_size(self.size, parent_size, context);
+        let mut size = StdSize::from_parent_size(self.size, parent_size, context);
         if size.width.is_none() {
-            size.width = Some(self.picture_size.width);
-            size.height = Some(self.picture_size.height);
+            size.width = StdSizeUnit::Pixel(self.picture_size.width);
+            size.height = StdSizeUnit::Pixel(self.picture_size.height);
         }
         size.unwrap()
     }

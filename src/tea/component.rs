@@ -128,10 +128,12 @@ impl<R: 'static> RenderTrait<R> for ComponentRenderNode<R> {
         DomComPareResult::Different
     }
 
-    fn update_render_tree(&mut self, _: &dyn DomNode<R>) {}
+    fn update_render_tree(&mut self, _: &dyn DomNode<R>) -> Result<(), ()> {
+        Ok(())
+    }
 
-    fn sub_nodes(&self) -> Vec<SubNode<R>> {
-        self.node.read().unwrap().sub_nodes()
+    fn sub_nodes(&self, parent_size: PxSize, context: &ApplicationContext) -> Vec<SubNode<R>> {
+        self.node.read().unwrap().sub_nodes(parent_size, context)
     }
 
     fn size(&self) -> super::types::size::Size {
