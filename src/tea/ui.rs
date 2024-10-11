@@ -81,10 +81,10 @@ pub enum DomComPareResult {
 
 pub trait RenderingTrait {
     // for rendering
-    fn sub_nodes(
-        &self,
+    fn sub_nodes<'a>(
+        &'a self,
         parent_size: PxSize,
-        context: &ApplicationContext,
+        context: &'a ApplicationContext,
     ) -> Vec<SubNode>;
 
     fn redraw(&self) -> bool {

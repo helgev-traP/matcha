@@ -202,7 +202,7 @@ impl<Model, OuterResponse: 'static, InnerResponse: 'static> RenderingTrait
     }
 
 
-    fn sub_nodes<'a>(&self, parent_size: PxSize, context: &ApplicationContext) -> Vec<SubNode<'a>> {
+    fn sub_nodes(&self, parent_size: PxSize, context: &ApplicationContext) -> Vec<SubNode> {
         self.node.lock().unwrap().sub_nodes(parent_size, context)
     }
 

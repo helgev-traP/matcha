@@ -91,7 +91,7 @@ impl<Model, Message: 'static> Window<'_, Model, Message> {
         let render = self.render.as_ref().unwrap();
         let render_tree = self.render_tree.as_ref().unwrap().for_rendering();
 
-        render.render(
+        render.renderer(
             surface_texture_view,
             &viewport_size,
             &self.base_color,
@@ -107,7 +107,8 @@ impl<Model, Message: 'static> Window<'_, Model, Message> {
         #[cfg(debug_assertions)]
         {
             print!(
-                "{}", "\x08".to_string().repeat(self.frame.to_string().len() + 7),
+                "{}",
+                "\x08".to_string().repeat(self.frame.to_string().len() + 7),
             );
             print!("frame: {}", self.frame);
             // flush
