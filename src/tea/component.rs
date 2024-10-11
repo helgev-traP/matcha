@@ -4,7 +4,7 @@ use super::{
     application_context::ApplicationContext,
     events::WidgetEventResult,
     types::size::PxSize,
-    ui::{DomComPareResult, DomNode, RenderItem, RenderingTrait, SubNode, Widget, WidgetTrait},
+    ui::{DomComPareResult, DomNode, RenderingTrait, Widget, WidgetTrait},
 };
 
 pub struct Component<Model: 'static, Message, OuterResponse: 'static, InnerResponse: 'static> {
@@ -122,6 +122,15 @@ pub struct ComponentAccess<Model> {
     model_updated: Arc<Mutex<bool>>,
 }
 
+impl<Model> Clone for ComponentAccess<Model> {
+    fn clone(&self) -> Self {
+        Self {
+            model: self.model.clone(),
+            model_updated: self.model_updated.clone(),
+        }
+    }
+}
+
 impl<Model> ComponentAccess<Model> {
     pub fn model_ref(&self) -> MutexGuard<Model> {
         self.model.lock().unwrap()
@@ -155,7 +164,11 @@ where
     InnerResponse: 'static,
 {
     fn build_render_tree(&self) -> Box<dyn Widget<OuterResponse>> {
-        todo!()
+        Box::new(ComponentRenderNode {
+            component_model: self.component_model.clone(),
+            local_update_component: self.local_update_component,
+            node: self.render_tree.clone(),
+        })
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -193,18 +206,17 @@ impl<Model, O: 'static, I: 'static> WidgetTrait<O> for ComponentRenderNode<Model
 impl<Model, OuterResponse: 'static, InnerResponse: 'static> RenderingTrait
     for ComponentRenderNode<Model, OuterResponse, InnerResponse>
 {
-    fn redraw(&self) -> bool {
-        self.node.lock().unwrap().redraw()
-    }
+    // fn redraw(&self) -> bool {
+    //     self.node.lock().unwrap().redraw()
+    // }
 
-    fn render(&self, app_context: &ApplicationContext, parent_size: PxSize) -> RenderItem {
-        self.node.lock().unwrap().render(app_context, parent_size)
-    }
+    // fn render(&self, app_context: &ApplicationContext, parent_size: PxSize) -> RenderItem {
+    //     self.node.lock().unwrap().render(app_context, parent_size)
+    // }
 
-
-    fn sub_nodes(&self, parent_size: PxSize, context: &ApplicationContext) -> Vec<SubNode> {
-        self.node.lock().unwrap().sub_nodes(parent_size, context)
-    }
+    // fn sub_nodes(&self, parent_size: PxSize, context: &ApplicationContext) -> Vec<SubNode> {
+    //     self.node.lock().unwrap().sub_nodes(parent_size, context)
+    // }
 
     fn size(&self) -> super::types::size::Size {
         self.node.lock().unwrap().size()
@@ -216,5 +228,14 @@ impl<Model, OuterResponse: 'static, InnerResponse: 'static> RenderingTrait
 
     fn default_size(&self) -> super::types::size::PxSize {
         self.node.lock().unwrap().default_size()
+    }
+
+    fn render(
+        &mut self,
+        parent_size: PxSize,
+        affine: nalgebra::Matrix4<f32>,
+        encoder: &mut super::render::RenderCommandEncoder,
+    ) {
+        self.node.lock().unwrap().render(parent_size, affine, encoder)
     }
 }

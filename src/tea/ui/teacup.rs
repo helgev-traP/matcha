@@ -1,8 +1,8 @@
 use nalgebra as na;
-use std::sync::Mutex;
 use std::{any::Any, sync::Arc};
 use wgpu::util::DeviceExt;
 
+use crate::render::RenderCommandEncoder;
 use crate::types::size::StdSizeUnit;
 use crate::{
     application_context::ApplicationContext,
@@ -11,7 +11,7 @@ use crate::{
     vertex,
 };
 
-use super::{DomComPareResult, DomNode, RenderItem, RenderingTrait, SubNode, Widget, WidgetTrait};
+use super::{DomComPareResult, DomNode, RenderItem, RenderingTrait, Widget, WidgetTrait};
 
 pub struct Teacup {
     size: crate::types::size::Size,
@@ -63,10 +63,10 @@ impl<R: 'static> DomNode<R> for Teacup {
             position: self.position,
             rotate: self.rotate_dig,
             size: self.size,
-            texture: None.into(),
-            vertex_buffer: None.into(),
-            index_buffer: None.into(),
-            index_len: 0.into(),
+            texture: None,
+            vertex_buffer: None,
+            index_buffer: None,
+            index_len: 0,
         })
     }
 
@@ -84,14 +84,13 @@ pub struct TeacupRenderNode {
     size: crate::types::size::Size,
 
     // previous_size: Option<PxSize>,
-    texture: Mutex<Option<Arc<wgpu::Texture>>>,
-    vertex_buffer: Mutex<Option<Arc<wgpu::Buffer>>>,
-    index_buffer: Mutex<Option<Arc<wgpu::Buffer>>>,
-    index_len: Mutex<u32>,
+    texture: Option<Arc<wgpu::Texture>>,
+    vertex_buffer: Option<Arc<wgpu::Buffer>>,
+    index_buffer: Option<Arc<wgpu::Buffer>>,
+    index_len: u32,
 }
 
 impl<R: 'static> WidgetTrait<R> for TeacupRenderNode {
-
     // fn default_size(&self) -> PxSize {
     //     self.picture_size
     // }
@@ -120,7 +119,9 @@ impl<R: 'static> WidgetTrait<R> for TeacupRenderNode {
 
         // clear cache
 
-        *self.vertex_buffer.lock().unwrap() = None;
+        self.vertex_buffer = None;
+        self.index_buffer = None;
+        self.index_len = 0;
 
         Ok(())
     }
@@ -142,23 +143,30 @@ impl<R: 'static> WidgetTrait<R> for TeacupRenderNode {
 }
 
 impl RenderingTrait for TeacupRenderNode {
-    fn render(&self, app_context: &ApplicationContext, parent_size: PxSize) -> RenderItem {
-        let device = app_context.get_wgpu_device();
+    // fn sub_nodes(&self, _: PxSize, _: &ApplicationContext) -> Vec<SubNode> {
+    //     vec![]
+    // }
+
+    // fn redraw(&self) -> bool {
+    //     true
+    // }
+
+    fn render(
+        &mut self,
+        parent_size: PxSize,
+        affine: na::Matrix4<f32>,
+        encoder: &mut RenderCommandEncoder,
+    ) {
+        let context = encoder.get_context();
+        let device = context.get_wgpu_device();
 
         // calculate actual size
 
-        let size = PxSize::from_size_parent_size(self.size, parent_size, app_context);
-
-        // lock
-
-        let mut self_texture = self.texture.lock().unwrap();
-        let mut self_vertex_buffer = self.vertex_buffer.lock().unwrap();
-        let mut self_index_buffer = self.index_buffer.lock().unwrap();
-        let mut self_index_len = self.index_len.lock().unwrap();
+        let size = PxSize::from_size_parent_size(self.size, parent_size, context);
 
         // create texture
 
-        if self_texture.is_none() {
+        if self.texture.is_none() {
             let texture_size = wgpu::Extent3d {
                 width: self.picture_size.width as u32,
                 height: self.picture_size.height as u32,
@@ -202,14 +210,16 @@ impl RenderingTrait for TeacupRenderNode {
                 },
                 texture_size,
             );
-            app_context.get_wgpu_queue().submit(Some(encoder.finish()));
+            context.get_wgpu_queue().submit(Some(encoder.finish()));
 
-            *self_texture = Some(Arc::new(texture));
+            self.texture = Some(Arc::new(texture));
         }
 
-        if self_vertex_buffer.is_none() || self_index_buffer.is_none() || *self_index_len == 0 {
+        // create / update vertex buffer
+
+        if self.vertex_buffer.is_none() || self.index_buffer.is_none() || self.index_len == 0 {
             let (vertex, index, index_len) = vertex::TexturedVertex::rectangle_buffer(
-                app_context,
+                context,
                 0.0,
                 0.0,
                 size.width,
@@ -217,24 +227,25 @@ impl RenderingTrait for TeacupRenderNode {
                 false,
             );
 
-            *self_vertex_buffer = Some(Arc::new(vertex));
-            *self_index_buffer = Some(Arc::new(index));
-            *self_index_len = index_len;
+            self.vertex_buffer = Some(Arc::new(vertex));
+            self.index_buffer = Some(Arc::new(index));
+            self.index_len = index_len;
         }
 
-        RenderItem {
-            object: vec![crate::ui::Object::Textured {
-                vertex_buffer: self_vertex_buffer.as_ref().unwrap().clone(),
-                index_buffer: self_index_buffer.as_ref().unwrap().clone(),
-                index_len: *self_index_len,
-                texture: self_texture.as_ref().unwrap().clone(),
-                affine: na::Matrix4::identity(),
-            }],
-        }
-    }
+        // draw
 
-    fn sub_nodes(&self, _: PxSize, _: &ApplicationContext) -> Vec<SubNode> {
-        vec![]
+        encoder.draw(
+            RenderItem {
+                object: vec![crate::ui::Object::Textured {
+                    vertex_buffer: self.vertex_buffer.as_ref().unwrap().clone(),
+                    index_buffer: self.index_buffer.as_ref().unwrap().clone(),
+                    index_len: self.index_len,
+                    texture: self.texture.as_ref().unwrap().clone(),
+                    instance_affine: na::Matrix4::identity(),
+                }],
+            },
+            affine,
+        );
     }
 
     fn size(&self) -> crate::types::size::Size {
@@ -252,9 +263,5 @@ impl RenderingTrait for TeacupRenderNode {
 
     fn default_size(&self) -> PxSize {
         self.picture_size
-    }
-
-    fn redraw(&self) -> bool {
-        true
     }
 }

@@ -1,4 +1,5 @@
-use std::sync::{Arc, RwLock};
+use nalgebra as na;
+use std::sync::Arc;
 
 use super::{application_context, component::Component, types::color::Color, ui::Widget};
 mod gpu_state;
@@ -79,33 +80,34 @@ impl<Model, Message: 'static> Window<'_, Model, Message> {
 }
 
 impl<Model, Message: 'static> Window<'_, Model, Message> {
-    fn render(&mut self, redraw: bool) {
+    fn render(&mut self, #[cfg(debug_assertions)] display_frame: bool) {
         // surface
         let surface = self.gpu_state.as_ref().unwrap().get_current_texture();
         let surface_texture_view = surface
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
+
+        // depth texture
+        let depth_texture = self.gpu_state.as_ref().unwrap().get_depth_texture();
+        let depth_texture_view = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
         let viewport_size = self.gpu_state.as_ref().unwrap().get_viewport_size();
 
         // render
         let render = self.render.as_ref().unwrap();
-        let render_tree = self.render_tree.as_ref().unwrap().for_rendering();
+        let mut encoder = render.encoder(surface_texture_view, depth_texture_view, viewport_size);
+        let render_tree = self.render_tree.as_mut().unwrap().for_rendering();
 
-        render.renderer(
-            surface_texture_view,
-            &viewport_size,
-            &self.base_color,
-            render_tree,
-            redraw,
-            self.frame,
-        );
+        render_tree.render(viewport_size, na::Matrix4::identity(), &mut encoder);
+
+        encoder.finish().unwrap();
 
         // present
         surface.present();
 
         // print frame (debug)
         #[cfg(debug_assertions)]
-        {
+        if display_frame {
             print!(
                 "{}",
                 "\x08".to_string().repeat(self.frame.to_string().len() + 7),
@@ -190,9 +192,12 @@ impl<Model, Message: 'static> winit::application::ApplicationHandler<Message>
         #[cfg(debug_assertions)]
         print!("first frame rendering");
 
-        self.render(true);
+        self.render(
+            #[cfg(debug_assertions)]
+            false,
+        );
 
-        println!("\x08\x08\x08ed");
+        println!("\x08\x08\x08ed ");
     }
 
     fn window_event(
@@ -228,7 +233,10 @@ impl<Model, Message: 'static> winit::application::ApplicationHandler<Message>
                 requested_resume,
             } => {}
             winit::event::StartCause::Poll => {
-                self.render(false);
+                self.render(
+                    #[cfg(debug_assertions)]
+                    true,
+                );
             }
         }
     }

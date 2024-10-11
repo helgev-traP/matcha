@@ -1,3 +1,5 @@
+use nalgebra as na;
+
 use crate::application_context::ApplicationContext;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -88,6 +90,31 @@ impl PxSize {
                 .unwrap_as_pixel(),
         }
     }
+
+    pub fn make_normalizer(&self) -> na::Matrix4<f32> {
+        na::Matrix4::new(
+            // -
+            2.0 / self.width,
+            0.0,
+            0.0,
+            -1.0,
+            // -
+            0.0,
+            2.0 / self.height,
+            0.0,
+            1.0,
+            // -
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            // -
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+        )
+    }
 }
 
 impl<T> From<[T; 2]> for PxSize
@@ -171,9 +198,15 @@ impl StdSize {
         }
     }
 
-    pub fn from_parent_size(size: Size, parent_size: PxSize, context: &ApplicationContext) -> StdSize {
+    pub fn from_parent_size(
+        size: Size,
+        parent_size: PxSize,
+        context: &ApplicationContext,
+    ) -> StdSize {
         StdSize {
-            width: size.width.to_px(StdSizeUnit::Pixel(parent_size.width), context),
+            width: size
+                .width
+                .to_px(StdSizeUnit::Pixel(parent_size.width), context),
             height: size
                 .height
                 .to_px(StdSizeUnit::Pixel(parent_size.height), context),

@@ -1,13 +1,10 @@
 use nalgebra as na;
-use std::sync::Arc;
-
 use wgpu::util::DeviceExt;
 
 use super::{
     application_context::ApplicationContext,
-    calc,
     types::{color::Color, size::PxSize},
-    ui::{Object, RenderNode, RenderObject},
+    ui::{Object, RenderItem, RenderingTrait},
 };
 
 pub struct Render {
@@ -181,16 +178,15 @@ impl Render {
         }
     }
 
-    pub fn render<R>(
+    pub fn renderer(
         &self,
         surface_view: wgpu::TextureView,
         viewport_size: &PxSize,
         base_color: &Color,
-        render_tree: &mut Box<dyn RenderNode<R>>,
+        render_tree: &dyn RenderingTrait,
+        redraw: bool,
         frame: u64,
     ) {
-        let mut render_obj = render_tree.render(&self.app_context, viewport_size.into());
-
         let queue = self.app_context.get_wgpu_queue();
 
         let mut encoder = self.app_context.get_wgpu_encoder();
@@ -220,177 +216,222 @@ impl Render {
         });
 
         // render the render object
-        let normalize = na::Matrix3::new(
-            2.0 / viewport_size.width,
+        let normalize = na::Matrix4::new(
+            2.0 / viewport_size.width as f32,
+            0.0,
             0.0,
             -1.0,
             0.0,
-            2.0 / viewport_size.height,
+            2.0 / viewport_size.height as f32,
+            0.0,
             1.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
             0.0,
             0.0,
             1.0,
         );
 
-        let affine = na::Matrix3::identity();
+        let affine = na::Matrix4::identity();
 
-        self.render_objects(
+        self.node_renderer(
             &mut encoder,
             &surface_view,
-            &mut render_obj,
             normalize,
+            render_tree,
+            *viewport_size,
             affine,
+            redraw,
             frame,
         );
 
         queue.submit(std::iter::once(encoder.finish()));
     }
 
-    fn render_objects(
+    fn node_renderer(
         &self,
         encoder: &mut wgpu::CommandEncoder,
         surface_view: &wgpu::TextureView,
-        object: &mut RenderObject,
-        normalize: na::Matrix3<f32>,
-        affine: na::Matrix3<f32>,
+        normalize: na::Matrix4<f32>,
+        node: &dyn RenderingTrait,
+        parent_size: PxSize,
+        node_affine: na::Matrix4<f32>,
+        parent_redrew: bool,
         frame: u64,
     ) {
-        let device = self.app_context.get_wgpu_device();
+        // calculate current size
 
-        // render the object
-        match object.object(frame) {
-            Object::Textured {
-                vertex_buffer,
-                index_buffer,
-                index_len,
-                texture,
-            } => {
-                let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-                let texture_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-                    label: Some("Renderer TexturedVertex Texture Sampler"),
-                    address_mode_u: wgpu::AddressMode::ClampToEdge,
-                    address_mode_v: wgpu::AddressMode::ClampToEdge,
-                    address_mode_w: wgpu::AddressMode::ClampToEdge,
-                    mag_filter: wgpu::FilterMode::Linear,
-                    min_filter: wgpu::FilterMode::Nearest,
-                    mipmap_filter: wgpu::FilterMode::Nearest,
-                    ..Default::default()
-                });
-                let texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("Renderer TexturedVertex Texture Bind Group"),
-                    layout: &self.texture_bind_group_layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: wgpu::BindingResource::TextureView(&texture_view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: wgpu::BindingResource::Sampler(&texture_sampler),
-                        },
-                    ],
-                });
+        let current_size = node.px_size(parent_size, &self.app_context);
 
-                let affine_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("Renderer TexturedVertex Affine Bind Group"),
-                    layout: &self.affine_bind_group_layout,
-                    entries: &[wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                            buffer: &device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                label: Some("Render TexturedVertex Affine Buffer"),
-                                contents: bytemuck::cast_slice(
-                                    calc::matrix::as_3d(normalize * affine).as_slice(),
-                                ),
-                                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                            }),
-                            offset: 0,
-                            size: None,
-                        }),
-                    }],
-                });
+        let should_be_redraw =
+            node.redraw() || node.redraw_sub(current_size, &self.app_context) || parent_redrew;
 
-                let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("Renderer TexturedVertex Render Pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: surface_view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    depth_stencil_attachment: None,
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                });
+        // redraw current node
 
-                render_pass.set_pipeline(&self.textured_render_pipeline);
-                render_pass.set_bind_group(0, &affine_bind_group, &[]);
-                render_pass.set_bind_group(1, &texture_bind_group, &[]);
-                render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-                render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-                render_pass.draw_indexed(0..*index_len, 0, 0..1);
-            }
-            Object::Colored {
-                vertex_buffer,
-                index_buffer,
-                index_len,
-            } => {
-                let affine_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("Renderer TexturedVertex Affine Bind Group"),
-                    layout: &self.affine_bind_group_layout,
-                    entries: &[wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                            buffer: &device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                label: Some("Render TexturedVertex Affine Buffer"),
-                                contents: bytemuck::cast_slice(
-                                    calc::matrix::as_3d(normalize * affine).as_slice(),
-                                ),
-                                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                            }),
-                            offset: 0,
-                            size: None,
-                        }),
-                    }],
-                });
-
-                let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("Renderer TexturedVertex Render Pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: surface_view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: wgpu::StoreOp::Store,
-                        },
-                    })],
-                    depth_stencil_attachment: None,
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                });
-
-                render_pass.set_pipeline(&self.textured_render_pipeline);
-                render_pass.set_bind_group(0, &affine_bind_group, &[]);
-                render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-                render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-                render_pass.draw_indexed(0..*index_len, 0, 0..1);
-            }
-            Object::NoObject => (),
+        if parent_redrew || should_be_redraw {
+            let render_item = node.render(&self.app_context, current_size);
+            self.item_drawer(surface_view, encoder, render_item, normalize, node_affine);
         }
 
-        // recursively render the sub objects
+        // render sub nodes
 
-        for sub_object in &mut object.sub_objects {
-            self.render_objects(
+        let sub_nodes = node.sub_nodes(current_size, &self.app_context);
+
+        for sub in sub_nodes {
+            self.node_renderer(
                 encoder,
                 surface_view,
-                &mut sub_object.object,
                 normalize,
-                affine * sub_object.affine,
+                sub.node,
+                current_size,
+                node_affine * sub.affine,
+                parent_redrew || should_be_redraw,
                 frame,
             );
+        }
+    }
+
+    pub fn item_drawer(
+        &self,
+        surface_view: &wgpu::TextureView,
+        encoder: &mut wgpu::CommandEncoder,
+        render_item: RenderItem,
+        normalize: na::Matrix4<f32>,
+        node_affine: na::Matrix4<f32>,
+    ) {
+        let device = self.app_context.get_wgpu_device();
+        for object in render_item.object {
+            match object {
+                Object::Textured {
+                    instance_affine: affine,
+                    vertex_buffer,
+                    index_buffer,
+                    index_len,
+                    texture,
+                } => {
+                    let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+                    let texture_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+                        label: Some("Renderer TexturedVertex Texture Sampler"),
+                        address_mode_u: wgpu::AddressMode::ClampToEdge,
+                        address_mode_v: wgpu::AddressMode::ClampToEdge,
+                        address_mode_w: wgpu::AddressMode::ClampToEdge,
+                        mag_filter: wgpu::FilterMode::Linear,
+                        min_filter: wgpu::FilterMode::Nearest,
+                        mipmap_filter: wgpu::FilterMode::Nearest,
+                        ..Default::default()
+                    });
+                    let texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("Renderer TexturedVertex Texture Bind Group"),
+                        layout: &self.texture_bind_group_layout,
+                        entries: &[
+                            wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: wgpu::BindingResource::TextureView(&texture_view),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 1,
+                                resource: wgpu::BindingResource::Sampler(&texture_sampler),
+                            },
+                        ],
+                    });
+
+                    let affine_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("Renderer TexturedVertex Affine Bind Group"),
+                        layout: &self.affine_bind_group_layout,
+                        entries: &[wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                                buffer: &device.create_buffer_init(
+                                    &wgpu::util::BufferInitDescriptor {
+                                        label: Some("Render TexturedVertex Affine Buffer"),
+                                        contents: bytemuck::cast_slice(
+                                            (normalize * node_affine * affine).as_slice(),
+                                        ),
+                                        usage: wgpu::BufferUsages::UNIFORM
+                                            | wgpu::BufferUsages::COPY_DST,
+                                    },
+                                ),
+                                offset: 0,
+                                size: None,
+                            }),
+                        }],
+                    });
+
+                    let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("Renderer TexturedVertex Render Pass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: surface_view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            },
+                        })],
+                        depth_stencil_attachment: None,
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                    });
+
+                    render_pass.set_pipeline(&self.textured_render_pipeline);
+                    render_pass.set_bind_group(0, &affine_bind_group, &[]);
+                    render_pass.set_bind_group(1, &texture_bind_group, &[]);
+                    render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+                    render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+                    render_pass.draw_indexed(0..index_len, 0, 0..1);
+                }
+                Object::Colored {
+                    instance_affine: affine,
+                    vertex_buffer,
+                    index_buffer,
+                    index_len,
+                } => {
+                    let affine_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("Renderer ColoredVertex Affine Bind Group"),
+                        layout: &self.affine_bind_group_layout,
+                        entries: &[wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                                buffer: &device.create_buffer_init(
+                                    &wgpu::util::BufferInitDescriptor {
+                                        label: Some("Render ColoredVertex Affine Buffer"),
+                                        contents: bytemuck::cast_slice(
+                                            (normalize * node_affine * affine).as_slice(),
+                                        ),
+                                        usage: wgpu::BufferUsages::UNIFORM
+                                            | wgpu::BufferUsages::COPY_DST,
+                                    },
+                                ),
+                                offset: 0,
+                                size: None,
+                            }),
+                        }],
+                    });
+
+                    let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("Renderer ColoredVertex Render Pass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: surface_view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            },
+                        })],
+                        depth_stencil_attachment: None,
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                    });
+
+                    render_pass.set_pipeline(&self.colored_render_pipeline);
+                    render_pass.set_bind_group(0, &affine_bind_group, &[]);
+                    render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+                    render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+                    render_pass.draw_indexed(0..index_len, 0, 0..1);
+                }
+            }
         }
     }
 }

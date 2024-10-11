@@ -1,13 +1,13 @@
 use nalgebra as na;
-use std::{
-    any::Any,
-    cell::Cell,
-};
+use std::{any::Any, cell::Cell};
 
-use super::{DomComPareResult, DomNode, RenderItem, RenderingTrait, SubNode, Widget, WidgetTrait};
+use super::{
+    DomComPareResult, DomNode, RenderItem, RenderingTrait, /* SubNode,*/ Widget, WidgetTrait,
+};
 use crate::{
     application_context::ApplicationContext,
     events::WidgetEventResult,
+    render::RenderCommandEncoder,
     types::size::{PxSize, Size, SizeUnit, StdSize, StdSizeUnit},
 };
 
@@ -88,38 +88,6 @@ impl<'a, R: 'static> WidgetTrait<R> for ColumnRenderNode<R> {
 }
 
 impl<R> RenderingTrait for ColumnRenderNode<R> {
-    fn redraw(&self) -> bool {
-        self.redraw
-    }
-
-    fn sub_nodes(&self, parent_size: PxSize, context: &ApplicationContext) -> Vec<SubNode> {
-        let mut sub_nodes = Vec::new();
-
-        if self.cache_self_size.get().is_none() {
-            self.cache_self_size
-                .set(Some(self.px_size(parent_size, context)));
-        }
-
-        let mut accumulate_height: f32 = 0.0;
-
-        for child in &self.children {
-            sub_nodes.push(SubNode {
-                affine: na::Matrix4::new_translation(&na::Vector3::new(
-                    0.0,
-                    -accumulate_height,
-                    0.0,
-                )) * na::Matrix4::identity(),
-                node: child.for_rendering(),
-            });
-
-            accumulate_height += child
-                .px_size(self.cache_self_size.get().unwrap(), context)
-                .height;
-        }
-
-        sub_nodes
-    }
-
     fn size(&self) -> crate::types::size::Size {
         Size {
             width: SizeUnit::Content(1.0),
@@ -162,7 +130,22 @@ impl<R> RenderingTrait for ColumnRenderNode<R> {
         todo!()
     }
 
-    fn render(&self, _: &ApplicationContext, _: crate::types::size::PxSize) -> RenderItem {
-        RenderItem { object: vec![] }
+    fn render(
+        &mut self,
+        parent_size: PxSize,
+        affine: na::Matrix4<f32>,
+        encoder: &mut RenderCommandEncoder,
+    ) {
+        let current_size = self.px_size(parent_size, encoder.get_context());
+
+        let mut accumulated_height: f32 = 0.0;
+        for child in &mut self.children {
+            let child_px_size = child.px_size(current_size, encoder.get_context());
+            let child_affine =
+                na::Matrix4::new_translation(&na::Vector3::new(0.0, -accumulated_height, 0.0))
+                    * affine;
+            child.render(child_px_size, child_affine, encoder);
+            accumulated_height += child_px_size.height;
+        }
     }
 }

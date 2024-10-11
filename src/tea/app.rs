@@ -1,11 +1,11 @@
 use super::{component::Component, window::Window};
 
-pub struct App<'a, Model, Message: 'static> {
+pub struct App<'a, Model: 'static, Message: 'static> {
     window: Window<'a, Model, Message>,
 }
 
-impl<Model, Message: 'static> App<'_, Model, Message> {
-    pub fn new(component: Component<Model, Message, Message>) -> Self {
+impl<Model: 'static, Message: 'static> App<'_, Model, Message> {
+    pub fn new(component: Component<Model, Message, Message, Message>) -> Self {
         Self {
             window: Window::new(component),
         }

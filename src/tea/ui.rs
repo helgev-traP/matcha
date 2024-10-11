@@ -3,14 +3,12 @@ pub mod column;
 pub mod teacup;
 
 use nalgebra as na;
-use std::{
-    any::Any,
-    sync::Arc,
-};
+use std::{any::Any, sync::Arc};
 
 use super::{
     application_context::ApplicationContext,
     events::{WidgetEvent, WidgetEventResult},
+    render::RenderCommandEncoder,
     types::size::{PxSize, Size},
 };
 
@@ -18,14 +16,14 @@ use super::{
 
 pub enum Object {
     Textured {
-        affine: na::Matrix4<f32>,
+        instance_affine: na::Matrix4<f32>,
         vertex_buffer: Arc<wgpu::Buffer>,
         index_buffer: Arc<wgpu::Buffer>,
         index_len: u32,
         texture: Arc<wgpu::Texture>,
     },
     Colored {
-        affine: na::Matrix4<f32>,
+        instance_affine: na::Matrix4<f32>,
         vertex_buffer: Arc<wgpu::Buffer>,
         index_buffer: Arc<wgpu::Buffer>,
         index_len: u32,
@@ -40,10 +38,10 @@ pub struct RenderItem {
 
 // sub node
 
-pub struct SubNode<'a> {
-    pub affine: na::Matrix4<f32>,
-    pub node: &'a dyn RenderingTrait,
-}
+// pub struct SubNode<'a> {
+//     pub affine: na::Matrix4<f32>,
+//     pub node: &'a dyn RenderingTrait,
+// }
 
 // dom tree node
 
@@ -55,11 +53,14 @@ pub trait DomNode<Response>: Any + 'static {
 // render tree node
 
 pub trait Widget<Response>: WidgetTrait<Response> + RenderingTrait {
-    fn for_rendering(&self) -> &dyn RenderingTrait;
+    fn for_rendering(&mut self) -> &mut dyn RenderingTrait;
 }
 
-impl<T, R> Widget<R> for T where T: WidgetTrait<R> + RenderingTrait {
-    fn for_rendering(&self) -> &dyn RenderingTrait {
+impl<T, R> Widget<R> for T
+where
+    T: WidgetTrait<R> + RenderingTrait,
+{
+    fn for_rendering(&mut self) -> &mut dyn RenderingTrait {
         self
     }
 }
@@ -80,23 +81,23 @@ pub enum DomComPareResult {
 }
 
 pub trait RenderingTrait {
-    // for rendering
-    fn sub_nodes<'a>(
-        &'a self,
-        parent_size: PxSize,
-        context: &'a ApplicationContext,
-    ) -> Vec<SubNode>;
+    // // for rendering
+    // fn sub_nodes<'a>(
+    //     &'a self,
+    //     parent_size: PxSize,
+    //     context: &'a ApplicationContext,
+    // ) -> Vec<SubNode>;
 
-    fn redraw(&self) -> bool {
-        // return true here if current widget need to be redrawn
-        true
-    }
+    // fn redraw(&self) -> bool {
+    //     // return true here if current widget need to be redrawn
+    //     true
+    // }
 
-    fn redraw_sub(&self, parent_size: PxSize, context: &ApplicationContext) -> bool {
-        self.sub_nodes(parent_size, context)
-            .iter()
-            .any(|sub_node| sub_node.node.redraw())
-    }
+    // fn redraw_sub(&self, parent_size: PxSize, context: &ApplicationContext) -> bool {
+    //     self.sub_nodes(parent_size, context)
+    //         .iter()
+    //         .any(|sub_node| sub_node.node.redraw())
+    // }
 
     /// The size configuration of the widget.
     fn size(&self) -> Size;
@@ -107,5 +108,10 @@ pub trait RenderingTrait {
     /// Default size of widget with pixel value.
     fn default_size(&self) -> PxSize;
 
-    fn render(&self, app_context: &ApplicationContext, parent_size: PxSize) -> RenderItem;
+    fn render(
+        &mut self,
+        parent_size: PxSize,
+        affine: na::Matrix4<f32>,
+        encoder: &mut RenderCommandEncoder,
+    );
 }

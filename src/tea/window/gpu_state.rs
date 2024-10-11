@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use wgpu::core::device;
-
 use crate::{cosmic::FontContext, types::size::PxSize};
 
 use super::application_context::ApplicationContext;
@@ -12,6 +10,7 @@ pub struct GpuState<'a> {
     app_context: ApplicationContext,
     config: wgpu::SurfaceConfiguration,
     surface: wgpu::Surface<'a>,
+    depth_texture: wgpu::Texture,
 }
 
 impl GpuState<'_> {
@@ -84,6 +83,21 @@ impl GpuState<'_> {
             view_formats: vec![],
         };
 
+        let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: None,
+            size: wgpu::Extent3d {
+                width: size.width,
+                height: size.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Depth32Float,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+
         surface.configure(&device, &config);
 
         let app_context = ApplicationContext::new(
@@ -100,6 +114,7 @@ impl GpuState<'_> {
             app_context,
             config,
             surface,
+            depth_texture,
         }
     }
 
@@ -109,6 +124,10 @@ impl GpuState<'_> {
 
     pub fn get_current_texture(&self) -> wgpu::SurfaceTexture {
         self.surface.get_current_texture().unwrap()
+    }
+
+    pub fn get_depth_texture(&self) -> &wgpu::Texture {
+        &self.depth_texture
     }
 
     pub fn get_config(&self) -> &wgpu::SurfaceConfiguration {
@@ -124,10 +143,27 @@ impl GpuState<'_> {
 
     pub fn resize(&mut self, size: winit::dpi::PhysicalSize<u32>) {
         if size.width > 0 && size.height > 0 {
+            // Update the surface configuration
             self.config.width = size.width;
             self.config.height = size.height;
             self.surface
                 .configure(&self.app_context.device, &self.config);
+
+            // Update the depth texture
+            self.depth_texture = self.app_context.device.create_texture(&wgpu::TextureDescriptor {
+                label: None,
+                size: wgpu::Extent3d {
+                    width: size.width,
+                    height: size.height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Depth32Float,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            });
         }
     }
 }
