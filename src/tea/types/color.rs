@@ -1,4 +1,4 @@
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Color {
     Rgb8USrgb { r: u8, g: u8, b: u8 },
     Rgba8USrgb { r: u8, g: u8, b: u8, a: u8 },

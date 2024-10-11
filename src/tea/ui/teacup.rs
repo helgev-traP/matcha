@@ -1,4 +1,5 @@
 use nalgebra as na;
+use wgpu::naga::Type;
 use std::{any::Any, sync::Arc};
 use wgpu::util::DeviceExt;
 
@@ -11,7 +12,7 @@ use crate::{
     vertex,
 };
 
-use super::{DomComPareResult, DomNode, RenderItem, RenderingTrait, Widget, WidgetTrait};
+use super::{DomComPareResult, Dom, RenderItem, RenderingTrait, Widget, WidgetTrait};
 
 pub struct Teacup {
     size: crate::types::size::Size,
@@ -47,7 +48,7 @@ impl Teacup {
     }
 }
 
-impl<R: 'static> DomNode<R> for Teacup {
+impl<R: 'static> Dom<R> for Teacup {
     fn build_render_tree(&self) -> Box<dyn Widget<R>> {
         let teacup_bytes = include_bytes!("./teacup.png");
         let teacup_image = image::load_from_memory(teacup_bytes).unwrap();
@@ -91,23 +92,12 @@ pub struct TeacupRenderNode {
 }
 
 impl<R: 'static> WidgetTrait<R> for TeacupRenderNode {
-    // fn default_size(&self) -> PxSize {
-    //     self.picture_size
-    // }
-
-    // fn size(&self) -> OptionPxSize {
-    //     OptionPxSize {
-    //         width: self.size.width,
-    //         height: self.size.height,
-    //     }
-    // }
-
-    fn widget_event(&self, _: &WidgetEvent) -> WidgetEventResult<R> {
+    fn widget_event(&self, _: &WidgetEvent, _: PxSize, _: &ApplicationContext) -> WidgetEventResult<R> {
         Default::default()
     }
 
-    fn update_render_tree(&mut self, dom: &dyn DomNode<R>) -> Result<(), ()> {
-        if (*dom).type_id() != (*self).type_id() {
+    fn update_render_tree(&mut self, dom: &dyn Dom<R>) -> Result<(), ()> {
+        if (*dom).type_id() != std::any::TypeId::of::<Teacup>() {
             return Err(());
         }
 
@@ -126,7 +116,7 @@ impl<R: 'static> WidgetTrait<R> for TeacupRenderNode {
         Ok(())
     }
 
-    fn compare(&self, dom: &dyn DomNode<R>) -> DomComPareResult {
+    fn compare(&self, dom: &dyn Dom<R>) -> DomComPareResult {
         if let Some(teacup) = dom.as_any().downcast_ref::<Teacup>() {
             if teacup.size == self.size
                 && teacup.position == self.position
@@ -143,14 +133,6 @@ impl<R: 'static> WidgetTrait<R> for TeacupRenderNode {
 }
 
 impl RenderingTrait for TeacupRenderNode {
-    // fn sub_nodes(&self, _: PxSize, _: &ApplicationContext) -> Vec<SubNode> {
-    //     vec![]
-    // }
-
-    // fn redraw(&self) -> bool {
-    //     true
-    // }
-
     fn render(
         &mut self,
         _: &rayon::Scope,

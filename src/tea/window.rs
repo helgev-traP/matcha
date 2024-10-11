@@ -29,6 +29,9 @@ pub struct Window<'a, Model: Send + 'static, Message: 'static> {
 
     // root component
     root_component: Component<Model, Message, Message, Message>,
+
+    // window event state
+    mouse_position: [f32; 2],
 }
 
 // setup
@@ -48,6 +51,7 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
             render_tree: None,
             root_component: component,
             frame: 0,
+            mouse_position: [0.0, 0.0],
         }
     }
 
@@ -214,6 +218,26 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
             }
             winit::event::WindowEvent::Resized(size) => {
                 self.gpu_state.as_mut().unwrap().resize(size);
+            }
+            winit::event::WindowEvent::CursorMoved { position, .. } => {
+                self.mouse_position = [position.x as f32, position.y as f32];
+            }
+            winit::event::WindowEvent::MouseInput { state, button, .. } => {
+                if let winit::event::ElementState::Pressed = state {
+                    if let winit::event::MouseButton::Left = button {
+                        let msg = self.render_tree.as_mut().unwrap().widget_event(
+                            &crate::events::WidgetEvent::MouseLeftClick {
+                                x: self.mouse_position[0],
+                                y: self.mouse_position[1],
+                            },
+                            self.gpu_state.as_ref().unwrap().get_viewport_size(),
+                            &self.gpu_state.as_ref().unwrap().get_app_context(),
+                        );
+                        if let Some(msg) = msg.user_event {
+                            self.root_component.update(msg);
+                        }
+                    }
+                }
             }
             _ => {}
         }

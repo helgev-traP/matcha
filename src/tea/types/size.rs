@@ -67,6 +67,21 @@ pub struct Size {
     pub height: SizeUnit,
 }
 
+impl Size {
+    pub fn to_px(&self, parent_size: PxSize, app_context: &ApplicationContext) -> PxSize {
+        PxSize {
+            width: self
+                .width
+                .to_px(StdSizeUnit::Pixel(parent_size.width), app_context)
+                .unwrap_as_pixel(),
+            height: self
+                .height
+                .to_px(StdSizeUnit::Pixel(parent_size.height), app_context)
+                .unwrap_as_pixel(),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct PxSize {
     pub width: f32,

@@ -6,10 +6,11 @@ use super::{
     application_context::ApplicationContext,
     events::WidgetEventResult,
     types::size::PxSize,
-    ui::{DomComPareResult, DomNode, RenderingTrait, Widget, WidgetTrait},
+    ui::{Dom, DomComPareResult, RenderingTrait, Widget, WidgetTrait},
 };
 
-pub struct Component<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'static> {
+pub struct Component<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'static>
+{
     label: Option<String>,
 
     model: Arc<Mutex<Model>>,
@@ -19,7 +20,7 @@ pub struct Component<Model: Send + 'static, Message, OuterResponse: 'static, Inn
         &ComponentAccess<Model>,
         WidgetEventResult<InnerResponse>,
     ) -> WidgetEventResult<OuterResponse>,
-    fn_view: fn(&Model) -> Box<dyn DomNode<InnerResponse>>,
+    fn_view: fn(&Model) -> Box<dyn Dom<InnerResponse>>,
 
     render_tree: Option<Arc<Mutex<Box<dyn Widget<InnerResponse>>>>>,
 }
@@ -31,7 +32,7 @@ impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'sta
         label: Option<String>,
         model: Model,
         update: fn(ComponentAccess<Model>, Message),
-        view: fn(&Model) -> Box<dyn DomNode<InnerResponse>>,
+        view: fn(&Model) -> Box<dyn Dom<InnerResponse>>,
     ) -> Self {
         Self {
             label,
@@ -104,7 +105,7 @@ impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'sta
         }
     }
 
-    pub fn view(&mut self) -> Option<Arc<dyn DomNode<OuterResponse>>> {
+    pub fn view(&mut self) -> Option<Arc<dyn Dom<OuterResponse>>> {
         if let None = self.render_tree {
             self.update_render_tree();
         }
@@ -158,7 +159,7 @@ where
     render_tree: Arc<Mutex<Box<dyn Widget<InnerResponse>>>>,
 }
 
-impl<Model: Send, OuterResponse, InnerResponse> DomNode<OuterResponse>
+impl<Model: Send, OuterResponse, InnerResponse> Dom<OuterResponse>
     for ComponentDom<Model, OuterResponse, InnerResponse>
 where
     Model: 'static,
@@ -188,19 +189,26 @@ pub struct ComponentRenderNode<Model, OuterResponse: 'static, InnerResponse: 'st
 }
 
 impl<Model, O: 'static, I: 'static> WidgetTrait<O> for ComponentRenderNode<Model, O, I> {
-    fn widget_event(&self, event: &super::events::WidgetEvent) -> WidgetEventResult<O> {
-        // self.node.read().unwrap().widget_event(event)
+    fn widget_event(
+        &self,
+        event: &super::events::WidgetEvent,
+        parent_size: PxSize,
+        context: &ApplicationContext,
+    ) -> WidgetEventResult<O> {
         (self.local_update_component)(
             &self.component_model,
-            self.node.lock().unwrap().widget_event(event),
+            self.node
+                .lock()
+                .unwrap()
+                .widget_event(event, parent_size, context),
         )
     }
 
-    fn compare(&self, _: &dyn DomNode<O>) -> DomComPareResult {
+    fn compare(&self, _: &dyn Dom<O>) -> DomComPareResult {
         DomComPareResult::Different
     }
 
-    fn update_render_tree(&mut self, _: &dyn DomNode<O>) -> Result<(), ()> {
+    fn update_render_tree(&mut self, _: &dyn Dom<O>) -> Result<(), ()> {
         Ok(())
     }
 }
@@ -208,18 +216,6 @@ impl<Model, O: 'static, I: 'static> WidgetTrait<O> for ComponentRenderNode<Model
 impl<Model: Send, OuterResponse: 'static, InnerResponse: 'static> RenderingTrait
     for ComponentRenderNode<Model, OuterResponse, InnerResponse>
 {
-    // fn redraw(&self) -> bool {
-    //     self.node.lock().unwrap().redraw()
-    // }
-
-    // fn render(&self, app_context: &ApplicationContext, parent_size: PxSize) -> RenderItem {
-    //     self.node.lock().unwrap().render(app_context, parent_size)
-    // }
-
-    // fn sub_nodes(&self, parent_size: PxSize, context: &ApplicationContext) -> Vec<SubNode> {
-    //     self.node.lock().unwrap().sub_nodes(parent_size, context)
-    // }
-
     fn size(&self) -> super::types::size::Size {
         self.node.lock().unwrap().size()
     }
@@ -239,6 +235,9 @@ impl<Model: Send, OuterResponse: 'static, InnerResponse: 'static> RenderingTrait
         affine: nalgebra::Matrix4<f32>,
         encoder: &mut super::render::RenderCommandEncoder,
     ) {
-        self.node.lock().unwrap().render(s, parent_size, affine, encoder)
+        self.node
+            .lock()
+            .unwrap()
+            .render(s, parent_size, affine, encoder)
     }
 }

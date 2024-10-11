@@ -1,9 +1,7 @@
 use nalgebra as na;
 use std::{any::Any, cell::Cell};
 
-use super::{
-    DomComPareResult, DomNode, RenderingTrait, Widget, WidgetTrait,
-};
+use super::{Dom, DomComPareResult, RenderingTrait, Widget, WidgetTrait};
 use crate::{
     application_context::ApplicationContext,
     events::WidgetEventResult,
@@ -12,7 +10,7 @@ use crate::{
 };
 
 pub struct Column<R: 'static> {
-    children: Vec<Box<dyn DomNode<R>>>,
+    children: Vec<Box<dyn Dom<R>>>,
 }
 
 impl<R: 'static> Column<R> {
@@ -22,16 +20,16 @@ impl<R: 'static> Column<R> {
         }
     }
 
-    pub fn vec(vec: Vec<Box<dyn DomNode<R>>>) -> Self {
+    pub fn vec(vec: Vec<Box<dyn Dom<R>>>) -> Self {
         Self { children: vec }
     }
 
-    pub fn push(&mut self, child: Box<dyn DomNode<R>>) {
+    pub fn push(&mut self, child: Box<dyn Dom<R>>) {
         self.children.push(child);
     }
 }
 
-impl<R: 'static> DomNode<R> for Column<R> {
+impl<R: 'static> Dom<R> for Column<R> {
     fn build_render_tree(&self) -> Box<dyn Widget<R>> {
         let mut render_tree = Vec::new();
 
@@ -58,12 +56,17 @@ pub struct ColumnRenderNode<R: 'static> {
 }
 
 impl<'a, R: 'static> WidgetTrait<R> for ColumnRenderNode<R> {
-    fn widget_event(&self, event: &crate::events::WidgetEvent) -> WidgetEventResult<R> {
+    fn widget_event(
+        &self,
+        event: &crate::events::WidgetEvent,
+        parent_size: PxSize,
+        context: &ApplicationContext,
+    ) -> WidgetEventResult<R> {
         // todo
         todo!()
     }
 
-    fn update_render_tree(&mut self, dom: &dyn DomNode<R>) -> Result<(), ()> {
+    fn update_render_tree(&mut self, dom: &dyn Dom<R>) -> Result<(), ()> {
         // todo
         if (*dom).type_id() != (*self).type_id() {
             Err(())
@@ -77,7 +80,7 @@ impl<'a, R: 'static> WidgetTrait<R> for ColumnRenderNode<R> {
         }
     }
 
-    fn compare(&self, dom: &dyn DomNode<R>) -> super::DomComPareResult {
+    fn compare(&self, dom: &dyn Dom<R>) -> super::DomComPareResult {
         if (*dom).type_id() != (*self).type_id() {
             return DomComPareResult::Different;
         }

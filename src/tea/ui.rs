@@ -1,7 +1,9 @@
-pub mod button;
 pub mod column;
+pub mod super_simple_button;
 pub mod teacup;
+pub mod template;
 
+use cosmic_text::SwashContent;
 use nalgebra as na;
 use std::{any::Any, sync::Arc};
 
@@ -36,16 +38,9 @@ pub struct RenderItem {
     // pub property: crate::ui::Property,
 }
 
-// sub node
-
-// pub struct SubNode<'a> {
-//     pub affine: na::Matrix4<f32>,
-//     pub node: &'a dyn RenderingTrait,
-// }
-
 // dom tree node
 
-pub trait DomNode<Response>: Any + 'static {
+pub trait Dom<Response>: Any + 'static {
     fn build_render_tree(&self) -> Box<dyn Widget<Response>>;
     fn as_any(&self) -> &dyn Any;
 }
@@ -67,11 +62,16 @@ where
 
 pub trait WidgetTrait<GlobalMessage> {
     // widget event
-    fn widget_event(&self, event: &WidgetEvent) -> WidgetEventResult<GlobalMessage>;
+    fn widget_event(
+        &self,
+        event: &WidgetEvent,
+        parent_size: PxSize,
+        Content: &ApplicationContext
+    ) -> WidgetEventResult<GlobalMessage>;
 
     // for dom handling
-    fn update_render_tree(&mut self, dom: &dyn DomNode<GlobalMessage>) -> Result<(), ()>;
-    fn compare(&self, dom: &dyn DomNode<GlobalMessage>) -> DomComPareResult;
+    fn update_render_tree(&mut self, dom: &dyn Dom<GlobalMessage>) -> Result<(), ()>;
+    fn compare(&self, dom: &dyn Dom<GlobalMessage>) -> DomComPareResult;
 }
 
 pub enum DomComPareResult {
@@ -81,24 +81,6 @@ pub enum DomComPareResult {
 }
 
 pub trait RenderingTrait: Send {
-    // // for rendering
-    // fn sub_nodes<'a>(
-    //     &'a self,
-    //     parent_size: PxSize,
-    //     context: &'a ApplicationContext,
-    // ) -> Vec<SubNode>;
-
-    // fn redraw(&self) -> bool {
-    //     // return true here if current widget need to be redrawn
-    //     true
-    // }
-
-    // fn redraw_sub(&self, parent_size: PxSize, context: &ApplicationContext) -> bool {
-    //     self.sub_nodes(parent_size, context)
-    //         .iter()
-    //         .any(|sub_node| sub_node.node.redraw())
-    // }
-
     /// The size configuration of the widget.
     fn size(&self) -> Size;
 
