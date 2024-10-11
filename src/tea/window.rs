@@ -1,10 +1,11 @@
 use nalgebra as na;
+use rayon::scope;
 use std::sync::Arc;
 
 use super::{application_context, component::Component, types::color::Color, ui::Widget};
 mod gpu_state;
 
-pub struct Window<'a, Model: 'static, Message: 'static> {
+pub struct Window<'a, Model: Send + 'static, Message: 'static> {
     // boot status
     performance: wgpu::PowerPreference,
     title: String,
@@ -31,7 +32,7 @@ pub struct Window<'a, Model: 'static, Message: 'static> {
 }
 
 // setup
-impl<Model, Message: 'static> Window<'_, Model, Message> {
+impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
     pub fn new(component: Component<Model, Message, Message, Message>) -> Self {
         Self {
             performance: wgpu::PowerPreference::default(),
@@ -79,7 +80,7 @@ impl<Model, Message: 'static> Window<'_, Model, Message> {
     }
 }
 
-impl<Model, Message: 'static> Window<'_, Model, Message> {
+impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
     fn render(&mut self, #[cfg(debug_assertions)] display_frame: bool) {
         // surface
         let surface = self.gpu_state.as_ref().unwrap().get_current_texture();
@@ -98,8 +99,9 @@ impl<Model, Message: 'static> Window<'_, Model, Message> {
         let mut encoder = render.encoder(surface_texture_view, depth_texture_view, viewport_size);
         let render_tree = self.render_tree.as_mut().unwrap().for_rendering();
 
-        render_tree.render(viewport_size, na::Matrix4::identity(), &mut encoder);
-
+        rayon::scope(|s| {
+            render_tree.render(s, viewport_size, na::Matrix4::identity(), &mut encoder);
+        });
         encoder.finish().unwrap();
 
         // present
@@ -122,7 +124,7 @@ impl<Model, Message: 'static> Window<'_, Model, Message> {
 }
 
 // winit event handler
-impl<Model, Message: 'static> winit::application::ApplicationHandler<Message>
+impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Message>
     for Window<'_, Model, Message>
 {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {

@@ -80,7 +80,7 @@ pub enum DomComPareResult {
     Different,
 }
 
-pub trait RenderingTrait {
+pub trait RenderingTrait: Send {
     // // for rendering
     // fn sub_nodes<'a>(
     //     &'a self,
@@ -110,6 +110,7 @@ pub trait RenderingTrait {
 
     fn render(
         &mut self,
+        s: &rayon::Scope,
         parent_size: PxSize,
         affine: na::Matrix4<f32>,
         encoder: &mut RenderCommandEncoder,

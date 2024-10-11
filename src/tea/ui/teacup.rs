@@ -153,6 +153,7 @@ impl RenderingTrait for TeacupRenderNode {
 
     fn render(
         &mut self,
+        _: &rayon::Scope,
         parent_size: PxSize,
         affine: na::Matrix4<f32>,
         encoder: &mut RenderCommandEncoder,

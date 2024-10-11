@@ -18,8 +18,7 @@ fn view(_: &u32) -> Box<dyn DomNode<()>> {
     column
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
     let component = Component::new(None, 0, update, view);
 
     App::new(component).run();

@@ -1,5 +1,7 @@
 use std::sync::{Arc, Mutex, MutexGuard};
 
+use rayon::Scope;
+
 use super::{
     application_context::ApplicationContext,
     events::WidgetEventResult,
@@ -7,7 +9,7 @@ use super::{
     ui::{DomComPareResult, DomNode, RenderingTrait, Widget, WidgetTrait},
 };
 
-pub struct Component<Model: 'static, Message, OuterResponse: 'static, InnerResponse: 'static> {
+pub struct Component<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'static> {
     label: Option<String>,
 
     model: Arc<Mutex<Model>>,
@@ -22,7 +24,7 @@ pub struct Component<Model: 'static, Message, OuterResponse: 'static, InnerRespo
     render_tree: Option<Arc<Mutex<Box<dyn Widget<InnerResponse>>>>>,
 }
 
-impl<Model: 'static, Message, OuterResponse: 'static, InnerResponse: 'static>
+impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'static>
     Component<Model, Message, OuterResponse, InnerResponse>
 {
     pub fn new(
@@ -54,7 +56,7 @@ impl<Model: 'static, Message, OuterResponse: 'static, InnerResponse: 'static>
     }
 }
 
-impl<Model: 'static, Message, OuterResponse: 'static, InnerResponse: 'static>
+impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'static>
     Component<Model, Message, OuterResponse, InnerResponse>
 {
     pub fn label(&self) -> Option<&String> {
@@ -144,7 +146,7 @@ impl<Model> ComponentAccess<Model> {
 
 pub struct ComponentDom<Model, OuterResponse, InnerResponse>
 where
-    Model: 'static,
+    Model: Send + 'static,
     OuterResponse: 'static,
     InnerResponse: 'static,
 {
@@ -156,7 +158,7 @@ where
     render_tree: Arc<Mutex<Box<dyn Widget<InnerResponse>>>>,
 }
 
-impl<Model, OuterResponse, InnerResponse> DomNode<OuterResponse>
+impl<Model: Send, OuterResponse, InnerResponse> DomNode<OuterResponse>
     for ComponentDom<Model, OuterResponse, InnerResponse>
 where
     Model: 'static,
@@ -203,7 +205,7 @@ impl<Model, O: 'static, I: 'static> WidgetTrait<O> for ComponentRenderNode<Model
     }
 }
 
-impl<Model, OuterResponse: 'static, InnerResponse: 'static> RenderingTrait
+impl<Model: Send, OuterResponse: 'static, InnerResponse: 'static> RenderingTrait
     for ComponentRenderNode<Model, OuterResponse, InnerResponse>
 {
     // fn redraw(&self) -> bool {
@@ -232,10 +234,11 @@ impl<Model, OuterResponse: 'static, InnerResponse: 'static> RenderingTrait
 
     fn render(
         &mut self,
+        s: &Scope,
         parent_size: PxSize,
         affine: nalgebra::Matrix4<f32>,
         encoder: &mut super::render::RenderCommandEncoder,
     ) {
-        self.node.lock().unwrap().render(parent_size, affine, encoder)
+        self.node.lock().unwrap().render(s, parent_size, affine, encoder)
     }
 }

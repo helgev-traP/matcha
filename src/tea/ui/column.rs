@@ -2,7 +2,7 @@ use nalgebra as na;
 use std::{any::Any, cell::Cell};
 
 use super::{
-    DomComPareResult, DomNode, RenderItem, RenderingTrait, /* SubNode,*/ Widget, WidgetTrait,
+    DomComPareResult, DomNode, RenderingTrait, Widget, WidgetTrait,
 };
 use crate::{
     application_context::ApplicationContext,
@@ -132,6 +132,7 @@ impl<R> RenderingTrait for ColumnRenderNode<R> {
 
     fn render(
         &mut self,
+        s: &rayon::Scope,
         parent_size: PxSize,
         affine: na::Matrix4<f32>,
         encoder: &mut RenderCommandEncoder,
@@ -144,7 +145,7 @@ impl<R> RenderingTrait for ColumnRenderNode<R> {
             let child_affine =
                 na::Matrix4::new_translation(&na::Vector3::new(0.0, -accumulated_height, 0.0))
                     * affine;
-            child.render(child_px_size, child_affine, encoder);
+            child.render(s, child_px_size, child_affine, encoder);
             accumulated_height += child_px_size.height;
         }
     }
