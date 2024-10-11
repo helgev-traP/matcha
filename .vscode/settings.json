@@ -4,6 +4,7 @@
     "bytemuck",
     "cgmath",
     "fullscreen",
+    "matcha",
     "mipmap",
     "multisample",
     "multisampled",

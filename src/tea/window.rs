@@ -1,9 +1,9 @@
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
-use super::{application_context, component::Component, types::color::Color, ui::RenderNode};
+use super::{application_context, component::Component, types::color::Color, ui::Widget};
 mod gpu_state;
 
-pub struct Window<'a, Model, Message: 'static> {
+pub struct Window<'a, Model: 'static, Message: 'static> {
     // boot status
     performance: wgpu::PowerPreference,
     title: String,
@@ -23,15 +23,15 @@ pub struct Window<'a, Model, Message: 'static> {
     frame: u64,
 
     // render tree
-    render_tree: Option<RenderNode<Message>>,
+    render_tree: Option<Box<dyn Widget<Message>>>,
 
     // root component
-    root_component: Component<Model, Message, Message>,
+    root_component: Component<Model, Message, Message, Message>,
 }
 
 // setup
 impl<Model, Message: 'static> Window<'_, Model, Message> {
-    pub fn new(component: Component<Model, Message, Message>) -> Self {
+    pub fn new(component: Component<Model, Message, Message, Message>) -> Self {
         Self {
             performance: wgpu::PowerPreference::default(),
             title: "Tea".to_string(),
@@ -89,7 +89,7 @@ impl<Model, Message: 'static> Window<'_, Model, Message> {
 
         // render
         let render = self.render.as_ref().unwrap();
-        let render_tree = self.render_tree.as_mut().unwrap();
+        let render_tree = self.render_tree.as_ref().unwrap().for_rendering();
 
         render.render(
             surface_texture_view,
@@ -105,7 +105,14 @@ impl<Model, Message: 'static> Window<'_, Model, Message> {
 
         // print frame (debug)
         #[cfg(debug_assertions)]
-        println!("frame: {}", self.frame);
+        {
+            print!(
+                "{}", "\x08".to_string().repeat(self.frame.to_string().len() + 7),
+            );
+            print!("frame: {}", self.frame);
+            // flush
+            std::io::Write::flush(&mut std::io::stdout()).unwrap();
+        }
 
         self.frame += 1;
     }
@@ -155,7 +162,10 @@ impl<Model, Message: 'static> winit::application::ApplicationHandler<Message>
         // set winit control flow
 
         #[cfg(debug_assertions)]
-        println!("set winit control flow{:?}", winit::event_loop::ControlFlow::Poll);
+        println!(
+            "set winit control flow{:?}",
+            winit::event_loop::ControlFlow::Poll
+        );
         event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
 
         // crate render

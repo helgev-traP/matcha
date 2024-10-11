@@ -4,7 +4,7 @@ use wgpu::util::DeviceExt;
 use super::{
     application_context::ApplicationContext,
     types::{color::Color, size::PxSize},
-    ui::{Object, RenderNode},
+    ui::{Object, RenderingTrait},
 };
 
 pub struct Render {
@@ -178,12 +178,12 @@ impl Render {
         }
     }
 
-    pub fn render<R>(
+    pub fn render(
         &self,
         surface_view: wgpu::TextureView,
         viewport_size: &PxSize,
         base_color: &Color,
-        render_tree: &mut RenderNode<R>,
+        render_tree: &dyn RenderingTrait,
         redraw: bool,
         frame: u64,
     ) {
@@ -251,12 +251,12 @@ impl Render {
         queue.submit(std::iter::once(encoder.finish()));
     }
 
-    fn render_node<R>(
+    fn render_node(
         &self,
         encoder: &mut wgpu::CommandEncoder,
         surface_view: &wgpu::TextureView,
         normalize: na::Matrix4<f32>,
-        node: &mut RenderNode<R>,
+        node: &dyn RenderingTrait,
         parent_size: PxSize,
         node_affine: na::Matrix4<f32>,
         parent_redrew: bool,
@@ -266,23 +266,19 @@ impl Render {
 
         // calculate current size
 
-        let current_size = node.read().unwrap().px_size(parent_size, &self.app_context);
+        let current_size = node.px_size(parent_size, &self.app_context);
 
-        let should_be_redraw = node.read().unwrap().redraw()
+        let should_be_redraw = node.redraw()
             || node
-                .read()
-                .unwrap()
                 .redraw_sub(current_size, &self.app_context)
             || parent_redrew;
 
         // redraw current node
 
         if parent_redrew || should_be_redraw {
-            let mut render_item = node
-                .write()
-                .unwrap()
+            let render_item = node
                 .render(&self.app_context, current_size);
-            for object in render_item.object() {
+            for object in render_item.object {
                 match object {
                     Object::Textured {
                         affine,
@@ -364,7 +360,7 @@ impl Render {
                         render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
                         render_pass
                             .set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-                        render_pass.draw_indexed(0..*index_len, 0, 0..1);
+                        render_pass.draw_indexed(0..index_len, 0, 0..1);
                     }
                     Object::Colored {
                         affine,
@@ -416,7 +412,7 @@ impl Render {
                         render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
                         render_pass
                             .set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-                        render_pass.draw_indexed(0..*index_len, 0, 0..1);
+                        render_pass.draw_indexed(0..index_len, 0, 0..1);
                     }
                 }
             }
@@ -425,16 +421,14 @@ impl Render {
         // render sub nodes
 
         let sub_nodes = node
-            .read()
-            .unwrap()
             .sub_nodes(current_size, &self.app_context);
 
-        for mut sub in sub_nodes {
+        for sub in sub_nodes {
             self.render_node(
                 encoder,
                 surface_view,
                 normalize,
-                &mut sub.node,
+                sub.node,
                 current_size,
                 node_affine * sub.affine,
                 parent_redrew || should_be_redraw,

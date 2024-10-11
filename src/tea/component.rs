@@ -1,43 +1,62 @@
-use std::{
-    cell::RefCell,
-    rc::Rc,
-    sync::{Arc, RwLock},
-};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use super::{
     application_context::ApplicationContext,
+    events::WidgetEventResult,
     types::size::PxSize,
-    ui::{DomComPareResult, DomNode, RenderItem, RenderNode, RenderTrait, SubNode},
+    ui::{DomComPareResult, DomNode, RenderItem, RenderingTrait, SubNode, Widget, WidgetTrait},
 };
 
-pub struct Component<Model, Message, R: 'static> {
+pub struct Component<Model: 'static, Message, OuterResponse: 'static, InnerResponse: 'static> {
     label: Option<String>,
 
-    model: Model,
-    model_updated: bool,
+    model: Arc<Mutex<Model>>,
+    model_updated: Arc<Mutex<bool>>,
     fn_update: fn(ComponentAccess<Model>, Message),
-    fn_view: fn(&Model) -> Box<dyn DomNode<R>>,
+    fn_local_update: fn(
+        &ComponentAccess<Model>,
+        WidgetEventResult<InnerResponse>,
+    ) -> WidgetEventResult<OuterResponse>,
+    fn_view: fn(&Model) -> Box<dyn DomNode<InnerResponse>>,
 
-    render_tree: Option<RenderNode<R>>,
+    render_tree: Option<Arc<Mutex<Box<dyn Widget<InnerResponse>>>>>,
 }
 
-impl<Model, Message, R: 'static> Component<Model, Message, R> {
+impl<Model: 'static, Message, OuterResponse: 'static, InnerResponse: 'static>
+    Component<Model, Message, OuterResponse, InnerResponse>
+{
     pub fn new(
         label: Option<String>,
         model: Model,
         update: fn(ComponentAccess<Model>, Message),
-        view: fn(&Model) -> Box<dyn DomNode<R>>,
+        view: fn(&Model) -> Box<dyn DomNode<InnerResponse>>,
     ) -> Self {
         Self {
             label,
-            model,
-            model_updated: true,
+            model: Arc::new(Mutex::new(model)),
+            model_updated: Arc::new(Mutex::new(true)),
             fn_update: update,
+            fn_local_update: |_, _| Default::default(),
             fn_view: view,
             render_tree: None,
         }
     }
 
+    pub fn component_update(
+        mut self,
+        component_update: fn(
+            &ComponentAccess<Model>,
+            WidgetEventResult<InnerResponse>,
+        ) -> WidgetEventResult<OuterResponse>,
+    ) -> Self {
+        self.fn_local_update = component_update;
+        self
+    }
+}
+
+impl<Model: 'static, Message, OuterResponse: 'static, InnerResponse: 'static>
+    Component<Model, Message, OuterResponse, InnerResponse>
+{
     pub fn label(&self) -> Option<&String> {
         self.label.as_ref()
     }
@@ -45,61 +64,98 @@ impl<Model, Message, R: 'static> Component<Model, Message, R> {
     pub fn update(&mut self, message: Message) {
         (self.fn_update)(
             ComponentAccess {
-                model: &mut self.model,
-                model_updated: &mut self.model_updated,
+                model: self.model.clone(),
+                model_updated: self.model_updated.clone(),
             },
             message,
         );
 
-        if self.model_updated {
+        if *self.model_updated.lock().unwrap() {
             self.update_render_tree();
-            self.model_updated = false;
+            *self.model_updated.lock().unwrap() = false;
         }
+    }
+
+    fn update_local(
+        &mut self,
+        event: WidgetEventResult<InnerResponse>,
+    ) -> WidgetEventResult<OuterResponse> {
+        (self.fn_local_update)(
+            &ComponentAccess {
+                model: self.model.clone(),
+                model_updated: self.model_updated.clone(),
+            },
+            event,
+        )
     }
 
     fn update_render_tree(&mut self) {
-        let dom = (self.fn_view)(&self.model);
+        let dom = (self.fn_view)(&*self.model.lock().unwrap());
 
-        if let Some(ref render_tree) = self.render_tree {
-            render_tree.write().unwrap().update_render_tree(&*dom);
+        if let Some(ref mut render_tree) = self.render_tree {
+            if let Ok(_) = render_tree.lock().unwrap().update_render_tree(&*dom) {
+                return;
+            }
+            self.render_tree = Some(Arc::new(Mutex::new(dom.build_render_tree())));
         } else {
-            self.render_tree = Some(dom.build_render_tree());
+            self.render_tree = Some(Arc::new(Mutex::new(dom.build_render_tree())));
         }
     }
 
-    pub fn view(&mut self) -> Option<Arc<dyn DomNode<R>>> {
+    pub fn view(&mut self) -> Option<Arc<dyn DomNode<OuterResponse>>> {
         if let None = self.render_tree {
             self.update_render_tree();
         }
         Some(Arc::new(ComponentDom {
+            component_model: ComponentAccess {
+                model: self.model.clone(),
+                model_updated: self.model_updated.clone(),
+            },
+            local_update_component: self.fn_local_update,
             render_tree: self.render_tree.as_ref().unwrap().clone(),
         }))
     }
 }
 
-pub struct ComponentAccess<'a, Model> {
-    model: &'a mut Model,
-    model_updated: &'a mut bool,
+pub struct ComponentAccess<Model> {
+    model: Arc<Mutex<Model>>,
+    model_updated: Arc<Mutex<bool>>,
 }
 
-impl<Model> ComponentAccess<'_, Model> {
-    pub fn model_ref(&self) -> &Model {
-        self.model
+impl<Model> ComponentAccess<Model> {
+    pub fn model_ref(&self) -> MutexGuard<Model> {
+        self.model.lock().unwrap()
     }
 
-    pub fn model_mut(&mut self) -> &mut Model {
-        *self.model_updated = true;
-        self.model
+    pub fn model_mut(&mut self) -> MutexGuard<Model> {
+        *self.model_updated.lock().unwrap() = true;
+        self.model.lock().unwrap()
     }
 }
 
-pub struct ComponentDom<R: 'static> {
-    render_tree: RenderNode<R>,
+pub struct ComponentDom<Model, OuterResponse, InnerResponse>
+where
+    Model: 'static,
+    OuterResponse: 'static,
+    InnerResponse: 'static,
+{
+    component_model: ComponentAccess<Model>,
+    local_update_component: fn(
+        &ComponentAccess<Model>,
+        WidgetEventResult<InnerResponse>,
+    ) -> WidgetEventResult<OuterResponse>,
+    render_tree: Arc<Mutex<Box<dyn Widget<InnerResponse>>>>,
 }
 
-impl<R: 'static> DomNode<R> for ComponentDom<R> {
-    fn build_render_tree(&self) -> RenderNode<R> {
-        self.render_tree.clone()
+impl<Model, OuterResponse, InnerResponse> DomNode<OuterResponse>
+    for ComponentDom<Model, OuterResponse, InnerResponse>
+where
+    Model: 'static,
+    OuterResponse: 'static,
+    InnerResponse: 'static,
+{
+    fn build_render_tree(&self) -> Box<dyn Widget<OuterResponse>> {
+        todo!()
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -107,44 +163,58 @@ impl<R: 'static> DomNode<R> for ComponentDom<R> {
     }
 }
 
-pub struct ComponentRenderNode<R: 'static> {
-    node: RenderNode<R>,
+pub struct ComponentRenderNode<Model, OuterResponse: 'static, InnerResponse: 'static> {
+    component_model: ComponentAccess<Model>,
+    local_update_component: fn(
+        &ComponentAccess<Model>,
+        WidgetEventResult<InnerResponse>,
+    ) -> WidgetEventResult<OuterResponse>,
+    node: Arc<Mutex<Box<dyn Widget<InnerResponse>>>>,
 }
 
-impl<R: 'static> RenderTrait<R> for ComponentRenderNode<R> {
-    fn redraw(&self) -> bool {
-        self.node.read().unwrap().redraw()
+impl<Model, O: 'static, I: 'static> WidgetTrait<O> for ComponentRenderNode<Model, O, I> {
+    fn widget_event(&self, event: &super::events::WidgetEvent) -> WidgetEventResult<O> {
+        // self.node.read().unwrap().widget_event(event)
+        (self.local_update_component)(
+            &self.component_model,
+            self.node.lock().unwrap().widget_event(event),
+        )
     }
 
-    fn render(&self, app_context: &ApplicationContext, parent_size: PxSize) -> RenderItem {
-        self.node.read().unwrap().render(app_context, parent_size)
-    }
-
-    fn widget_event(&self, event: &super::events::WidgetEvent) -> Option<R> {
-        self.node.read().unwrap().widget_event(event)
-    }
-
-    fn compare(&self, _: &dyn DomNode<R>) -> DomComPareResult {
+    fn compare(&self, _: &dyn DomNode<O>) -> DomComPareResult {
         DomComPareResult::Different
     }
 
-    fn update_render_tree(&mut self, _: &dyn DomNode<R>) -> Result<(), ()> {
+    fn update_render_tree(&mut self, _: &dyn DomNode<O>) -> Result<(), ()> {
         Ok(())
     }
+}
 
-    fn sub_nodes(&self, parent_size: PxSize, context: &ApplicationContext) -> Vec<SubNode<R>> {
-        self.node.read().unwrap().sub_nodes(parent_size, context)
+impl<Model, OuterResponse: 'static, InnerResponse: 'static> RenderingTrait
+    for ComponentRenderNode<Model, OuterResponse, InnerResponse>
+{
+    fn redraw(&self) -> bool {
+        self.node.lock().unwrap().redraw()
+    }
+
+    fn render(&self, app_context: &ApplicationContext, parent_size: PxSize) -> RenderItem {
+        self.node.lock().unwrap().render(app_context, parent_size)
+    }
+
+
+    fn sub_nodes<'a>(&self, parent_size: PxSize, context: &ApplicationContext) -> Vec<SubNode<'a>> {
+        self.node.lock().unwrap().sub_nodes(parent_size, context)
     }
 
     fn size(&self) -> super::types::size::Size {
-        self.node.read().unwrap().size()
+        self.node.lock().unwrap().size()
     }
 
     fn px_size(&self, parent_size: PxSize, context: &ApplicationContext) -> PxSize {
-        self.node.read().unwrap().px_size(parent_size, context)
+        self.node.lock().unwrap().px_size(parent_size, context)
     }
 
     fn default_size(&self) -> super::types::size::PxSize {
-        self.node.read().unwrap().default_size()
+        self.node.lock().unwrap().default_size()
     }
 }

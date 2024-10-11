@@ -1,20 +1,17 @@
 use nalgebra as na;
-use std::sync::{Mutex, RwLock};
-use std::{
-    any::{Any, TypeId},
-    sync::Arc,
-};
+use std::sync::Mutex;
+use std::{any::Any, sync::Arc};
 use wgpu::util::DeviceExt;
 
 use crate::types::size::StdSizeUnit;
 use crate::{
     application_context::ApplicationContext,
-    events::WidgetEvent,
+    events::{WidgetEvent, WidgetEventResult},
     types::size::{PxSize, StdSize},
     vertex,
 };
 
-use super::{DomComPareResult, DomNode, RenderItem, RenderNode, RenderTrait, SubNode};
+use super::{DomComPareResult, DomNode, RenderItem, RenderingTrait, SubNode, Widget, WidgetTrait};
 
 pub struct Teacup {
     size: crate::types::size::Size,
@@ -51,13 +48,13 @@ impl Teacup {
 }
 
 impl<R: 'static> DomNode<R> for Teacup {
-    fn build_render_tree(&self) -> RenderNode<R> {
+    fn build_render_tree(&self) -> Box<dyn Widget<R>> {
         let teacup_bytes = include_bytes!("./teacup.png");
         let teacup_image = image::load_from_memory(teacup_bytes).unwrap();
         let teacup_rgba = teacup_image.to_rgba8();
         let (width, height) = teacup_rgba.dimensions();
 
-        Arc::new(RwLock::new(TeacupRenderNode {
+        Box::new(TeacupRenderNode {
             teacup_rgba,
             picture_size: crate::types::size::PxSize {
                 width: width as f32,
@@ -70,7 +67,7 @@ impl<R: 'static> DomNode<R> for Teacup {
             vertex_buffer: None.into(),
             index_buffer: None.into(),
             index_len: 0.into(),
-        }))
+        })
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -93,7 +90,58 @@ pub struct TeacupRenderNode {
     index_len: Mutex<u32>,
 }
 
-impl<R: 'static> RenderTrait<R> for TeacupRenderNode {
+impl<R: 'static> WidgetTrait<R> for TeacupRenderNode {
+
+    // fn default_size(&self) -> PxSize {
+    //     self.picture_size
+    // }
+
+    // fn size(&self) -> OptionPxSize {
+    //     OptionPxSize {
+    //         width: self.size.width,
+    //         height: self.size.height,
+    //     }
+    // }
+
+    fn widget_event(&self, _: &WidgetEvent) -> WidgetEventResult<R> {
+        Default::default()
+    }
+
+    fn update_render_tree(&mut self, dom: &dyn DomNode<R>) -> Result<(), ()> {
+        if (*dom).type_id() != (*self).type_id() {
+            return Err(());
+        }
+
+        let dom = dom.as_any().downcast_ref::<Teacup>().unwrap();
+
+        self.size = dom.size;
+        self.position = dom.position;
+        self.rotate = dom.rotate_dig;
+
+        // clear cache
+
+        *self.vertex_buffer.lock().unwrap() = None;
+
+        Ok(())
+    }
+
+    fn compare(&self, dom: &dyn DomNode<R>) -> DomComPareResult {
+        if let Some(teacup) = dom.as_any().downcast_ref::<Teacup>() {
+            if teacup.size == self.size
+                && teacup.position == self.position
+                && teacup.rotate_dig == self.rotate
+            {
+                DomComPareResult::Same
+            } else {
+                DomComPareResult::Changed
+            }
+        } else {
+            DomComPareResult::Different
+        }
+    }
+}
+
+impl RenderingTrait for TeacupRenderNode {
     fn render(&self, app_context: &ApplicationContext, parent_size: PxSize) -> RenderItem {
         let device = app_context.get_wgpu_device();
 
@@ -156,6 +204,10 @@ impl<R: 'static> RenderTrait<R> for TeacupRenderNode {
             );
             app_context.get_wgpu_queue().submit(Some(encoder.finish()));
 
+            *self_texture = Some(Arc::new(texture));
+        }
+
+        if self_vertex_buffer.is_none() || self_index_buffer.is_none() || *self_index_len == 0 {
             let (vertex, index, index_len) = vertex::TexturedVertex::rectangle_buffer(
                 app_context,
                 0.0,
@@ -164,7 +216,7 @@ impl<R: 'static> RenderTrait<R> for TeacupRenderNode {
                 size.height,
                 false,
             );
-            *self_texture = Some(Arc::new(texture));
+
             *self_vertex_buffer = Some(Arc::new(vertex));
             *self_index_buffer = Some(Arc::new(index));
             *self_index_len = index_len;
@@ -178,48 +230,10 @@ impl<R: 'static> RenderTrait<R> for TeacupRenderNode {
                 texture: self_texture.as_ref().unwrap().clone(),
                 affine: na::Matrix4::identity(),
             }],
-            px_size: size,
         }
     }
 
-    // fn default_size(&self) -> PxSize {
-    //     self.picture_size
-    // }
-
-    // fn size(&self) -> OptionPxSize {
-    //     OptionPxSize {
-    //         width: self.size.width,
-    //         height: self.size.height,
-    //     }
-    // }
-
-    fn widget_event(&self, event: &WidgetEvent) -> Option<R> {
-        None
-    }
-
-    fn update_render_tree(&mut self, dom: &dyn DomNode<R>) -> Result<(), ()> {
-        if (*dom).type_id() != (*self).type_id() {
-            return Err(());
-        }
-        Ok(())
-    }
-
-    fn compare(&self, dom: &dyn DomNode<R>) -> DomComPareResult {
-        if let Some(teacup) = dom.as_any().downcast_ref::<Teacup>() {
-            if teacup.size == self.size
-                && teacup.position == self.position
-                && teacup.rotate_dig == self.rotate
-            {
-                DomComPareResult::Same
-            } else {
-                DomComPareResult::Changed
-            }
-        } else {
-            DomComPareResult::Different
-        }
-    }
-
-    fn sub_nodes(&self, parent_size: PxSize, context: &ApplicationContext) -> Vec<SubNode<R>> {
+    fn sub_nodes(&self, _: PxSize, _: &ApplicationContext) -> Vec<SubNode> {
         vec![]
     }
 
