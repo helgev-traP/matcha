@@ -1,6 +1,6 @@
 use crate::{
     application_context::ApplicationContext,
-    events::WidgetEvent,
+    events::UiEvent,
     renderer::RendererCommandEncoder,
     types::size::{PxSize, Size, SizeUnit},
     ui::{Dom, Widget},
@@ -62,10 +62,10 @@ impl<R: Send + 'static> super::WidgetTrait<R> for TemplateRenderNode {
 
     fn widget_event(
         &self,
-        event: &WidgetEvent,
+        event: &UiEvent,
         parent_size: PxSize,
         context: &ApplicationContext,
-    ) -> crate::events::WidgetEventResult<R> {
+    ) -> crate::events::UiEventResult<R> {
         todo!()
     }
 

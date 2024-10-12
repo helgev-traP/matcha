@@ -82,28 +82,58 @@ impl<R: Copy + Send + 'static> super::WidgetTrait<R> for SuperSimpleButtonRender
 
     fn widget_event(
         &self,
-        event: &crate::events::WidgetEvent,
+        event: &crate::events::UiEvent,
         parent_size: PxSize,
         context: &ApplicationContext,
-    ) -> crate::events::WidgetEventResult<R> {
-        match event {
-            crate::events::WidgetEvent::MouseLeftClick { x, y } => {
-                let actual_size = self.size.to_px(parent_size, &context);
-                if *x >= 0.0 && *x <= actual_size.width && *y >= 0.0 && *y <= actual_size.height {
-                    #[cfg(debug_assertions)]
+    ) -> crate::events::UiEventResult<R> {
+        let actual_size = self.size.to_px(parent_size, &context);
+        match event.content {
+            crate::events::UiEventContent::None => {}
+            crate::events::UiEventContent::CursorMoved { x, y } => {
+                if x >= 0.0 && x <= actual_size.width && y >= 0.0 && y <= actual_size.height {
+                    println!("Detect mouse moving on button at x: {}, y: {}", x, y);
+                }
+            }
+            crate::events::UiEventContent::MousePressed {
+                x,
+                y,
+                button,
+                combo,
+            } => {
+                if x >= 0.0 && x <= actual_size.width && y >= 0.0 && y <= actual_size.height {
+                    println!("Detect mouse pressed on button at x: {}, y: {}", x, y);
+                }
+            }
+            crate::events::UiEventContent::MouseReleased { x, y, button } => {
+                if x >= 0.0 && x <= actual_size.width && y >= 0.0 && y <= actual_size.height {
+                    println!("Detect mouse released on button at x: {}, y: {}", x, y);
+                }
+            }
+            crate::events::UiEventContent::MouseWheel { x, y, delta } => {
+                if x >= 0.0 && x <= actual_size.width && y >= 0.0 && y <= actual_size.height {
+                    println!("Detect mouse wheel on button at x: {}, y: {}", x, y);
+                }
+            }
+            crate::events::UiEventContent::Drag {
+                x,
+                y,
+                from_x,
+                from_y,
+                button,
+            } => {
+                if from_x >= 0.0
+                    && from_x <= actual_size.width
+                    && from_y >= 0.0
+                    && from_y <= actual_size.height
+                {
                     println!(
-                        "SuperSimpleButton({:?}) clicked at ({}, {})",
-                        self.label, x, y
+                        "Detect drag on button from x: {}, y: {} to x: {}, y: {}",
+                        from_x, from_y, x, y
                     );
-
-                    crate::events::WidgetEventResult {
-                        user_event: Some(self.on_click),
-                    }
-                } else {
-                    crate::events::WidgetEventResult::default()
                 }
             }
         }
+        crate::events::UiEventResult::default()
     }
 
     fn update_render_tree(&mut self, dom: &dyn Dom<R>) -> Result<(), ()> {

@@ -4,7 +4,7 @@ use std::{any::Any, cell::Cell};
 use super::{Dom, DomComPareResult, RenderingTrait, Widget, WidgetTrait};
 use crate::{
     application_context::ApplicationContext,
-    events::WidgetEventResult,
+    events::UiEventResult,
     renderer::RendererCommandEncoder,
     types::size::{PxSize, Size, SizeUnit, StdSize, StdSizeUnit},
 };
@@ -76,10 +76,10 @@ impl<'a, R: 'static> WidgetTrait<R> for ColumnRenderNode<R> {
 
     fn widget_event(
         &self,
-        event: &crate::events::WidgetEvent,
+        event: &crate::events::UiEvent,
         parent_size: PxSize,
         context: &ApplicationContext,
-    ) -> WidgetEventResult<R> {
+    ) -> UiEventResult<R> {
         // todo
         todo!()
     }

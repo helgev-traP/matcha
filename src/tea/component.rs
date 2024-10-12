@@ -4,7 +4,7 @@ use rayon::Scope;
 
 use super::{
     application_context::ApplicationContext,
-    events::WidgetEventResult,
+    events::UiEventResult,
     types::size::PxSize,
     ui::{Dom, DomComPareResult, RenderingTrait, Widget, WidgetTrait},
 };
@@ -18,8 +18,8 @@ pub struct Component<Model: Send + 'static, Message, OuterResponse: 'static, Inn
     fn_update: fn(ComponentAccess<Model>, Message),
     fn_local_update: fn(
         &ComponentAccess<Model>,
-        WidgetEventResult<InnerResponse>,
-    ) -> WidgetEventResult<OuterResponse>,
+        UiEventResult<InnerResponse>,
+    ) -> UiEventResult<OuterResponse>,
     fn_view: fn(&Model) -> Box<dyn Dom<InnerResponse>>,
 
     render_tree: Option<Arc<Mutex<Box<dyn Widget<InnerResponse>>>>>,
@@ -49,8 +49,8 @@ impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'sta
         mut self,
         component_update: fn(
             &ComponentAccess<Model>,
-            WidgetEventResult<InnerResponse>,
-        ) -> WidgetEventResult<OuterResponse>,
+            UiEventResult<InnerResponse>,
+        ) -> UiEventResult<OuterResponse>,
     ) -> Self {
         self.fn_local_update = component_update;
         self
@@ -81,8 +81,8 @@ impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'sta
 
     fn update_local(
         &mut self,
-        event: WidgetEventResult<InnerResponse>,
-    ) -> WidgetEventResult<OuterResponse> {
+        event: UiEventResult<InnerResponse>,
+    ) -> UiEventResult<OuterResponse> {
         (self.fn_local_update)(
             &ComponentAccess {
                 model: self.model.clone(),
@@ -156,8 +156,8 @@ where
     component_model: ComponentAccess<Model>,
     local_update_component: fn(
         &ComponentAccess<Model>,
-        WidgetEventResult<InnerResponse>,
-    ) -> WidgetEventResult<OuterResponse>,
+        UiEventResult<InnerResponse>,
+    ) -> UiEventResult<OuterResponse>,
     render_tree: Arc<Mutex<Box<dyn Widget<InnerResponse>>>>,
 }
 
@@ -187,8 +187,8 @@ pub struct ComponentRenderNode<Model, OuterResponse: 'static, InnerResponse: 'st
     component_model: ComponentAccess<Model>,
     local_update_component: fn(
         &ComponentAccess<Model>,
-        WidgetEventResult<InnerResponse>,
-    ) -> WidgetEventResult<OuterResponse>,
+        UiEventResult<InnerResponse>,
+    ) -> UiEventResult<OuterResponse>,
     node: Arc<Mutex<Box<dyn Widget<InnerResponse>>>>,
 }
 
@@ -199,10 +199,10 @@ impl<Model, O: 'static, I: 'static> WidgetTrait<O> for ComponentRenderNode<Model
 
     fn widget_event(
         &self,
-        event: &super::events::WidgetEvent,
+        event: &super::events::UiEvent,
         parent_size: PxSize,
         context: &ApplicationContext,
-    ) -> WidgetEventResult<O> {
+    ) -> UiEventResult<O> {
         (self.local_update_component)(
             &self.component_model,
             self.node

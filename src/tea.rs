@@ -9,4 +9,3 @@ pub mod ui;
 pub mod types;
 pub mod renderer;
 pub mod vertex;
-pub mod calc;

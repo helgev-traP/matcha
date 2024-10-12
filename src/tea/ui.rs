@@ -8,7 +8,7 @@ use std::{any::Any, sync::Arc};
 
 use super::{
     application_context::ApplicationContext,
-    events::{WidgetEvent, WidgetEventResult},
+    events::{UiEvent, UiEventResult},
     renderer::RendererCommandEncoder,
     types::size::{PxSize, Size},
 };
@@ -65,10 +65,10 @@ pub trait WidgetTrait<GlobalMessage> {
     // widget event
     fn widget_event(
         &self,
-        event: &WidgetEvent,
+        event: &UiEvent,
         parent_size: PxSize,
-        Content: &ApplicationContext,
-    ) -> WidgetEventResult<GlobalMessage>;
+        context: &ApplicationContext,
+    ) -> UiEventResult<GlobalMessage>;
 
     // for dom handling
     fn update_render_tree(&mut self, dom: &dyn Dom<GlobalMessage>) -> Result<(), ()>;

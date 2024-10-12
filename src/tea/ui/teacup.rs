@@ -2,11 +2,12 @@ use nalgebra as na;
 use std::{any::Any, sync::Arc};
 use wgpu::util::DeviceExt;
 
+use crate::events::UiEvent;
 use crate::renderer::RendererCommandEncoder;
 use crate::types::size::StdSizeUnit;
 use crate::{
     application_context::ApplicationContext,
-    events::{WidgetEvent, WidgetEventResult},
+    events::{UiEventContent, UiEventResult},
     types::size::{PxSize, StdSize},
     vertex,
 };
@@ -103,12 +104,7 @@ impl<R: 'static> WidgetTrait<R> for TeacupRenderNode {
         self.label.as_deref()
     }
 
-    fn widget_event(
-        &self,
-        _: &WidgetEvent,
-        _: PxSize,
-        _: &ApplicationContext,
-    ) -> WidgetEventResult<R> {
+    fn widget_event(&self, _: &UiEvent, _: PxSize, _: &ApplicationContext) -> UiEventResult<R> {
         Default::default()
     }
 
