@@ -6,46 +6,40 @@ use crate::{
         color::Color,
         size::{PxSize, Size, SizeUnit},
     },
+    ui::{Dom, Widget},
 };
+pub struct SuperSimpleButtonDescriptor {
+    pub label: Option<String>,
+    pub size: Size,
+    pub background_color: Color,
+}
 
-use super::{Dom, Widget};
+impl Default for SuperSimpleButtonDescriptor {
+    fn default() -> Self {
+        Self {
+            label: None,
+            size: Size {
+                width: SizeUnit::Pixel(100.0),
+                height: SizeUnit::Pixel(100.0),
+            },
+            background_color: Color::Rgb8USrgb { r: 0, g: 0, b: 0 },
+        }
+    }
+}
 
 pub struct SuperSimpleButton<R: Copy + Send + 'static> {
+    label: Option<String>,
     size: Size,
     background_color: Color,
     on_click: R,
 }
 
 impl<R: Copy + Send> SuperSimpleButton<R> {
-    pub fn new(on_click: R) -> Self {
+    pub fn new(on_click: R, disc: SuperSimpleButtonDescriptor) -> Self {
         Self {
-            size: Size {
-                width: SizeUnit::Pixel(100.0),
-                height: SizeUnit::Pixel(100.0),
-            },
-            background_color: Color::Rgb8USrgb {
-                r: 128,
-                g: 128,
-                b: 128,
-            },
-            on_click,
-        }
-    }
-
-    pub fn size(mut self, size: Size) -> Self {
-        self.size = size;
-        self
-    }
-
-    pub fn background_color(mut self, background_color: Color) -> Self {
-        self.background_color = background_color;
-        self
-    }
-
-    pub fn on_click(self, on_click: R) -> SuperSimpleButton<R> {
-        SuperSimpleButton {
-            size: self.size,
-            background_color: self.background_color,
+            label: disc.label,
+            size: disc.size,
+            background_color: disc.background_color,
             on_click,
         }
     }
@@ -54,6 +48,7 @@ impl<R: Copy + Send> SuperSimpleButton<R> {
 impl<R: Copy + Send> Dom<R> for SuperSimpleButton<R> {
     fn build_render_tree(&self) -> Box<dyn Widget<R>> {
         Box::new(SuperSimpleButtonRenderNode {
+            label: self.label.clone(),
             size: self.size,
             background_color: self.background_color,
             on_click: self.on_click,
@@ -69,6 +64,8 @@ impl<R: Copy + Send> Dom<R> for SuperSimpleButton<R> {
 }
 
 pub struct SuperSimpleButtonRenderNode<R: Copy + Send> {
+    label: Option<String>,
+
     size: Size,
     background_color: Color,
     on_click: R,
@@ -79,6 +76,10 @@ pub struct SuperSimpleButtonRenderNode<R: Copy + Send> {
 }
 
 impl<R: Copy + Send + 'static> super::WidgetTrait<R> for SuperSimpleButtonRenderNode<R> {
+    fn label(&self) -> Option<&str> {
+        self.label.as_deref()
+    }
+
     fn widget_event(
         &self,
         event: &crate::events::WidgetEvent,
@@ -89,6 +90,12 @@ impl<R: Copy + Send + 'static> super::WidgetTrait<R> for SuperSimpleButtonRender
             crate::events::WidgetEvent::MouseLeftClick { x, y } => {
                 let actual_size = self.size.to_px(parent_size, &context);
                 if *x >= 0.0 && *x <= actual_size.width && *y >= 0.0 && *y <= actual_size.height {
+                    #[cfg(debug_assertions)]
+                    println!(
+                        "SuperSimpleButton({:?}) clicked at ({}, {})",
+                        self.label, x, y
+                    );
+
                     crate::events::WidgetEventResult {
                         user_event: Some(self.on_click),
                     }

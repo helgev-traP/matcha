@@ -3,7 +3,6 @@ pub mod super_simple_button;
 pub mod teacup;
 pub mod template;
 
-use cosmic_text::SwashContent;
 use nalgebra as na;
 use std::{any::Any, sync::Arc};
 
@@ -61,6 +60,8 @@ where
 }
 
 pub trait WidgetTrait<GlobalMessage> {
+    fn label(&self) -> Option<&str>;
+
     // widget event
     fn widget_event(
         &self,

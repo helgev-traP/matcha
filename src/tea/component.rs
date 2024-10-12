@@ -110,6 +110,7 @@ impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'sta
             self.update_render_tree();
         }
         Some(Arc::new(ComponentDom {
+            label: self.label.clone(),
             component_model: ComponentAccess {
                 model: self.model.clone(),
                 model_updated: self.model_updated.clone(),
@@ -151,6 +152,7 @@ where
     OuterResponse: 'static,
     InnerResponse: 'static,
 {
+    label: Option<String>,
     component_model: ComponentAccess<Model>,
     local_update_component: fn(
         &ComponentAccess<Model>,
@@ -168,6 +170,7 @@ where
 {
     fn build_render_tree(&self) -> Box<dyn Widget<OuterResponse>> {
         Box::new(ComponentRenderNode {
+            label: self.label.clone(),
             component_model: self.component_model.clone(),
             local_update_component: self.local_update_component,
             node: self.render_tree.clone(),
@@ -180,6 +183,7 @@ where
 }
 
 pub struct ComponentRenderNode<Model, OuterResponse: 'static, InnerResponse: 'static> {
+    label: Option<String>,
     component_model: ComponentAccess<Model>,
     local_update_component: fn(
         &ComponentAccess<Model>,
@@ -189,6 +193,10 @@ pub struct ComponentRenderNode<Model, OuterResponse: 'static, InnerResponse: 'st
 }
 
 impl<Model, O: 'static, I: 'static> WidgetTrait<O> for ComponentRenderNode<Model, O, I> {
+    fn label(&self) -> Option<&str> {
+        self.label.as_deref()
+    }
+
     fn widget_event(
         &self,
         event: &super::events::WidgetEvent,

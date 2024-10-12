@@ -1,5 +1,4 @@
 use nalgebra as na;
-use wgpu::naga::Type;
 use std::{any::Any, sync::Arc};
 use wgpu::util::DeviceExt;
 
@@ -12,39 +11,44 @@ use crate::{
     vertex,
 };
 
-use super::{DomComPareResult, Dom, RenderItem, RenderingTrait, Widget, WidgetTrait};
+use super::{Dom, DomComPareResult, RenderItem, RenderingTrait, Widget, WidgetTrait};
+
+pub struct TeacupDescriptor {
+    pub label: Option<String>,
+    pub size: crate::types::size::Size,
+    pub position: [f32; 2],
+    pub rotate: f32,
+}
+
+impl Default for TeacupDescriptor {
+    fn default() -> Self {
+        Self {
+            label: None,
+            size: crate::types::size::Size {
+                width: crate::types::size::SizeUnit::Pixel(100.0),
+                height: crate::types::size::SizeUnit::Pixel(100.0),
+            },
+            position: [0.0, 0.0],
+            rotate: 0.0,
+        }
+    }
+}
 
 pub struct Teacup {
+    label: Option<String>,
     size: crate::types::size::Size,
     position: [f32; 2],
     rotate_dig: f32,
 }
 
 impl Teacup {
-    pub fn new() -> Self {
+    pub fn new(disc: TeacupDescriptor) -> Self {
         Self {
-            size: crate::types::size::Size {
-                width: crate::types::size::SizeUnit::Pixel(100.0),
-                height: crate::types::size::SizeUnit::Pixel(100.0),
-            },
-            position: [0.0, 0.0],
-            rotate_dig: 0.0,
+            label: disc.label,
+            size: disc.size,
+            position: disc.position,
+            rotate_dig: disc.rotate,
         }
-    }
-
-    pub fn size(mut self, size: crate::types::size::Size) -> Self {
-        self.size = size;
-        self
-    }
-
-    pub fn position(mut self, position: [f32; 2]) -> Self {
-        self.position = position;
-        self
-    }
-
-    pub fn rotate(mut self, rotate: f32) -> Self {
-        self.rotate_dig = rotate;
-        self
     }
 }
 
@@ -56,6 +60,7 @@ impl<R: 'static> Dom<R> for Teacup {
         let (width, height) = teacup_rgba.dimensions();
 
         Box::new(TeacupRenderNode {
+            label: self.label.clone(),
             teacup_rgba,
             picture_size: crate::types::size::PxSize {
                 width: width as f32,
@@ -77,6 +82,8 @@ impl<R: 'static> Dom<R> for Teacup {
 }
 
 pub struct TeacupRenderNode {
+    label: Option<String>,
+
     teacup_rgba: image::RgbaImage,
     picture_size: crate::types::size::PxSize,
     position: [f32; 2],
@@ -92,7 +99,16 @@ pub struct TeacupRenderNode {
 }
 
 impl<R: 'static> WidgetTrait<R> for TeacupRenderNode {
-    fn widget_event(&self, _: &WidgetEvent, _: PxSize, _: &ApplicationContext) -> WidgetEventResult<R> {
+    fn label(&self) -> Option<&str> {
+        self.label.as_deref()
+    }
+
+    fn widget_event(
+        &self,
+        _: &WidgetEvent,
+        _: PxSize,
+        _: &ApplicationContext,
+    ) -> WidgetEventResult<R> {
         Default::default()
     }
 

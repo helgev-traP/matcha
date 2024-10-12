@@ -9,19 +9,31 @@ use crate::{
     types::size::{PxSize, Size, SizeUnit, StdSize, StdSizeUnit},
 };
 
+pub struct ColumnDescriptor<R> {
+    pub label: Option<String>,
+    pub children: Vec<Box<dyn Dom<R>>>,
+}
+
+impl<R> Default for ColumnDescriptor<R> {
+    fn default() -> Self {
+        Self {
+            label: None,
+            children: Vec::new(),
+        }
+    }
+}
+
 pub struct Column<R: 'static> {
+    label: Option<String>,
     children: Vec<Box<dyn Dom<R>>>,
 }
 
 impl<R: 'static> Column<R> {
-    pub fn new() -> Self {
+    pub fn new(disc: ColumnDescriptor<R>) -> Self {
         Self {
-            children: Vec::new(),
+            label: disc.label,
+            children: disc.children,
         }
-    }
-
-    pub fn vec(vec: Vec<Box<dyn Dom<R>>>) -> Self {
-        Self { children: vec }
     }
 
     pub fn push(&mut self, child: Box<dyn Dom<R>>) {
@@ -38,6 +50,7 @@ impl<R: 'static> Dom<R> for Column<R> {
         }
 
         Box::new(ColumnRenderNode {
+            label: self.label.clone(),
             redraw: true,
             children: render_tree,
             cache_self_size: Cell::new(None),
@@ -50,12 +63,17 @@ impl<R: 'static> Dom<R> for Column<R> {
 }
 
 pub struct ColumnRenderNode<R: 'static> {
+    label: Option<String>,
     redraw: bool,
     children: Vec<Box<dyn Widget<R>>>,
     cache_self_size: Cell<Option<PxSize>>,
 }
 
 impl<'a, R: 'static> WidgetTrait<R> for ColumnRenderNode<R> {
+    fn label(&self) -> Option<&str> {
+        self.label.as_deref()
+    }
+
     fn widget_event(
         &self,
         event: &crate::events::WidgetEvent,

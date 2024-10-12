@@ -5,24 +5,32 @@ use tea_ui::{
         color::Color,
         size::{Size, SizeUnit},
     },
-    ui::{column::Column, super_simple_button::SuperSimpleButton, teacup::Teacup, Dom},
+    ui::{
+        column::Column,
+        super_simple_button::{SuperSimpleButton, SuperSimpleButtonDescriptor},
+        teacup::Teacup,
+        Dom,
+    },
 };
 
 fn update(component: ComponentAccess<u32>, message: ()) {}
 
 fn view(_: &u32) -> Box<dyn Dom<()>> {
-    Box::new(
-        SuperSimpleButton::new(())
-            .size(Size {
+    Box::new(SuperSimpleButton::new(
+        (),
+        SuperSimpleButtonDescriptor {
+            label: Some("Click me".to_string()),
+            size: Size {
                 width: SizeUnit::Pixel(100.0),
                 height: SizeUnit::Pixel(100.0),
-            })
-            .background_color(Color::Rgb8USrgb {
-                r: 128,
-                g: 128,
-                b: 128,
-            }),
-    )
+            },
+            background_color: Color::Rgb8USrgb {
+                r: 255,
+                g: 255,
+                b: 255,
+            },
+        },
+    ))
 }
 
 fn main() {

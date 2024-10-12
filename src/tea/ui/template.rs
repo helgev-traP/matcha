@@ -2,18 +2,45 @@ use crate::{
     application_context::ApplicationContext,
     events::WidgetEvent,
     render::RenderCommandEncoder,
-    types::size::{PxSize, Size},
+    types::size::{PxSize, Size, SizeUnit},
+    ui::{Dom, Widget},
 };
 
-use super::{Dom, Widget};
+pub struct TemplateDescriptor {
+    pub label: Option<String>,
+    pub size: Size,
+}
+
+impl Default for TemplateDescriptor {
+    fn default() -> Self {
+        Self {
+            label: None,
+            size: Size {
+                width: SizeUnit::Pixel(100.0),
+                height: SizeUnit::Pixel(100.0),
+            },
+        }
+    }
+}
 
 pub struct Template {
+    label: Option<String>,
     size: Size,
+}
+
+impl Template {
+    pub fn new(disc: TemplateDescriptor) -> Self {
+        Self {
+            label: disc.label,
+            size: disc.size,
+        }
+    }
 }
 
 impl<R: Send + 'static> Dom<R> for Template {
     fn build_render_tree(&self) -> Box<dyn Widget<R>> {
         Box::new(TemplateRenderNode {
+            label: self.label.clone(),
             size: self.size,
         })
     }
@@ -24,10 +51,15 @@ impl<R: Send + 'static> Dom<R> for Template {
 }
 
 pub struct TemplateRenderNode {
+    label: Option<String>,
     size: Size,
 }
 
 impl<R: Send + 'static> super::WidgetTrait<R> for TemplateRenderNode {
+    fn label(&self) -> Option<&str> {
+        self.label.as_deref()
+    }
+
     fn widget_event(
         &self,
         event: &WidgetEvent,
