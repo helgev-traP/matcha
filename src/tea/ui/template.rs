@@ -1,7 +1,7 @@
 use crate::{
     application_context::ApplicationContext,
     events::WidgetEvent,
-    render::RenderCommandEncoder,
+    renderer::RendererCommandEncoder,
     types::size::{PxSize, Size, SizeUnit},
     ui::{Dom, Widget},
 };
@@ -109,7 +109,7 @@ impl super::RenderingTrait for TemplateRenderNode {
         s: &rayon::Scope,
         parent_size: PxSize,
         affine: nalgebra::Matrix4<f32>,
-        encoder: &mut RenderCommandEncoder,
+        encoder: &mut RendererCommandEncoder,
     ) {
         todo!()
     }

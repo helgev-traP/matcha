@@ -7,6 +7,6 @@ pub mod events;
 pub mod ui;
 
 pub mod types;
-pub mod render;
+pub mod renderer;
 pub mod vertex;
 pub mod calc;

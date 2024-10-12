@@ -9,7 +9,7 @@ use std::{any::Any, sync::Arc};
 use super::{
     application_context::ApplicationContext,
     events::{WidgetEvent, WidgetEventResult},
-    render::RenderCommandEncoder,
+    renderer::RendererCommandEncoder,
     types::size::{PxSize, Size},
 };
 
@@ -67,7 +67,7 @@ pub trait WidgetTrait<GlobalMessage> {
         &self,
         event: &WidgetEvent,
         parent_size: PxSize,
-        Content: &ApplicationContext
+        Content: &ApplicationContext,
     ) -> WidgetEventResult<GlobalMessage>;
 
     // for dom handling
@@ -96,6 +96,6 @@ pub trait RenderingTrait: Send {
         s: &rayon::Scope,
         parent_size: PxSize,
         affine: na::Matrix4<f32>,
-        encoder: &mut RenderCommandEncoder,
+        encoder: &mut RendererCommandEncoder,
     );
 }

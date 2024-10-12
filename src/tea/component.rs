@@ -241,7 +241,7 @@ impl<Model: Send, OuterResponse: 'static, InnerResponse: 'static> RenderingTrait
         s: &Scope,
         parent_size: PxSize,
         affine: nalgebra::Matrix4<f32>,
-        encoder: &mut super::render::RenderCommandEncoder,
+        encoder: &mut super::renderer::RendererCommandEncoder,
     ) {
         self.node
             .lock()

@@ -6,9 +6,7 @@ use tea_ui::{
         size::{Size, SizeUnit},
     },
     ui::{
-        column::Column,
         super_simple_button::{SuperSimpleButton, SuperSimpleButtonDescriptor},
-        teacup::Teacup,
         Dom,
     },
 };

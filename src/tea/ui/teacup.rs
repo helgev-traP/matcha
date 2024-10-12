@@ -2,7 +2,7 @@ use nalgebra as na;
 use std::{any::Any, sync::Arc};
 use wgpu::util::DeviceExt;
 
-use crate::render::RenderCommandEncoder;
+use crate::renderer::RendererCommandEncoder;
 use crate::types::size::StdSizeUnit;
 use crate::{
     application_context::ApplicationContext,
@@ -154,7 +154,7 @@ impl RenderingTrait for TeacupRenderNode {
         _: &rayon::Scope,
         parent_size: PxSize,
         affine: na::Matrix4<f32>,
-        encoder: &mut RenderCommandEncoder,
+        encoder: &mut RendererCommandEncoder,
     ) {
         let context = encoder.get_context();
         let device = context.get_wgpu_device();

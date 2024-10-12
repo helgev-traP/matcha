@@ -5,7 +5,7 @@ use super::{Dom, DomComPareResult, RenderingTrait, Widget, WidgetTrait};
 use crate::{
     application_context::ApplicationContext,
     events::WidgetEventResult,
-    render::RenderCommandEncoder,
+    renderer::RendererCommandEncoder,
     types::size::{PxSize, Size, SizeUnit, StdSize, StdSizeUnit},
 };
 
@@ -156,7 +156,7 @@ impl<R> RenderingTrait for ColumnRenderNode<R> {
         s: &rayon::Scope,
         parent_size: PxSize,
         affine: na::Matrix4<f32>,
-        encoder: &mut RenderCommandEncoder,
+        encoder: &mut RendererCommandEncoder,
     ) {
         let current_size = self.px_size(parent_size, encoder.get_context());
 

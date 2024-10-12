@@ -20,7 +20,7 @@ pub struct Window<'a, Model: Send + 'static, Message: 'static> {
     winit_window: Option<Arc<winit::window::Window>>,
     gpu_state: Option<gpu_state::GpuState<'a>>,
 
-    render: Option<crate::render::Render>,
+    render: Option<crate::renderer::Renderer>,
 
     frame: u64,
 
@@ -182,7 +182,7 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
         #[cfg(debug_assertions)]
         println!("create render");
 
-        self.render = Some(crate::render::Render::new(
+        self.render = Some(crate::renderer::Renderer::new(
             self.gpu_state.as_ref().unwrap().get_app_context(),
         ));
 

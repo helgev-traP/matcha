@@ -9,7 +9,7 @@ use super::{
     ui::{Object, RenderItem},
 };
 
-pub struct Render {
+pub struct Renderer {
     // context
     app_context: ApplicationContext,
 
@@ -25,7 +25,7 @@ pub struct Render {
     affine_bind_group_layout: wgpu::BindGroupLayout,
 }
 
-impl Render {
+impl Renderer {
     pub fn new(context: ApplicationContext) -> Self {
         let device = context.get_wgpu_device();
 
@@ -197,12 +197,12 @@ impl Render {
         target_texture_view: wgpu::TextureView,
         depth_texture_view: wgpu::TextureView,
         size: PxSize,
-    ) -> RenderCommandEncoder {
+    ) -> RendererCommandEncoder {
         let encoder = Arc::new(Mutex::new(self.app_context.get_wgpu_encoder()));
 
         let normalizer = size.make_normalizer();
 
-        RenderCommandEncoder {
+        RendererCommandEncoder {
             app_context: &self.app_context,
             size,
             texture_bind_group_layout: &self.texture_bind_group_layout,
@@ -217,7 +217,7 @@ impl Render {
     }
 }
 
-pub struct RenderCommandEncoder<'a> {
+pub struct RendererCommandEncoder<'a> {
     // context
     app_context: &'a ApplicationContext,
     size: PxSize,
@@ -242,7 +242,7 @@ pub struct RenderCommandEncoder<'a> {
     normalizer: na::Matrix4<f32>,
 }
 
-impl<'a> RenderCommandEncoder<'a> {
+impl<'a> RendererCommandEncoder<'a> {
     pub fn get_context(&self) -> &ApplicationContext {
         self.app_context
     }

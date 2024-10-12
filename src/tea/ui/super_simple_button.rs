@@ -159,7 +159,7 @@ impl<R: Copy + Send> super::RenderingTrait for SuperSimpleButtonRenderNode<R> {
         _: &rayon::Scope,
         parent_size: crate::types::size::PxSize,
         affine: nalgebra::Matrix4<f32>,
-        encoder: &mut crate::render::RenderCommandEncoder,
+        encoder: &mut crate::renderer::RendererCommandEncoder,
     ) {
         let context = encoder.get_context();
 
