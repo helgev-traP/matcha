@@ -109,6 +109,7 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
         let render_tree = self.render_tree.as_mut().unwrap().for_rendering();
 
         rayon::scope(|s| {
+            encoder.clear(self.base_color);
             render_tree.render(s, viewport_size, na::Matrix4::identity(), &mut encoder);
         });
 

@@ -17,8 +17,10 @@ use super::{Dom, DomComPareResult, RenderItem, RenderingTrait, Widget, WidgetTra
 pub struct TeacupDescriptor {
     pub label: Option<String>,
     pub size: crate::types::size::Size,
+    pub frame_size: crate::types::size::Size,
     pub position: [f32; 2],
     pub rotate: f32,
+    pub visible: bool,
 }
 
 impl Default for TeacupDescriptor {
@@ -29,8 +31,13 @@ impl Default for TeacupDescriptor {
                 width: crate::types::size::SizeUnit::Pixel(100.0),
                 height: crate::types::size::SizeUnit::Pixel(100.0),
             },
+            frame_size: crate::types::size::Size {
+                width: crate::types::size::SizeUnit::Pixel(100.0),
+                height: crate::types::size::SizeUnit::Pixel(100.0),
+            },
             position: [0.0, 0.0],
             rotate: 0.0,
+            visible: true,
         }
     }
 }
@@ -38,8 +45,10 @@ impl Default for TeacupDescriptor {
 pub struct Teacup {
     label: Option<String>,
     size: crate::types::size::Size,
+    frame_size: crate::types::size::Size,
     position: [f32; 2],
     rotate_dig: f32,
+    visible: bool,
 }
 
 impl Teacup {
@@ -47,8 +56,10 @@ impl Teacup {
         Self {
             label: disc.label,
             size: disc.size,
+            frame_size: disc.frame_size,
             position: disc.position,
             rotate_dig: disc.rotate,
+            visible: disc.visible,
         }
     }
 }
@@ -70,6 +81,8 @@ impl<R: 'static> Dom<R> for Teacup {
             position: self.position,
             rotate: self.rotate_dig,
             size: self.size,
+            frame_size: self.frame_size,
+            visible: self.visible,
             texture: None,
             vertex_buffer: None,
             index_buffer: None,
@@ -91,6 +104,9 @@ pub struct TeacupRenderNode {
     rotate: f32,
 
     size: crate::types::size::Size,
+    frame_size: crate::types::size::Size,
+
+    visible: bool,
 
     // previous_size: Option<PxSize>,
     texture: Option<Arc<wgpu::Texture>>,
@@ -229,26 +245,28 @@ impl RenderingTrait for TeacupRenderNode {
 
         // draw
 
-        encoder.draw(
-            RenderItem {
-                object: vec![crate::ui::Object::Textured {
-                    vertex_buffer: self.vertex_buffer.as_ref().unwrap().clone(),
-                    index_buffer: self.index_buffer.as_ref().unwrap().clone(),
-                    index_len: self.index_len,
-                    texture: self.texture.as_ref().unwrap().clone(),
-                    instance_affine: na::Matrix4::identity(),
-                }],
-            },
-            affine,
-        );
+        if self.visible {
+            encoder.draw(
+                RenderItem {
+                    object: vec![crate::ui::Object::Textured {
+                        vertex_buffer: self.vertex_buffer.as_ref().unwrap().clone(),
+                        index_buffer: self.index_buffer.as_ref().unwrap().clone(),
+                        index_len: self.index_len,
+                        texture: self.texture.as_ref().unwrap().clone(),
+                        instance_affine: na::Matrix4::identity(),
+                    }],
+                },
+                affine,
+            );
+        }
     }
 
     fn size(&self) -> crate::types::size::Size {
-        self.size
+        self.frame_size
     }
 
     fn px_size(&self, parent_size: PxSize, context: &ApplicationContext) -> PxSize {
-        let mut size = StdSize::from_parent_size(self.size, parent_size, context);
+        let mut size = StdSize::from_parent_size(self.frame_size, parent_size, context);
         if size.width.is_none() {
             size.width = StdSizeUnit::Pixel(self.picture_size.width);
             size.height = StdSizeUnit::Pixel(self.picture_size.height);

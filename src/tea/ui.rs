@@ -1,4 +1,5 @@
 pub mod column;
+pub mod row;
 pub mod super_simple_button;
 pub mod teacup;
 pub mod template;

@@ -71,12 +71,11 @@ impl<R: Send + 'static> super::WidgetTrait<R> for TemplateRenderNode {
 
     fn update_render_tree(&mut self, dom: &dyn Dom<R>) -> Result<(), ()> {
         if (*dom).type_id() != std::any::TypeId::of::<Template>() {
-            return Err(());
+            Err(())
+        } else {
+            let dom = dom.as_any().downcast_ref::<Template>().unwrap();
+            todo!()
         }
-
-        let dom = dom.as_any().downcast_ref::<Template>().unwrap();
-
-        todo!()
     }
 
     fn compare(&self, dom: &dyn Dom<R>) -> super::DomComPareResult {

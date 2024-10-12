@@ -15,4 +15,5 @@ image = "0.25"
 font-kit = "0.14"
 pathfinder_geometry = "0.5.1"
 cosmic-text = "0.12.1"
+rand = "0.8"
 

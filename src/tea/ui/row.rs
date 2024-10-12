@@ -1,20 +1,20 @@
+use std::cell::Cell;
 use nalgebra as na;
-use std::{any::Any, cell::Cell};
 
-use super::{Dom, DomComPareResult, RenderingTrait, Widget, WidgetTrait};
 use crate::{
     application_context::ApplicationContext,
     events::{UiEvent, UiEventResult},
     renderer::RendererCommandEncoder,
-    types::size::{PxSize, Size, SizeUnit, StdSize, StdSizeUnit},
+    types::size::{PxSize, Size, SizeUnit, StdSize},
+    ui::{Dom, Widget},
 };
 
-pub struct ColumnDescriptor<R> {
+pub struct RowDescriptor<R> {
     pub label: Option<String>,
     pub vec: Vec<Box<dyn Dom<R>>>,
 }
 
-impl<R> Default for ColumnDescriptor<R> {
+impl<R> Default for RowDescriptor<R> {
     fn default() -> Self {
         Self {
             label: None,
@@ -23,13 +23,13 @@ impl<R> Default for ColumnDescriptor<R> {
     }
 }
 
-pub struct Column<R: 'static> {
+pub struct Row<R: 'static> {
     label: Option<String>,
     children: Vec<Box<dyn Dom<R>>>,
 }
 
-impl<R: 'static> Column<R> {
-    pub fn new(disc: ColumnDescriptor<R>) -> Self {
+impl<R> Row<R> {
+    pub fn new(disc: RowDescriptor<R>) -> Self {
         Self {
             label: disc.label,
             children: disc.vec,
@@ -41,7 +41,7 @@ impl<R: 'static> Column<R> {
     }
 }
 
-impl<R: 'static> Dom<R> for Column<R> {
+impl<R: Send + 'static> Dom<R> for Row<R> {
     fn build_render_tree(&self) -> Box<dyn Widget<R>> {
         let mut render_tree = Vec::new();
 
@@ -49,7 +49,7 @@ impl<R: 'static> Dom<R> for Column<R> {
             render_tree.push(child.build_render_tree());
         }
 
-        Box::new(ColumnRenderNode {
+        Box::new(RowRenderNode {
             label: self.label.clone(),
             redraw: true,
             children: render_tree,
@@ -62,14 +62,14 @@ impl<R: 'static> Dom<R> for Column<R> {
     }
 }
 
-pub struct ColumnRenderNode<R: 'static> {
+pub struct RowRenderNode<R: 'static> {
     label: Option<String>,
     redraw: bool,
     children: Vec<Box<dyn Widget<R>>>,
     cache_self_size: Cell<Option<PxSize>>,
 }
 
-impl<R: 'static> WidgetTrait<R> for ColumnRenderNode<R> {
+impl<R: Send + 'static> super::WidgetTrait<R> for RowRenderNode<R> {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
@@ -79,16 +79,16 @@ impl<R: 'static> WidgetTrait<R> for ColumnRenderNode<R> {
         event: &UiEvent,
         parent_size: PxSize,
         context: &ApplicationContext,
-    ) -> UiEventResult<R> {
+    ) -> crate::events::UiEventResult<R> {
         // todo: event handling
         UiEventResult::default()
     }
 
     fn update_render_tree(&mut self, dom: &dyn Dom<R>) -> Result<(), ()> {
-        if (*dom).type_id() != (*self).type_id() {
+        if (*dom).type_id() != std::any::TypeId::of::<Row<R>>() {
             Err(())
         } else {
-            let dom = dom.as_any().downcast_ref::<Column<R>>().unwrap();
+            let dom = dom.as_any().downcast_ref::<Row<R>>().unwrap();
             // todo: differential update
             self.children.clear();
             for child in dom.children.iter() {
@@ -99,18 +99,18 @@ impl<R: 'static> WidgetTrait<R> for ColumnRenderNode<R> {
     }
 
     fn compare(&self, dom: &dyn Dom<R>) -> super::DomComPareResult {
-        if let Some(_) = dom.as_any().downcast_ref::<Column<R>>() {
+        if let Some(_) = dom.as_any().downcast_ref::<Row<R>>() {
             // todo: calculate difference
 
-            DomComPareResult::Different
+            super::DomComPareResult::Different
         } else {
-            DomComPareResult::Different
+            super::DomComPareResult::Different
         }
     }
 }
 
-impl<R> RenderingTrait for ColumnRenderNode<R> {
-    fn size(&self) -> Size {
+impl<R> super::RenderingTrait for RowRenderNode<R> {
+    fn size(&self) -> crate::types::size::Size {
         Size {
             width: SizeUnit::Content(1.0),
             height: SizeUnit::Content(1.0),
@@ -118,27 +118,29 @@ impl<R> RenderingTrait for ColumnRenderNode<R> {
     }
 
     fn px_size(&self, _: PxSize, context: &ApplicationContext) -> PxSize {
-        let mut width: f32 = 0.0;
-        let mut height_px: f32 = 0.0;
-        let mut height_percent: f32 = 0.0;
+        let mut width_px: f32 = 0.0;
+        let mut width_percent: f32 = 0.0;
+        let mut height: f32 = 0.0;
 
         for child in &self.children {
             let child_std_size = StdSize::from_size(child.size(), context);
 
             match child_std_size.width {
-                StdSizeUnit::Pixel(px) => width = width.max(px),
-                StdSizeUnit::Percent(_) => (),
-                StdSizeUnit::None => width = width.max(child.default_size().width),
+                crate::types::size::StdSizeUnit::None => width_px += child.default_size().width,
+                crate::types::size::StdSizeUnit::Pixel(px) => width_px += px,
+                crate::types::size::StdSizeUnit::Percent(percent) => width_percent += percent,
             }
 
             match child_std_size.height {
-                StdSizeUnit::Pixel(px) => height_px += px,
-                StdSizeUnit::Percent(percent) => height_percent += percent,
-                StdSizeUnit::None => height_px += child.default_size().height,
+                crate::types::size::StdSizeUnit::None => {
+                    height = height.max(child.default_size().height)
+                }
+                crate::types::size::StdSizeUnit::Pixel(px) => height = height.max(px),
+                crate::types::size::StdSizeUnit::Percent(_) => (),
             }
         }
 
-        let height = height_px / (1.0 - height_percent);
+        let width = width_px / (1.0 - width_percent);
 
         self.cache_self_size.set(Some(PxSize { width, height }));
         PxSize { width, height }
@@ -155,19 +157,19 @@ impl<R> RenderingTrait for ColumnRenderNode<R> {
         &mut self,
         s: &rayon::Scope,
         parent_size: PxSize,
-        affine: na::Matrix4<f32>,
+        affine: nalgebra::Matrix4<f32>,
         encoder: &mut RendererCommandEncoder,
     ) {
         let current_size = self.px_size(parent_size, encoder.get_context());
 
-        let mut accumulated_height: f32 = 0.0;
+        let mut accumulated_width: f32 = 0.0;
         for child in &mut self.children {
             let child_px_size = child.px_size(current_size, encoder.get_context());
             let child_affine =
-                na::Matrix4::new_translation(&na::Vector3::new(0.0, -accumulated_height, 0.0))
+                na::Matrix4::new_translation(&na::Vector3::new(accumulated_width, 0.0, 0.0))
                     * affine;
-            child.render(s, child_px_size, child_affine, encoder);
-            accumulated_height += child_px_size.height;
+            child.render(s, current_size, child_affine, encoder);
+            accumulated_width += child_px_size.width;
         }
     }
 }

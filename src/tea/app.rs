@@ -1,4 +1,4 @@
-use super::{component::Component, window::Window};
+use super::{component::Component, types::color::Color, window::Window};
 
 pub struct App<'a, Model: Send + 'static, Message: 'static> {
     window: Window<'a, Model, Message>,
@@ -9,6 +9,11 @@ impl<Model: Send + 'static, Message: 'static> App<'_, Model, Message> {
         Self {
             window: Window::new(component),
         }
+    }
+
+    pub fn base_color(mut self, color: Color) -> Self {
+        self.window.base_color(color);
+        self
     }
 
     pub fn run(&mut self) {
