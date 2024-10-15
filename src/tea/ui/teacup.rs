@@ -1,6 +1,7 @@
 use nalgebra as na;
 use std::{any::Any, sync::Arc};
 use wgpu::util::DeviceExt;
+use wgpu::ImageCopyTextureBase;
 
 use crate::events::UiEvent;
 use crate::renderer::RendererCommandEncoder;
@@ -201,27 +202,43 @@ impl RenderingTrait for TeacupRenderNode {
                 usage: wgpu::BufferUsages::COPY_SRC,
             });
 
-            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Texture Command Encoder"),
-            });
-            encoder.copy_buffer_to_texture(
-                wgpu::ImageCopyBuffer {
-                    buffer: &buffer,
-                    layout: wgpu::ImageDataLayout {
-                        offset: 0,
-                        bytes_per_row: Some(4 * self.picture_size.width as u32),
-                        rows_per_image: Some(self.picture_size.height as u32),
-                    },
-                },
-                wgpu::ImageCopyTexture {
+            encoder.get_context().get_wgpu_queue().write_texture(
+                ImageCopyTextureBase {
                     texture: &texture,
                     mip_level: 0,
                     origin: wgpu::Origin3d::ZERO,
                     aspect: wgpu::TextureAspect::All,
                 },
+                &self.teacup_rgba,
+                wgpu::ImageDataLayout {
+                    offset: 0,
+                    bytes_per_row: Some(4 * self.picture_size.width as u32),
+                    rows_per_image: None,
+                },
                 texture_size,
             );
-            context.get_wgpu_queue().submit(Some(encoder.finish()));
+
+            // let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            //     label: Some("Texture Command Encoder"),
+            // });
+            // encoder.copy_buffer_to_texture(
+            //     wgpu::ImageCopyBuffer {
+            //         buffer: &buffer,
+            //         layout: wgpu::ImageDataLayout {
+            //             offset: 0,
+            //             bytes_per_row: Some(((4 * self.picture_size.width as u32) / 256 + 1) * 256),
+            //             rows_per_image: None,
+            //         },
+            //     },
+            //     wgpu::ImageCopyTexture {
+            //         texture: &texture,
+            //         mip_level: 0,
+            //         origin: wgpu::Origin3d::ZERO,
+            //         aspect: wgpu::TextureAspect::All,
+            //     },
+            //     texture_size,
+            // );
+            // context.get_wgpu_queue().submit(Some(encoder.finish()));
 
             self.texture = Some(Arc::new(texture));
         }
@@ -256,7 +273,24 @@ impl RenderingTrait for TeacupRenderNode {
                         instance_affine: na::Matrix4::identity(),
                     }],
                 },
-                affine,
+                nalgebra::Matrix4::new_translation(&na::Vector3::new(
+                    self.position[0],
+                    -self.position[1],
+                    0.0,
+                )) * affine
+                    * nalgebra::Matrix4::new_translation(&na::Vector3::new(
+                        size.width / 2.0,
+                        -size.height / 2.0,
+                        0.0,
+                    ))
+                    * nalgebra::Matrix4::new_rotation(
+                        nalgebra::Vector3::new(0.0, 0.0, self.rotate.to_radians()),
+                    )
+                *nalgebra::Matrix4::new_translation(&na::Vector3::new(
+                    -size.width / 2.0,
+                    size.height / 2.0,
+                    0.0,
+                )),
             );
         }
     }

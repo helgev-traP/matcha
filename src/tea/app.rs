@@ -11,6 +11,11 @@ impl<Model: Send + 'static, Message: 'static> App<'_, Model, Message> {
         }
     }
 
+    pub fn title(mut self, title: &str) -> Self {
+        self.window.title(title);
+        self
+    }
+
     pub fn base_color(mut self, color: Color) -> Self {
         self.window.base_color(color);
         self

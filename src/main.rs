@@ -8,7 +8,6 @@ use tea_ui::{
     ui::{
         column::{Column, ColumnDescriptor},
         row::{Row, RowDescriptor},
-        super_simple_button::{SuperSimpleButton, SuperSimpleButtonDescriptor},
         teacup::{Teacup, TeacupDescriptor},
         Dom,
     },
@@ -28,7 +27,7 @@ fn view(_: &u32) -> Box<dyn Dom<()>> {
             vec: vec![],
         });
 
-        for _ in 0..10 {
+        for _ in 0..20 {
             // random size
             let px = rand::random::<f32>() * 50.0 + 50.0;
 
@@ -41,7 +40,9 @@ fn view(_: &u32) -> Box<dyn Dom<()>> {
                     width: SizeUnit::Pixel(100.0),
                     height: SizeUnit::Pixel(100.0),
                 },
-                // visible: rand::random::<f32>() > 0.5,
+                position: [(100.0 - px) / 2.0, (100.0 - px) / 2.0],
+                visible: rand::random::<f32>() > 0.3,
+                rotate: rand::random::<f32>() * 360.0,
                 ..Default::default()
             })));
         }
@@ -55,5 +56,12 @@ fn view(_: &u32) -> Box<dyn Dom<()>> {
 fn main() {
     let component = Component::new(None, 0, update, view);
 
-    App::new(component).base_color(Color::Rgb8USrgb { r: 128, g: 128, b: 128 }).run();
+    App::new(component)
+        .base_color(Color::Rgb8USrgb {
+            r: 255,
+            g: 255,
+            b: 255,
+        })
+        .title("traP Conference")
+        .run();
 }

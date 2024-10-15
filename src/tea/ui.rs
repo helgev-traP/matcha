@@ -61,7 +61,16 @@ where
 }
 
 pub trait WidgetTrait<GlobalMessage> {
+    // label
     fn label(&self) -> Option<&str>;
+
+    // for dom handling
+    fn update_render_tree(&mut self, dom: &dyn Dom<GlobalMessage>) -> Result<(), ()>;
+    fn compare(&self, dom: &dyn Dom<GlobalMessage>) -> DomComPareResult;
+
+    // raw event
+    // todo
+    // fn raw_event(&self, event: ?) -> ?;
 
     // widget event
     fn widget_event(
@@ -70,10 +79,6 @@ pub trait WidgetTrait<GlobalMessage> {
         parent_size: PxSize,
         context: &ApplicationContext,
     ) -> UiEventResult<GlobalMessage>;
-
-    // for dom handling
-    fn update_render_tree(&mut self, dom: &dyn Dom<GlobalMessage>) -> Result<(), ()>;
-    fn compare(&self, dom: &dyn Dom<GlobalMessage>) -> DomComPareResult;
 }
 
 pub enum DomComPareResult {
