@@ -1,45 +1,45 @@
 // widget event
-
-use std::time::Instant;
+use super::device::mouse::MouseButton;
 
 pub struct UiEvent {
-    pub time: Instant,
+    pub frame: u64,
     pub content: UiEventContent,
+    pub diff: (), // todo
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum UiEventContent {
     None,
     // mouse event
-    CursorMoved {
-        x: f32,
-        y: f32,
-    },
-    MousePressed {
-        x: f32,
-        y: f32,
-        button: MouseButton,
-        combo: u32,
-    },
-    MouseReleased {
-        x: f32,
-        y: f32,
+    MouseClick {
+        position: [f32; 2],
+        click_state: ElementState,
         button: MouseButton,
     },
-    MouseWheel {
-        x: f32,
-        y: f32,
+    CursorMove {
+        position: [f32; 2],
+        primary_dragging_from: Option<[f32; 2]>,
+        secondary_dragging_from: Option<[f32; 2]>,
+        middle_dragging_from: Option<[f32; 2]>,
+    },
+    CursorEntered,
+    CursorLeft,
+    MouseScroll {
+        position: [f32; 2],
         delta: [f32; 2],
-    },
-    Drag {
-        x: f32,
-        y: f32,
-        from_x: f32,
-        from_y: f32,
-        button: MouseButton,
     },
     // keyboard event
     // todo
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ElementState {
+    Pressed(u32),
+    LongPressed(u32),
+    Released(u32),
+}
+
+// result of widget event
 
 pub struct UiEventResult<UserEvent> {
     // matcha-ui system event
@@ -62,11 +62,4 @@ impl<R> Default for UiEventResult<R> {
     fn default() -> Self {
         UiEventResult { user_event: None }
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MouseButton {
-    Primary,
-    Secondary,
-    Middle,
 }
