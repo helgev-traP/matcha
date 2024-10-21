@@ -1,6 +1,7 @@
 pub mod column;
+pub mod drag_field;
 pub mod row;
-pub mod super_simple_button;
+pub mod square;
 pub mod teacup;
 pub mod template;
 
@@ -69,16 +70,20 @@ pub trait WidgetTrait<GlobalMessage> {
     fn compare(&self, dom: &dyn Dom<GlobalMessage>) -> DomComPareResult;
 
     // raw event
-    // todo
+    // todo ?
     // fn raw_event(&self, event: ?) -> ?;
 
     // widget event
     fn widget_event(
-        &self,
+        &mut self,
         event: &UiEvent,
         parent_size: PxSize,
         context: &ApplicationContext,
     ) -> UiEventResult<GlobalMessage>;
+
+    // inside / outside check
+    // todo
+    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &ApplicationContext) -> bool;
 }
 
 pub enum DomComPareResult {

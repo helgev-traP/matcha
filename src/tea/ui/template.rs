@@ -37,9 +37,9 @@ impl Template {
     }
 }
 
-impl<R: Send + 'static> Dom<R> for Template {
-    fn build_render_tree(&self) -> Box<dyn Widget<R>> {
-        Box::new(TemplateRenderNode {
+impl<T: Send + 'static> Dom<T> for Template {
+    fn build_render_tree(&self) -> Box<dyn Widget<T>> {
+        Box::new(TemplateNode {
             label: self.label.clone(),
             size: self.size,
         })
@@ -50,26 +50,30 @@ impl<R: Send + 'static> Dom<R> for Template {
     }
 }
 
-pub struct TemplateRenderNode {
+pub struct TemplateNode {
     label: Option<String>,
     size: Size,
 }
 
-impl<R: Send + 'static> super::WidgetTrait<R> for TemplateRenderNode {
+impl<T: Send + 'static> super::WidgetTrait<T> for TemplateNode {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
 
     fn widget_event(
-        &self,
+        &mut self,
         event: &UiEvent,
         parent_size: PxSize,
         context: &ApplicationContext,
-    ) -> crate::events::UiEventResult<R> {
+    ) -> crate::events::UiEventResult<T> {
         todo!()
     }
 
-    fn update_render_tree(&mut self, dom: &dyn Dom<R>) -> Result<(), ()> {
+    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &ApplicationContext) -> bool {
+        todo!()
+    }
+
+    fn update_render_tree(&mut self, dom: &dyn Dom<T>) -> Result<(), ()> {
         if (*dom).type_id() != std::any::TypeId::of::<Template>() {
             Err(())
         } else {
@@ -78,7 +82,7 @@ impl<R: Send + 'static> super::WidgetTrait<R> for TemplateRenderNode {
         }
     }
 
-    fn compare(&self, dom: &dyn Dom<R>) -> super::DomComPareResult {
+    fn compare(&self, dom: &dyn Dom<T>) -> super::DomComPareResult {
         if let Some(_) = dom.as_any().downcast_ref::<Template>() {
             todo!()
         } else {
@@ -87,7 +91,7 @@ impl<R: Send + 'static> super::WidgetTrait<R> for TemplateRenderNode {
     }
 }
 
-impl super::RenderingTrait for TemplateRenderNode {
+impl super::RenderingTrait for TemplateNode {
     fn size(&self) -> Size {
         self.size
     }

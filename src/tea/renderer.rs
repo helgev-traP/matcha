@@ -7,6 +7,7 @@ use super::{
     application_context::ApplicationContext,
     types::{color::Color, size::PxSize},
     ui::{Object, RenderItem},
+    vertex::{colored_vertex::ColoredVertex, textured_vertex::TexturedVertex},
 };
 
 pub struct Renderer {
@@ -88,7 +89,7 @@ impl Renderer {
                 vertex: wgpu::VertexState {
                     module: &textured_shader,
                     entry_point: "vs_main",
-                    buffers: &[crate::vertex::TexturedVertex::desc()],
+                    buffers: &[TexturedVertex::desc()],
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
                 },
                 fragment: Some(wgpu::FragmentState {
@@ -145,7 +146,7 @@ impl Renderer {
                 vertex: wgpu::VertexState {
                     module: &colored_shader,
                     entry_point: "vs_main",
-                    buffers: &[crate::vertex::ColoredVertex::desc()],
+                    buffers: &[ColoredVertex::desc()],
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
                 },
                 fragment: Some(wgpu::FragmentState {

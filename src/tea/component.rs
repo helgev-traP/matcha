@@ -9,7 +9,7 @@ use super::{
     ui::{Dom, DomComPareResult, RenderingTrait, Widget, WidgetTrait},
 };
 
-pub struct Component<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'static>
+pub struct Component<Model, Message, OuterResponse, InnerResponse>
 {
     label: Option<String>,
 
@@ -192,13 +192,13 @@ pub struct ComponentRenderNode<Model, OuterResponse: 'static, InnerResponse: 'st
     node: Arc<Mutex<Box<dyn Widget<InnerResponse>>>>,
 }
 
-impl<Model, O: 'static, I: 'static> WidgetTrait<O> for ComponentRenderNode<Model, O, I> {
+impl<Model, O, I> WidgetTrait<O> for ComponentRenderNode<Model, O, I> {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
 
     fn widget_event(
-        &self,
+        &mut self,
         event: &super::events::UiEvent,
         parent_size: PxSize,
         context: &ApplicationContext,
@@ -212,6 +212,10 @@ impl<Model, O: 'static, I: 'static> WidgetTrait<O> for ComponentRenderNode<Model
         )
     }
 
+    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &ApplicationContext) -> bool {
+        self.node.lock().unwrap().is_inside(position, parent_size, context)
+    }
+
     fn compare(&self, _: &dyn Dom<O>) -> DomComPareResult {
         DomComPareResult::Different
     }
@@ -221,7 +225,7 @@ impl<Model, O: 'static, I: 'static> WidgetTrait<O> for ComponentRenderNode<Model
     }
 }
 
-impl<Model: Send, OuterResponse: 'static, InnerResponse: 'static> RenderingTrait
+impl<Model: Send, OuterResponse, InnerResponse> RenderingTrait
     for ComponentRenderNode<Model, OuterResponse, InnerResponse>
 {
     fn size(&self) -> super::types::size::Size {

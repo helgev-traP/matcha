@@ -6,12 +6,14 @@ use super::{
     component::Component,
     events::{self, UiEventContent},
     types::{color::Color, size::PxSize},
-    ui::{self, Widget},
+    ui::{Widget, WidgetTrait, RenderingTrait},
 };
 
 mod gpu_state;
+mod mouse_state;
 
 pub struct Window<'a, Model: Send + 'static, Message: 'static> {
+    // --- rendering context ---
     // boot status
     performance: wgpu::PowerPreference,
     title: String,
@@ -22,13 +24,13 @@ pub struct Window<'a, Model: Send + 'static, Message: 'static> {
     font_context: Option<crate::cosmic::FontContext>,
 
     base_color: Color,
+
     // rendering
     winit_window: Option<Arc<winit::window::Window>>,
     gpu_state: Option<gpu_state::GpuState<'a>>,
+    context: Option<application_context::ApplicationContext>,
 
     render: Option<crate::renderer::Renderer>,
-
-    frame: u64,
 
     // render tree
     render_tree: Option<Box<dyn Widget<Message>>>,
@@ -36,8 +38,17 @@ pub struct Window<'a, Model: Send + 'static, Message: 'static> {
     // root component
     root_component: Component<Model, Message, Message, Message>,
 
-    // window event input state
-    // todo
+    // frame
+    frame: u64,
+
+    // --- input and event handling ---
+    // mouse
+    mouse_state: Option<mouse_state::MouseState>,
+
+    // mouse settings
+    mouse_primary_button: winit::event::MouseButton,
+    scroll_pixel_per_line: f32,
+    // keyboard
 }
 
 // setup
@@ -53,12 +64,18 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
             base_color: Color::Rgb8USrgb { r: 0, g: 0, b: 0 },
             winit_window: None,
             gpu_state: None,
+            context: None,
             render: None,
             render_tree: None,
             root_component: component,
             frame: 0,
+            mouse_state: None,
+            mouse_primary_button: winit::event::MouseButton::Left,
+            scroll_pixel_per_line: 40.0,
         }
     }
+
+    // design
 
     pub fn base_color(&mut self, color: Color) {
         self.base_color = color;
@@ -86,6 +103,26 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
 
     pub fn font_context(&mut self, font_context: crate::cosmic::FontContext) {
         self.font_context = Some(font_context);
+    }
+
+    // input
+
+    pub fn mouse_primary_button(&mut self, button: crate::device::mouse::MousePhysicalButton) {
+        match button {
+            crate::device::mouse::MousePhysicalButton::Left => {
+                self.mouse_primary_button = winit::event::MouseButton::Left;
+            }
+            crate::device::mouse::MousePhysicalButton::Right => {
+                self.mouse_primary_button = winit::event::MouseButton::Right;
+            }
+            crate::device::mouse::MousePhysicalButton::Middle => {
+                self.mouse_primary_button = winit::event::MouseButton::Middle;
+            }
+        }
+    }
+
+    pub fn scroll_pixel_per_line(&mut self, pixel: f32) {
+        self.scroll_pixel_per_line = pixel;
     }
 }
 
@@ -139,12 +176,7 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
     for Window<'_, Model, Message>
 {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        #[cfg(debug_assertions)]
-        println!("resumed");
-
         // crate window
-        #[cfg(debug_assertions)]
-        println!("create window");
 
         let winit_window = Arc::new(
             event_loop
@@ -164,30 +196,22 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
         }
         self.winit_window = Some(winit_window);
 
-        #[cfg(debug_assertions)]
-        println!("create gpu state");
-
         let context = std::mem::take(&mut self.font_context);
         let gpu_state = pollster::block_on(gpu_state::GpuState::new(
             self.winit_window.as_ref().unwrap().clone(),
             self.performance,
             context,
         ));
+        self.context = Some(
+            gpu_state.get_app_context()
+        );
         self.gpu_state = Some(gpu_state);
 
         // set winit control flow
 
-        #[cfg(debug_assertions)]
-        println!(
-            "set winit control flow{:?}",
-            winit::event_loop::ControlFlow::Poll
-        );
         event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
 
-        // crate render
-
-        #[cfg(debug_assertions)]
-        println!("create render");
+        // crate renderer
 
         self.render = Some(crate::renderer::Renderer::new(
             self.gpu_state.as_ref().unwrap().get_app_context(),
@@ -195,22 +219,19 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
 
         // crate render tree
 
-        #[cfg(debug_assertions)]
-        println!("create render tree");
-
         self.render_tree = Some(self.root_component.view().unwrap().build_render_tree());
 
-        // render
+        // crate input states
 
-        #[cfg(debug_assertions)]
-        print!("first frame rendering");
+        // todo: calculate double click and long press duration from monitor refresh rate
+        self.mouse_state = Some(mouse_state::MouseState::new(12, 60).unwrap());
+
+        // render
 
         self.render(
             #[cfg(debug_assertions)]
             false,
         );
-
-        println!("\x08\x08\x08ed ");
     }
 
     fn window_event(
@@ -219,47 +240,89 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
         window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
-        let mut ui_event = UiEventContent::None;
-        match event {
+        let mut ui_event = match event {
             // window
             winit::event::WindowEvent::CloseRequested => {
                 event_loop.exit();
+                return;
             }
             winit::event::WindowEvent::Resized(size) => {
                 self.gpu_state.as_mut().unwrap().resize(size);
+                return;
             }
             // mouse
-            winit::event::WindowEvent::CursorMoved { position, .. } => {}
-            winit::event::WindowEvent::CursorEntered { device_id: _ } => {}
-            winit::event::WindowEvent::CursorLeft { device_id: _ } => {}
+            winit::event::WindowEvent::CursorMoved {
+                device_id,
+                position,
+            } => self
+                .mouse_state
+                .as_mut()
+                .unwrap()
+                .mouse_move(self.frame, position.into()),
+            winit::event::WindowEvent::CursorEntered { device_id } => self
+                .mouse_state
+                .as_mut()
+                .unwrap()
+                .cursor_entered(self.frame),
+            winit::event::WindowEvent::CursorLeft { device_id } => {
+                self.mouse_state.as_mut().unwrap().cursor_left(self.frame)
+            }
             winit::event::WindowEvent::MouseWheel {
+                device_id,
                 delta,
-                device_id: _,
-                phase: _,
-            } => {}
+                phase,
+            } => match delta {
+                winit::event::MouseScrollDelta::LineDelta(x, y) => {
+                    self.mouse_state.as_mut().unwrap().mouse_scroll(
+                        self.frame,
+                        [
+                            x * self.scroll_pixel_per_line,
+                            y * self.scroll_pixel_per_line,
+                        ],
+                    )
+                }
+                winit::event::MouseScrollDelta::PixelDelta(position) => self
+                    .mouse_state
+                    .as_mut()
+                    .unwrap()
+                    .mouse_scroll(self.frame, [position.x as f32, position.y as f32]),
+            },
             winit::event::WindowEvent::MouseInput {
+                device_id,
                 state,
                 button,
-                device_id: _,
-            } => {}
-            _ => {}
-        }
-
-        let ui_event = events::UiEvent {
-            time: Instant::now(),
-            content: ui_event,
+            } => {
+                let button = match button {
+                    winit::event::MouseButton::Left => crate::device::mouse::MouseButton::Primary,
+                    winit::event::MouseButton::Right => {
+                        crate::device::mouse::MouseButton::Secondary
+                    }
+                    winit::event::MouseButton::Middle => crate::device::mouse::MouseButton::Middle,
+                    winit::event::MouseButton::Back => return,
+                    winit::event::MouseButton::Forward => return,
+                    winit::event::MouseButton::Other(_) => return,
+                };
+                match state {
+                    winit::event::ElementState::Pressed => self
+                        .mouse_state
+                        .as_mut()
+                        .unwrap()
+                        .button_pressed(self.frame, button),
+                    winit::event::ElementState::Released => self
+                        .mouse_state
+                        .as_mut()
+                        .unwrap()
+                        .button_released(self.frame, button),
+                }
+            }
+            _ => return,
         };
 
-        let ui_event_result = self.render_tree.as_mut().unwrap().widget_event(
+        self.render_tree.as_mut().unwrap().widget_event(
             &ui_event,
-            PxSize {
-                width: self.gpu_state.as_ref().unwrap().get_viewport_size().width,
-                height: self.gpu_state.as_ref().unwrap().get_viewport_size().height,
-            },
-            &self.gpu_state.as_ref().unwrap().get_app_context(),
+            self.gpu_state.as_ref().unwrap().get_viewport_size(),
+            self.context.as_ref().unwrap(),
         );
-
-        // todo: handle result
     }
 
     fn new_events(
@@ -278,6 +341,16 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
                 requested_resume,
             } => {}
             winit::event::StartCause::Poll => {
+                // poll events
+                let event = self
+                    .mouse_state
+                    .as_mut()
+                    .unwrap()
+                    .long_pressing_detection(self.frame);
+
+                // todo: give event to root component
+
+                // render
                 self.render(
                     #[cfg(debug_assertions)]
                     true,

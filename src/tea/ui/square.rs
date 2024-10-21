@@ -2,19 +2,22 @@ use std::sync::Arc;
 
 use crate::{
     application_context::ApplicationContext,
+    events::UiEvent,
     types::{
         color::Color,
         size::{PxSize, Size, SizeUnit},
     },
     ui::{Dom, Widget},
+    vertex::colored_vertex::ColoredVertex,
 };
-pub struct SuperSimpleButtonDescriptor {
+
+pub struct SquareDescriptor {
     pub label: Option<String>,
     pub size: Size,
     pub background_color: Color,
 }
 
-impl Default for SuperSimpleButtonDescriptor {
+impl Default for SquareDescriptor {
     fn default() -> Self {
         Self {
             label: None,
@@ -27,31 +30,28 @@ impl Default for SuperSimpleButtonDescriptor {
     }
 }
 
-pub struct SuperSimpleButton<R: Copy + Send + 'static> {
+pub struct Square {
     label: Option<String>,
     size: Size,
     background_color: Color,
-    on_click: R,
 }
 
-impl<R: Copy + Send> SuperSimpleButton<R> {
-    pub fn new(on_click: R, disc: SuperSimpleButtonDescriptor) -> Self {
+impl Square {
+    pub fn new(disc: SquareDescriptor) -> Self {
         Self {
             label: disc.label,
             size: disc.size,
             background_color: disc.background_color,
-            on_click,
         }
     }
 }
 
-impl<R: Copy + Send> Dom<R> for SuperSimpleButton<R> {
+impl<R: Copy + Send + 'static> Dom<R> for Square {
     fn build_render_tree(&self) -> Box<dyn Widget<R>> {
-        Box::new(SuperSimpleButtonRenderNode {
+        Box::new(SquareNode {
             label: self.label.clone(),
             size: self.size,
             background_color: self.background_color,
-            on_click: self.on_click,
             vertex_buffer: None,
             index_buffer: None,
             index_len: 0,
@@ -63,85 +63,51 @@ impl<R: Copy + Send> Dom<R> for SuperSimpleButton<R> {
     }
 }
 
-pub struct SuperSimpleButtonRenderNode<R: Copy + Send> {
+pub struct SquareNode {
     label: Option<String>,
 
     size: Size,
     background_color: Color,
-    on_click: R,
 
     vertex_buffer: Option<Arc<wgpu::Buffer>>,
     index_buffer: Option<Arc<wgpu::Buffer>>,
     index_len: u32,
 }
 
-impl<R: Copy + Send + 'static> super::WidgetTrait<R> for SuperSimpleButtonRenderNode<R> {
+impl<R: Copy + Send + 'static> super::WidgetTrait<R> for SquareNode {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
 
     fn widget_event(
-        &self,
-        event: &crate::events::UiEvent,
+        &mut self,
+        event: &UiEvent,
         parent_size: PxSize,
         context: &ApplicationContext,
     ) -> crate::events::UiEventResult<R> {
-        let actual_size = self.size.to_px(parent_size, &context);
-        match event.content {
-            crate::events::UiEventContent::None => {}
-            crate::events::UiEventContent::CursorMoved { x, y } => {
-                if x >= 0.0 && x <= actual_size.width && y >= 0.0 && y <= actual_size.height {
-                    println!("Detect mouse moving on button at x: {}, y: {}", x, y);
-                }
-            }
-            crate::events::UiEventContent::MousePressed {
-                x,
-                y,
-                button,
-                combo,
-            } => {
-                if x >= 0.0 && x <= actual_size.width && y >= 0.0 && y <= actual_size.height {
-                    println!("Detect mouse pressed on button at x: {}, y: {}", x, y);
-                }
-            }
-            crate::events::UiEventContent::MouseReleased { x, y, button } => {
-                if x >= 0.0 && x <= actual_size.width && y >= 0.0 && y <= actual_size.height {
-                    println!("Detect mouse released on button at x: {}, y: {}", x, y);
-                }
-            }
-            crate::events::UiEventContent::MouseWheel { x, y, delta } => {
-                if x >= 0.0 && x <= actual_size.width && y >= 0.0 && y <= actual_size.height {
-                    println!("Detect mouse wheel on button at x: {}, y: {}", x, y);
-                }
-            }
-            crate::events::UiEventContent::Drag {
-                x,
-                y,
-                from_x,
-                from_y,
-                button,
-            } => {
-                if from_x >= 0.0
-                    && from_x <= actual_size.width
-                    && from_y >= 0.0
-                    && from_y <= actual_size.height
-                {
-                    println!(
-                        "Detect drag on button from x: {}, y: {} to x: {}, y: {}",
-                        from_x, from_y, x, y
-                    );
-                }
-            }
-        }
         crate::events::UiEventResult::default()
     }
 
+    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &ApplicationContext) -> bool {
+        let current_size = self.size.to_px(parent_size, context);
+
+        if position[0] < 0.0
+            || position[0] > current_size.width
+            || position[1] < 0.0
+            || position[1] > current_size.height
+        {
+            false
+        } else {
+            true
+        }
+    }
+
     fn update_render_tree(&mut self, dom: &dyn Dom<R>) -> Result<(), ()> {
-        if (*dom).type_id() != std::any::TypeId::of::<SuperSimpleButton<R>>() {
+        if (*dom).type_id() != std::any::TypeId::of::<Square>() {
             return Err(());
         }
 
-        let dom = dom.as_any().downcast_ref::<SuperSimpleButton<R>>().unwrap();
+        let dom = dom.as_any().downcast_ref::<Square>().unwrap();
 
         self.size = dom.size;
         self.background_color = dom.background_color;
@@ -150,7 +116,7 @@ impl<R: Copy + Send + 'static> super::WidgetTrait<R> for SuperSimpleButtonRender
     }
 
     fn compare(&self, dom: &dyn Dom<R>) -> super::DomComPareResult {
-        if let Some(super_simple_button) = dom.as_any().downcast_ref::<SuperSimpleButton<R>>() {
+        if let Some(super_simple_button) = dom.as_any().downcast_ref::<Square>() {
             if self.size == super_simple_button.size
                 && self.background_color == super_simple_button.background_color
             {
@@ -164,7 +130,7 @@ impl<R: Copy + Send + 'static> super::WidgetTrait<R> for SuperSimpleButtonRender
     }
 }
 
-impl<R: Copy + Send> super::RenderingTrait for SuperSimpleButtonRenderNode<R> {
+impl super::RenderingTrait for SquareNode {
     fn size(&self) -> Size {
         self.size
     }
@@ -196,7 +162,7 @@ impl<R: Copy + Send> super::RenderingTrait for SuperSimpleButtonRenderNode<R> {
         let size = self.size.to_px(parent_size, context);
 
         if self.vertex_buffer.is_none() || self.index_buffer.is_none() || self.index_len == 0 {
-            let (vertex, index, index_len) = crate::vertex::ColoredVertex::rectangle_buffer(
+            let (vertex, index, index_len) = ColoredVertex::rectangle_buffer(
                 context,
                 0.0,
                 0.0,
