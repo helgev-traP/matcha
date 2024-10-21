@@ -75,13 +75,17 @@ impl<R: 'static> WidgetTrait<R> for ColumnRenderNode<R> {
     }
 
     fn widget_event(
-        &self,
+        &mut self,
         event: &UiEvent,
         parent_size: PxSize,
         context: &ApplicationContext,
     ) -> UiEventResult<R> {
         // todo: event handling
         UiEventResult::default()
+    }
+
+    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &ApplicationContext) -> bool {
+        todo!()
     }
 
     fn update_render_tree(&mut self, dom: &dyn Dom<R>) -> Result<(), ()> {

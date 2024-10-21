@@ -8,9 +8,9 @@ use crate::renderer::RendererCommandEncoder;
 use crate::types::size::StdSizeUnit;
 use crate::{
     application_context::ApplicationContext,
-    events::{UiEventContent, UiEventResult},
+    events::UiEventResult,
     types::size::{PxSize, StdSize},
-    vertex,
+    vertex::textured_vertex::TexturedVertex,
 };
 
 use super::{Dom, DomComPareResult, RenderItem, RenderingTrait, Widget, WidgetTrait};
@@ -121,8 +121,22 @@ impl<R: 'static> WidgetTrait<R> for TeacupRenderNode {
         self.label.as_deref()
     }
 
-    fn widget_event(&self, _: &UiEvent, _: PxSize, _: &ApplicationContext) -> UiEventResult<R> {
+    fn widget_event(&mut self, _: &UiEvent, _: PxSize, _: &ApplicationContext) -> UiEventResult<R> {
         Default::default()
+    }
+
+    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &ApplicationContext) -> bool {
+        let size = PxSize::from_size_parent_size(self.size, parent_size, context);
+
+        if position[0] < self.position[0]
+            || position[0] > self.position[0] + size.width
+            || position[1] < self.position[1]
+            || position[1] > self.position[1] + size.height
+        {
+            false
+        } else {
+            true
+        }
     }
 
     fn update_render_tree(&mut self, dom: &dyn Dom<R>) -> Result<(), ()> {
@@ -246,7 +260,7 @@ impl RenderingTrait for TeacupRenderNode {
         // create / update vertex buffer
 
         if self.vertex_buffer.is_none() || self.index_buffer.is_none() || self.index_len == 0 {
-            let (vertex, index, index_len) = vertex::TexturedVertex::rectangle_buffer(
+            let (vertex, index, index_len) = TexturedVertex::rectangle_buffer(
                 context,
                 0.0,
                 0.0,

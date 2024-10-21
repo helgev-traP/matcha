@@ -6,51 +6,40 @@ use tea_ui::{
         size::{Size, SizeUnit},
     },
     ui::{
-        column::{Column, ColumnDescriptor},
-        row::{Row, RowDescriptor},
-        teacup::{Teacup, TeacupDescriptor},
-        Dom,
+        column::{Column, ColumnDescriptor}, drag_field::{DragField, DragFieldDescriptor}, row::{Row, RowDescriptor}, square::{Square, SquareDescriptor}, teacup::{Teacup, TeacupDescriptor}, Dom
     },
 };
 
 fn update(component: ComponentAccess<u32>, message: ()) {}
 
 fn view(_: &u32) -> Box<dyn Dom<()>> {
-    let mut column = Column::new(ColumnDescriptor {
-        label: None,
-        vec: vec![],
-    });
-
-    for _ in 0..10 {
-        let mut row = Row::new(RowDescriptor {
-            label: None,
-            vec: vec![],
-        });
-
-        for _ in 0..20 {
-            // random size
-            let px = rand::random::<f32>() * 50.0 + 50.0;
-
-            row.push(Box::new(Teacup::new(TeacupDescriptor {
+    Box::new(
+        DragField::new(
+            DragFieldDescriptor {
+                label: None,
                 size: Size {
-                    width: SizeUnit::Pixel(px),
-                    height: SizeUnit::Pixel(px),
+                    width: SizeUnit::Percent(100.0),
+                    height: SizeUnit::Percent(100.0),
                 },
-                frame_size: Size {
-                    width: SizeUnit::Pixel(100.0),
-                    height: SizeUnit::Pixel(100.0),
-                },
-                position: [(100.0 - px) / 2.0, (100.0 - px) / 2.0],
-                visible: rand::random::<f32>() > 0.3,
-                rotate: rand::random::<f32>() * 360.0,
-                ..Default::default()
-            })));
-        }
-
-        column.push(Box::new(row));
-    }
-
-    Box::new(column)
+                item: Box::new(
+                    Square::new(
+                        SquareDescriptor {
+                            label: None,
+                            size: Size {
+                                width: SizeUnit::Pixel(100.0),
+                                height: SizeUnit::Pixel(100.0),
+                            },
+                            background_color: Color::Rgb8USrgb {
+                                r: 255,
+                                g: 0,
+                                b: 0,
+                            },
+                        }
+                    )
+                ),
+            }
+        )
+    )
 }
 
 fn main() {
@@ -58,9 +47,9 @@ fn main() {
 
     App::new(component)
         .base_color(Color::Rgb8USrgb {
-            r: 255,
-            g: 255,
-            b: 255,
+            r: 0,
+            g: 0,
+            b: 0,
         })
         .title("traP Conference")
         .run();
