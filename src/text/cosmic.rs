@@ -20,11 +20,11 @@ pub use ct::Family;
 
 #[derive(Clone)]
 pub struct RenderAttribute<'a> {
-    text_attr: ct::Attrs<'a>,
-    font_size: f32,
-    line_height: f32,
-    offset_px: [f32; 2],
-    font_color: [u8; 4],
+    pub text_attr: ct::Attrs<'a>,
+    pub font_size: f32,
+    pub line_height: f32,
+    pub offset_px: [f32; 2],
+    pub font_color: [u8; 4],
 }
 
 impl<'a> RenderAttribute<'a> {
@@ -87,7 +87,7 @@ impl FontContext {
         }
     }
 
-    pub fn render(&mut self, text: &str, atr: &RenderAttribute, texture: &TextureAttributeGpu) {
+    pub fn render(&mut self, text: &str, atr: RenderAttribute, texture: &TextureAttributeGpu) {
         // create image buffer
         let mut image_buffer: Vec<u8> =
             vec![0u8; texture.width as usize * texture.height as usize * 4];
@@ -120,17 +120,29 @@ impl FontContext {
             let texture_width_i32 = texture.width as i32;
             let texture_height_i32 = texture.height as i32;
 
-            buffer.draw(&mut swash_cache, text_color, |mut x, mut y, _w, _h, color| {
-                x += atr.offset_px[0] as i32;
-                y += atr.offset_px[1] as i32;
-                if x < 0 || y < 0 || x >= texture_width_i32 || y >= texture_height_i32 {
-                    return;
-                }
-                image_buffer[((x as u32 + y as u32 * texture.width) * 4) as usize] = color.r();
-                image_buffer[((x as u32 + y as u32 * texture.width) * 4 + 1) as usize] = color.g();
-                image_buffer[((x as u32 + y as u32 * texture.width) * 4 + 2) as usize] = color.b();
-                image_buffer[((x as u32 + y as u32 * texture.width) * 4 + 3) as usize] = color.a();
-            });
+            buffer.draw(
+                &mut swash_cache,
+                text_color,
+                |mut x, mut y, _w, _h, color| {
+                    x += atr.offset_px[0] as i32;
+                    y += atr.offset_px[1] as i32;
+                    if x < 0 || y < 0 || x >= texture_width_i32 || y >= texture_height_i32 {
+                        return;
+                    }
+                    image_buffer[((x as u32 + y as u32 * texture.width) * 4) as usize] =
+                        image_buffer[((x as u32 + y as u32 * texture.width) * 4) as usize]
+                            .max(color.r());
+                    image_buffer[((x as u32 + y as u32 * texture.width) * 4 + 1) as usize] =
+                        image_buffer[((x as u32 + y as u32 * texture.width) * 4 + 1) as usize]
+                            .max(color.g());
+                    image_buffer[((x as u32 + y as u32 * texture.width) * 4 + 2) as usize] =
+                        image_buffer[((x as u32 + y as u32 * texture.width) * 4 + 2) as usize]
+                            .max(color.b());
+                    image_buffer[((x as u32 + y as u32 * texture.width) * 4 + 3) as usize] =
+                        image_buffer[((x as u32 + y as u32 * texture.width) * 4 + 3) as usize]
+                            .max(color.a());
+                },
+            );
         }
 
         // copy buffer to texture

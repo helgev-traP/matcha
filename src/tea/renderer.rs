@@ -194,7 +194,7 @@ impl Renderer {
     }
 
     pub fn encoder(
-        &self,
+        &mut self,
         target_texture_view: wgpu::TextureView,
         depth_texture_view: wgpu::TextureView,
         size: PxSize,
@@ -204,7 +204,7 @@ impl Renderer {
         let normalizer = size.make_normalizer();
 
         RendererCommandEncoder {
-            app_context: &self.app_context,
+            app_context: &mut self.app_context,
             size,
             texture_bind_group_layout: &self.texture_bind_group_layout,
             textured_render_pipeline: &self.textured_render_pipeline,
@@ -220,7 +220,7 @@ impl Renderer {
 
 pub struct RendererCommandEncoder<'a> {
     // context
-    app_context: &'a ApplicationContext,
+    app_context: &'a mut ApplicationContext,
     size: PxSize,
 
     // wgpu state
@@ -244,7 +244,7 @@ pub struct RendererCommandEncoder<'a> {
 }
 
 impl<'a> RendererCommandEncoder<'a> {
-    pub fn get_context(&self) -> &ApplicationContext {
+    pub fn get_context(&mut self) -> &mut ApplicationContext {
         self.app_context
     }
 

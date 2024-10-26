@@ -15,4 +15,5 @@ font-kit = "0.14"
 pathfinder_geometry = "0.5.1"
 cosmic-text = "0.12.1"
 rand = "0.8"
+bitflags = "2.6"
 

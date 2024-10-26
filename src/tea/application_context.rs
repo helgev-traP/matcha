@@ -76,7 +76,7 @@ impl ApplicationContext {
         &self.cosmic_text
     }
 
-    pub fn text_render(&mut self, text: &str, atr: &RenderAttribute, texture: &TextureAttribute) {
+    pub fn text_render(&mut self, text: &str, atr: RenderAttribute, texture: TextureAttribute) {
         self.cosmic_text.render(
             text,
             atr,
