@@ -6,10 +6,11 @@ use super::{
     component::Component,
     events::{self, UiEventContent},
     types::{color::Color, size::PxSize},
-    ui::{Widget, WidgetTrait, RenderingTrait},
+    ui::{RenderingTrait, Widget, WidgetTrait},
 };
 
 mod gpu_state;
+mod keyboard_state;
 mod mouse_state;
 
 pub struct Window<'a, Model: Send + 'static, Message: 'static> {
@@ -48,7 +49,9 @@ pub struct Window<'a, Model: Send + 'static, Message: 'static> {
     // mouse settings
     mouse_primary_button: winit::event::MouseButton,
     scroll_pixel_per_line: f32,
+    
     // keyboard
+    keyboard_state: Option<keyboard_state::KeyboardState>,
 }
 
 // setup
@@ -72,6 +75,7 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
             mouse_state: None,
             mouse_primary_button: winit::event::MouseButton::Left,
             scroll_pixel_per_line: 40.0,
+            keyboard_state: None,
         }
     }
 
@@ -127,7 +131,7 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
 }
 
 impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
-    fn render(&mut self, #[cfg(debug_assertions)] display_frame: bool) {
+    fn render(&mut self) {
         // surface
         let surface = self.gpu_state.as_ref().unwrap().get_current_texture();
         let surface_texture_view = surface
@@ -141,7 +145,7 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
         let viewport_size = self.gpu_state.as_ref().unwrap().get_viewport_size();
 
         // render
-        let render = self.render.as_ref().unwrap();
+        let render = self.render.as_mut().unwrap();
         let mut encoder = render.encoder(surface_texture_view, depth_texture_view, viewport_size);
         let render_tree = self.render_tree.as_mut().unwrap().for_rendering();
 
@@ -157,7 +161,7 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
 
         // print frame (debug)
         #[cfg(debug_assertions)]
-        if display_frame {
+        {
             print!(
                 "{}",
                 "\x08".to_string().repeat(self.frame.to_string().len() + 7),
@@ -202,9 +206,7 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
             self.performance,
             context,
         ));
-        self.context = Some(
-            gpu_state.get_app_context()
-        );
+        self.context = Some(gpu_state.get_app_context());
         self.gpu_state = Some(gpu_state);
 
         // set winit control flow
@@ -225,13 +227,11 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
 
         // todo: calculate double click and long press duration from monitor refresh rate
         self.mouse_state = Some(mouse_state::MouseState::new(12, 60).unwrap());
+        self.keyboard_state = Some(keyboard_state::KeyboardState::new());
 
         // render
 
-        self.render(
-            #[cfg(debug_assertions)]
-            false,
-        );
+        self.render();
     }
 
     fn window_event(
@@ -315,6 +315,18 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
                         .button_released(self.frame, button),
                 }
             }
+            // keyboard
+            winit::event::WindowEvent::KeyboardInput {
+                device_id,
+                event,
+                is_synthetic,
+            } => {
+                if let Some(event) = self.keyboard_state.as_mut().unwrap().key_event(self.frame, event) {
+                    event
+                } else {
+                    return;
+                }
+            }
             _ => return,
         };
 
@@ -351,10 +363,7 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
                 // todo: give event to root component
 
                 // render
-                self.render(
-                    #[cfg(debug_assertions)]
-                    true,
-                );
+                self.render();
             }
         }
     }

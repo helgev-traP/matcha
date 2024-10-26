@@ -216,7 +216,7 @@ impl RenderingTrait for TeacupRenderNode {
                 usage: wgpu::BufferUsages::COPY_SRC,
             });
 
-            encoder.get_context().get_wgpu_queue().write_texture(
+            context.get_wgpu_queue().write_texture(
                 ImageCopyTextureBase {
                     texture: &texture,
                     mip_level: 0,

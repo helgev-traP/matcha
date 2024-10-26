@@ -1,6 +1,10 @@
 // widget event
-use super::device::mouse::MouseButton;
+use super::device::{
+    keyboard::Key,
+    mouse::MouseButton,
+};
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct UiEvent {
     pub frame: u64,
     pub content: UiEventContent,
@@ -29,6 +33,10 @@ pub enum UiEventContent {
         delta: [f32; 2],
     },
     // keyboard event
+    KeyboardInput {
+        key: Key,
+        element_state: ElementState,
+    },
     // todo
 }
 
@@ -37,6 +45,15 @@ pub enum ElementState {
     Pressed(u32),
     LongPressed(u32),
     Released(u32),
+}
+
+impl ElementState {
+    pub(crate) fn from_winit_state(state: winit::event::ElementState, count: u32) -> Self {
+        match state {
+            winit::event::ElementState::Pressed => ElementState::Pressed(count),
+            winit::event::ElementState::Released => ElementState::Released(count),
+        }
+    }
 }
 
 // result of widget event

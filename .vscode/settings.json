@@ -1,5 +1,6 @@
 {
   "cSpell.words": [
+    "bitflags",
     "Borderless",
     "bytemuck",
     "cgmath",
@@ -10,6 +11,7 @@
     "multisampled",
     "multiview",
     "nalgebra",
+    "Numpad",
     "powf",
     "Rasterizer",
     "repr",
