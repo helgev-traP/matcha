@@ -4,6 +4,7 @@
     "Borderless",
     "bytemuck",
     "cgmath",
+    "consts",
     "fullscreen",
     "matcha",
     "mipmap",

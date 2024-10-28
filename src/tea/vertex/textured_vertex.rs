@@ -1,6 +1,7 @@
 use wgpu::util::DeviceExt;
 
-use crate::{application_context::ApplicationContext, types::color::Color};
+use super::vertex_generator::{rectangle, RectangleDescriptor};
+use crate::application_context::ApplicationContext;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -30,7 +31,12 @@ impl TexturedVertex {
     }
 
     /// Create a rectangle with the given position of upper-left corner, width, and height.
-    pub fn rectangle(x: f32, y: f32, width: f32, height: f32) -> ([TexturedVertex; 4], [u16; 6]) {
+    pub fn atomic_rectangle(
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+    ) -> ([TexturedVertex; 4], [u16; 6]) {
         // 0-------3
         // | \     |
         // |   \   |
@@ -59,20 +65,20 @@ impl TexturedVertex {
         )
     }
 
-    pub fn rectangle_buffer(
-        device_queue: &ApplicationContext,
+    pub fn atomic_rectangle_buffer(
+        context: &ApplicationContext,
         x: f32,
         y: f32,
         width: f32,
         height: f32,
         compute: bool,
     ) -> (wgpu::Buffer, wgpu::Buffer, u32) {
-        let (vertices, indices) = TexturedVertex::rectangle(x, y, width, height);
+        let (vertices, indices) = TexturedVertex::atomic_rectangle(x, y, width, height);
 
         let vertex_buffer;
 
         if compute {
-            vertex_buffer = device_queue.get_wgpu_device().create_buffer_init(
+            vertex_buffer = context.get_wgpu_device().create_buffer_init(
                 &wgpu::util::BufferInitDescriptor {
                     label: Some("Vertex Buffer"),
                     contents: bytemuck::cast_slice(&vertices),
@@ -80,7 +86,7 @@ impl TexturedVertex {
                 },
             );
         } else {
-            vertex_buffer = device_queue.get_wgpu_device().create_buffer_init(
+            vertex_buffer = context.get_wgpu_device().create_buffer_init(
                 &wgpu::util::BufferInitDescriptor {
                     label: Some("Vertex Buffer"),
                     contents: bytemuck::cast_slice(&vertices),
@@ -90,7 +96,7 @@ impl TexturedVertex {
         }
 
         let index_buffer =
-            device_queue
+            context
                 .get_wgpu_device()
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("Index Buffer"),
@@ -101,26 +107,63 @@ impl TexturedVertex {
         (vertex_buffer, index_buffer, indices.len() as u32)
     }
 
-    pub fn radius_rectangle(
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-        radius: f32,
-        div: u16,
+    pub fn rectangle(
+        desc: RectangleDescriptor,
     ) -> (Vec<TexturedVertex>, Vec<u16>) {
-        todo!()
+        let (raw_vertex, index) = rectangle(desc);
+
+        let mut vertex = Vec::with_capacity(raw_vertex.len());
+
+        for raw_vertex in raw_vertex {
+            vertex.push(TexturedVertex {
+                position: raw_vertex.position,
+                tex_coords: [
+                    (raw_vertex.position[0] - desc.x) / desc.width,
+                    (raw_vertex.position[1] + desc.y) / desc.height,
+                ],
+            });
+        }
+
+        (vertex, index)
     }
 
-    pub fn radius_rectangle_buffer(
-        device_queue: &ApplicationContext,
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-        radius: f32,
-        div: u16,
-    ) -> (wgpu::Buffer, wgpu::Buffer) {
-        todo!()
+    pub fn rectangle_buffer(
+        context: &ApplicationContext,
+        desc: RectangleDescriptor,
+        compute: bool,
+    ) -> (wgpu::Buffer, wgpu::Buffer, u32) {
+        let (vertices, indices) =
+            TexturedVertex::rectangle(desc);
+
+        let vertex_buffer;
+
+        if compute {
+            vertex_buffer = context.get_wgpu_device().create_buffer_init(
+                &wgpu::util::BufferInitDescriptor {
+                    label: Some("Vertex Buffer"),
+                    contents: bytemuck::cast_slice(&vertices),
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::STORAGE,
+                },
+            );
+        } else {
+            vertex_buffer = context.get_wgpu_device().create_buffer_init(
+                &wgpu::util::BufferInitDescriptor {
+                    label: Some("Vertex Buffer"),
+                    contents: bytemuck::cast_slice(&vertices),
+                    usage: wgpu::BufferUsages::VERTEX,
+                },
+            );
+        }
+
+        let index_buffer =
+            context
+                .get_wgpu_device()
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Index Buffer"),
+                    contents: bytemuck::cast_slice(&indices),
+                    usage: wgpu::BufferUsages::INDEX,
+                });
+
+        (vertex_buffer, index_buffer, indices.len() as u32)
     }
 }

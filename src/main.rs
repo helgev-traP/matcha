@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use tea_ui::{
     app::App,
     component::{Component, ComponentAccess},
@@ -19,19 +21,21 @@ use tea_ui::{
 fn update(component: ComponentAccess<u32>, message: ()) {}
 
 fn view(_: &u32) -> Box<dyn Dom<()>> {
-    Box::new(Text::new(TextDescriptor {
+    Box::new(DragField::new(DragFieldDescriptor {
         label: None,
         size: Size {
             width: SizeUnit::Percent(100.0),
             height: SizeUnit::Percent(100.0),
         },
-        font_size: 50.0,
-        font_color: Color::Rgb8USrgb {
-            r: 255,
-            g: 255,
-            b: 255,
-        },
-        text: "Hello, world!".to_string(),
+        item: Box::new(Square::new(SquareDescriptor {
+            size: Size {
+                width: SizeUnit::Pixel(500.0),
+                height: SizeUnit::Pixel(200.0),
+            },
+            radius: 200.0,
+            background_color: Color::Rgb8USrgb { r: 255, g: 0, b: 0 },
+            ..SquareDescriptor::default()
+        })),
     }))
 }
 
@@ -39,7 +43,11 @@ fn main() {
     let component = Component::new(None, 0, update, view);
 
     App::new(component)
-        .base_color(Color::Rgb8USrgb { r: 0, g: 0, b: 0 })
-        .title("traP Conference")
+        .base_color(Color::Rgb8USrgb {
+            r: 30,
+            g: 30,
+            b: 30,
+        })
+        .title("matcha UI")
         .run();
 }

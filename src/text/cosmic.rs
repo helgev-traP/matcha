@@ -87,7 +87,15 @@ impl FontContext {
         }
     }
 
-    pub fn render(&mut self, text: &str, atr: RenderAttribute, texture: &TextureAttributeGpu) {
+    pub fn render(
+        &mut self,
+        text: &str,
+        atr: RenderAttribute,
+        texture: &TextureAttributeGpu,
+    ) -> [i32; 2] {
+        // measure text size
+        let mut text_size = [0, 0];
+
         // create image buffer
         let mut image_buffer: Vec<u8> =
             vec![0u8; texture.width as usize * texture.height as usize * 4];
@@ -124,6 +132,9 @@ impl FontContext {
                 &mut swash_cache,
                 text_color,
                 |mut x, mut y, _w, _h, color| {
+                    text_size[0] = x.max(text_size[0]);
+                    text_size[1] = y.max(text_size[1]);
+
                     x += atr.offset_px[0] as i32;
                     y += atr.offset_px[1] as i32;
                     if x < 0 || y < 0 || x >= texture_width_i32 || y >= texture_height_i32 {
@@ -166,5 +177,7 @@ impl FontContext {
                 depth_or_array_layers: 1,
             },
         );
+
+        text_size
     }
 }
