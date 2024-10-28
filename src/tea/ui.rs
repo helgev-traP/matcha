@@ -5,6 +5,7 @@ pub mod square;
 pub mod teacup;
 pub mod template;
 pub mod text;
+pub mod container;
 
 use nalgebra as na;
 use std::{any::Any, sync::Arc};

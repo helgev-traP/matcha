@@ -43,16 +43,14 @@ impl<R: 'static> Column<R> {
 
 impl<R: 'static> Dom<R> for Column<R> {
     fn build_render_tree(&self) -> Box<dyn Widget<R>> {
-        let mut render_tree = Vec::new();
-
-        for child in &self.children {
-            render_tree.push(child.build_render_tree());
-        }
-
         Box::new(ColumnRenderNode {
             label: self.label.clone(),
             redraw: true,
-            children: render_tree,
+            children: self
+                .children
+                .iter()
+                .map(|child| child.build_render_tree())
+                .collect(),
             cache_self_size: Cell::new(None),
         })
     }
@@ -84,7 +82,12 @@ impl<R: 'static> WidgetTrait<R> for ColumnRenderNode<R> {
         UiEventResult::default()
     }
 
-    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &ApplicationContext) -> bool {
+    fn is_inside(
+        &self,
+        position: [f32; 2],
+        parent_size: PxSize,
+        context: &ApplicationContext,
+    ) -> bool {
         todo!()
     }
 
