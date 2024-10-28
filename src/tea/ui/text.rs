@@ -304,7 +304,7 @@ impl super::RenderingTrait for TextNode {
         encoder.draw(
             RenderItem {
                 object: vec![Object::Textured {
-                    instance_affine: nalgebra::Matrix4::identity(),
+                    object_affine: nalgebra::Matrix4::identity(),
                     vertex_buffer: self.vertex_buffer.as_ref().unwrap().clone(),
                     index_buffer: self.index_buffer.as_ref().unwrap().clone(),
                     index_len: self.index_len,

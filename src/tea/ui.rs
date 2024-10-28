@@ -1,11 +1,11 @@
 pub mod column;
+pub mod container;
 pub mod drag_field;
 pub mod row;
 pub mod square;
 pub mod teacup;
 pub mod template;
 pub mod text;
-pub mod container;
 
 use nalgebra as na;
 use std::{any::Any, sync::Arc};
@@ -14,24 +14,25 @@ use super::{
     application_context::ApplicationContext,
     events::{UiEvent, UiEventResult},
     renderer::RendererCommandEncoder,
-    types::size::{PxSize, Size},
+    types::{color::Color, size::{PxSize, Size}},
 };
 
 // render item
 
 pub enum Object {
     Textured {
-        instance_affine: na::Matrix4<f32>,
+        object_affine: na::Matrix4<f32>,
         vertex_buffer: Arc<wgpu::Buffer>,
         index_buffer: Arc<wgpu::Buffer>,
         index_len: u32,
         texture: Arc<wgpu::Texture>,
     },
     Colored {
-        instance_affine: na::Matrix4<f32>,
+        object_affine: na::Matrix4<f32>,
         vertex_buffer: Arc<wgpu::Buffer>,
         index_buffer: Arc<wgpu::Buffer>,
         index_len: u32,
+        color: Color,
     },
 }
 
@@ -85,7 +86,12 @@ pub trait WidgetTrait<GlobalMessage> {
 
     // inside / outside check
     // todo
-    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &ApplicationContext) -> bool;
+    fn is_inside(
+        &self,
+        position: [f32; 2],
+        parent_size: PxSize,
+        context: &ApplicationContext,
+    ) -> bool;
 }
 
 pub enum DomComPareResult {
