@@ -260,7 +260,7 @@ impl RenderingTrait for TeacupRenderNode {
         // create / update vertex buffer
 
         if self.vertex_buffer.is_none() || self.index_buffer.is_none() || self.index_len == 0 {
-            let (vertex, index, index_len) = TexturedVertex::rectangle_buffer(
+            let (vertex, index, index_len) = TexturedVertex::atomic_rectangle_buffer(
                 context,
                 0.0,
                 0.0,

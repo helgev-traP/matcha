@@ -249,7 +249,7 @@ impl super::RenderingTrait for TextNode {
                     mip_level_count: 1,
                     sample_count: 1,
                     dimension: wgpu::TextureDimension::D2,
-                    format: context.surface_format,
+                    format: wgpu::TextureFormat::Rgba8UnormSrgb,
                     usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
                     label: Some("Text Texture"),
                     view_formats: &[],
@@ -283,7 +283,7 @@ impl super::RenderingTrait for TextNode {
             let context = encoder.get_context();
             let current_size = self.size.to_px(parent_size, context);
 
-            let (vertex_buffer, index_buffer, index_len) = TexturedVertex::rectangle_buffer(
+            let (vertex_buffer, index_buffer, index_len) = TexturedVertex::atomic_rectangle_buffer(
                 &context,
                 0.0,
                 0.0,

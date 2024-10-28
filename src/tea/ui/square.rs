@@ -8,12 +8,13 @@ use crate::{
         size::{PxSize, Size, SizeUnit},
     },
     ui::{Dom, Widget},
-    vertex::colored_vertex::ColoredVertex,
+    vertex::{colored_vertex::ColoredVertex, vertex_generator::RectangleDescriptor},
 };
 
 pub struct SquareDescriptor {
     pub label: Option<String>,
     pub size: Size,
+    pub radius: f32,
     pub background_color: Color,
 }
 
@@ -25,6 +26,7 @@ impl Default for SquareDescriptor {
                 width: SizeUnit::Pixel(100.0),
                 height: SizeUnit::Pixel(100.0),
             },
+            radius: 0.0,
             background_color: Color::Rgb8USrgb { r: 0, g: 0, b: 0 },
         }
     }
@@ -33,6 +35,8 @@ impl Default for SquareDescriptor {
 pub struct Square {
     label: Option<String>,
     size: Size,
+    radius: f32,
+
     background_color: Color,
 }
 
@@ -41,6 +45,7 @@ impl Square {
         Self {
             label: disc.label,
             size: disc.size,
+            radius: disc.radius,
             background_color: disc.background_color,
         }
     }
@@ -51,6 +56,7 @@ impl<R: Copy + Send + 'static> Dom<R> for Square {
         Box::new(SquareNode {
             label: self.label.clone(),
             size: self.size,
+            radius: self.radius,
             background_color: self.background_color,
             vertex_buffer: None,
             index_buffer: None,
@@ -67,6 +73,7 @@ pub struct SquareNode {
     label: Option<String>,
 
     size: Size,
+    radius: f32,
     background_color: Color,
 
     vertex_buffer: Option<Arc<wgpu::Buffer>>,
@@ -88,7 +95,12 @@ impl<R: Copy + Send + 'static> super::WidgetTrait<R> for SquareNode {
         crate::events::UiEventResult::default()
     }
 
-    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &ApplicationContext) -> bool {
+    fn is_inside(
+        &self,
+        position: [f32; 2],
+        parent_size: PxSize,
+        context: &ApplicationContext,
+    ) -> bool {
         let current_size = self.size.to_px(parent_size, context);
 
         if position[0] < 0.0
@@ -164,10 +176,7 @@ impl super::RenderingTrait for SquareNode {
         if self.vertex_buffer.is_none() || self.index_buffer.is_none() || self.index_len == 0 {
             let (vertex, index, index_len) = ColoredVertex::rectangle_buffer(
                 context,
-                0.0,
-                0.0,
-                size.width,
-                size.height,
+                RectangleDescriptor::new(size.width, size.height).radius(self.radius),
                 &self.background_color,
                 false,
             );

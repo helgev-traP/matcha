@@ -2,6 +2,8 @@ use wgpu::util::DeviceExt;
 
 use crate::{application_context::ApplicationContext, types::color::Color};
 
+use super::vertex_generator::{rectangle, RectangleDescriptor};
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct ColoredVertex {
@@ -29,7 +31,7 @@ impl ColoredVertex {
         }
     }
 
-    pub fn rectangle(
+    pub fn atomic_rectangle(
         x: f32,
         y: f32,
         width: f32,
@@ -41,7 +43,7 @@ impl ColoredVertex {
         // |   \   |
         // |     \ |
         // 1-------2
-        let color =color.to_rgba_f32();
+        let color = color.to_rgba_f32();
         (
             [
                 ColoredVertex {
@@ -65,8 +67,8 @@ impl ColoredVertex {
         )
     }
 
-    pub fn rectangle_buffer(
-        app_context: &ApplicationContext,
+    pub fn atomic_rectangle_buffer(
+        context: &ApplicationContext,
         x: f32,
         y: f32,
         width: f32,
@@ -74,12 +76,12 @@ impl ColoredVertex {
         color: &Color,
         compute: bool,
     ) -> (wgpu::Buffer, wgpu::Buffer, u32) {
-        let (vertices, indices) = ColoredVertex::rectangle(x, y, width, height, color);
+        let (vertices, indices) = ColoredVertex::atomic_rectangle(x, y, width, height, color);
 
         let vertex_buffer;
 
         if compute {
-            vertex_buffer = app_context.get_wgpu_device().create_buffer_init(
+            vertex_buffer = context.get_wgpu_device().create_buffer_init(
                 &wgpu::util::BufferInitDescriptor {
                     label: Some("Vertex Buffer"),
                     contents: bytemuck::cast_slice(&vertices),
@@ -87,7 +89,7 @@ impl ColoredVertex {
                 },
             );
         } else {
-            vertex_buffer = app_context.get_wgpu_device().create_buffer_init(
+            vertex_buffer = context.get_wgpu_device().create_buffer_init(
                 &wgpu::util::BufferInitDescriptor {
                     label: Some("Vertex Buffer"),
                     contents: bytemuck::cast_slice(&vertices),
@@ -97,7 +99,65 @@ impl ColoredVertex {
         }
 
         let index_buffer =
-            app_context
+            context
+                .get_wgpu_device()
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Index Buffer"),
+                    contents: bytemuck::cast_slice(&indices),
+                    usage: wgpu::BufferUsages::INDEX,
+                });
+
+        (vertex_buffer, index_buffer, indices.len() as u32)
+    }
+
+    pub fn rectangle(
+        desc: RectangleDescriptor,
+        color: &Color,
+    ) -> (Vec<ColoredVertex>, Vec<u16>) {
+        let (raw_vertex, index) = rectangle(desc);
+
+        let mut vertex = Vec::with_capacity(raw_vertex.len());
+
+        for raw_vertex in raw_vertex {
+            vertex.push(ColoredVertex {
+                position: raw_vertex.position,
+                color: color.to_rgba_f32(),
+            });
+        }
+
+        (vertex, index)
+    }
+
+    pub fn rectangle_buffer(
+        context: &ApplicationContext,
+        desc: RectangleDescriptor,
+        color: &Color,
+        compute: bool,
+    ) -> (wgpu::Buffer, wgpu::Buffer, u32) {
+        let (vertices, indices) = ColoredVertex::rectangle(desc, color);
+
+        let vertex_buffer;
+
+        if compute {
+            vertex_buffer = context.get_wgpu_device().create_buffer_init(
+                &wgpu::util::BufferInitDescriptor {
+                    label: Some("Vertex Buffer"),
+                    contents: bytemuck::cast_slice(&vertices),
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::STORAGE,
+                },
+            );
+        } else {
+            vertex_buffer = context.get_wgpu_device().create_buffer_init(
+                &wgpu::util::BufferInitDescriptor {
+                    label: Some("Vertex Buffer"),
+                    contents: bytemuck::cast_slice(&vertices),
+                    usage: wgpu::BufferUsages::VERTEX,
+                },
+            );
+        }
+
+        let index_buffer =
+            context
                 .get_wgpu_device()
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("Index Buffer"),
