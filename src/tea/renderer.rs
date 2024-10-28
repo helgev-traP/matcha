@@ -20,6 +20,7 @@ pub struct Renderer {
     textured_render_pipeline: wgpu::RenderPipeline,
 
     // color
+    color_bind_group_layout: wgpu::BindGroupLayout,
     colored_render_pipeline: wgpu::RenderPipeline,
 
     // common
@@ -127,10 +128,25 @@ impl Renderer {
                 cache: None,
             });
 
+        let color_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("Panel Affine Bind Group Layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            });
+
         let colored_render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Panel Render Pipeline Layout"),
-                bind_group_layouts: &[&affine_bind_group_layout],
+                bind_group_layouts: &[&affine_bind_group_layout, &color_bind_group_layout],
                 push_constant_ranges: &[],
             });
 
@@ -188,6 +204,7 @@ impl Renderer {
             app_context: context,
             texture_bind_group_layout,
             textured_render_pipeline,
+            color_bind_group_layout,
             colored_render_pipeline,
             affine_bind_group_layout,
         }
@@ -208,6 +225,7 @@ impl Renderer {
             size,
             texture_bind_group_layout: &self.texture_bind_group_layout,
             textured_render_pipeline: &self.textured_render_pipeline,
+            color_bind_group_layout: &self.color_bind_group_layout,
             colored_render_pipeline: &self.colored_render_pipeline,
             affine_bind_group_layout: &self.affine_bind_group_layout,
             encoder,
@@ -229,6 +247,7 @@ pub struct RendererCommandEncoder<'a> {
     textured_render_pipeline: &'a wgpu::RenderPipeline,
 
     // color
+    color_bind_group_layout: &'a wgpu::BindGroupLayout,
     colored_render_pipeline: &'a wgpu::RenderPipeline,
 
     // common
@@ -283,7 +302,7 @@ impl<'a> RendererCommandEncoder<'a> {
         for object in item.object {
             match object {
                 Object::Textured {
-                    instance_affine,
+                    object_affine: instance_affine,
                     vertex_buffer,
                     index_buffer,
                     index_len,
@@ -328,7 +347,6 @@ impl<'a> RendererCommandEncoder<'a> {
                                             (self.normalizer * affine * instance_affine).as_slice(),
                                         ),
                                         usage: wgpu::BufferUsages::UNIFORM
-                                            | wgpu::BufferUsages::COPY_DST,
                                     },
                                 ),
                                 offset: 0,
@@ -375,10 +393,11 @@ impl<'a> RendererCommandEncoder<'a> {
                     }
                 }
                 Object::Colored {
-                    instance_affine,
+                    object_affine: instance_affine,
                     vertex_buffer,
                     index_buffer,
                     index_len,
+                    color,
                 } => {
                     let affine_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                         label: Some("Renderer ColoredVertex Affine Bind Group"),
@@ -393,7 +412,25 @@ impl<'a> RendererCommandEncoder<'a> {
                                             (self.normalizer * affine * instance_affine).as_slice(),
                                         ),
                                         usage: wgpu::BufferUsages::UNIFORM
-                                            | wgpu::BufferUsages::COPY_DST,
+                                    },
+                                ),
+                                offset: 0,
+                                size: None,
+                            }),
+                        }],
+                    });
+
+                    let color_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("Renderer ColoredVertex Color Bind Group"),
+                        layout: &self.color_bind_group_layout,
+                        entries: &[wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                                buffer: &device.create_buffer_init(
+                                    &wgpu::util::BufferInitDescriptor {
+                                        label: Some("Render ColoredVertex Color Buffer"),
+                                        contents: bytemuck::cast_slice(&color.to_rgba_f32()),
+                                        usage: wgpu::BufferUsages::UNIFORM
                                     },
                                 ),
                                 offset: 0,
@@ -432,6 +469,7 @@ impl<'a> RendererCommandEncoder<'a> {
 
                         render_pass.set_pipeline(&self.colored_render_pipeline);
                         render_pass.set_bind_group(0, &affine_bind_group, &[]);
+                        render_pass.set_bind_group(1, &color_bind_group, &[]);
                         render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
                         render_pass
                             .set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);

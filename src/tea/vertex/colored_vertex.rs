@@ -1,6 +1,6 @@
 use wgpu::util::DeviceExt;
 
-use crate::{application_context::ApplicationContext, types::color::Color};
+use crate::application_context::ApplicationContext;
 
 use super::vertex_generator::{rectangle, RectangleDescriptor};
 
@@ -8,7 +8,6 @@ use super::vertex_generator::{rectangle, RectangleDescriptor};
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct ColoredVertex {
     position: [f32; 3],
-    color: [f32; 4],
 }
 
 impl ColoredVertex {
@@ -22,11 +21,6 @@ impl ColoredVertex {
                     shader_location: 0,
                     format: wgpu::VertexFormat::Float32x3,
                 },
-                wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x4,
-                },
             ],
         }
     }
@@ -36,31 +30,25 @@ impl ColoredVertex {
         y: f32,
         width: f32,
         height: f32,
-        color: &Color,
     ) -> ([ColoredVertex; 4], [u16; 6]) {
         // 0-------3
         // | \     |
         // |   \   |
         // |     \ |
         // 1-------2
-        let color = color.to_rgba_f32();
         (
             [
                 ColoredVertex {
                     position: [x, y, 0.0],
-                    color,
                 },
                 ColoredVertex {
                     position: [x, y - height, 0.0],
-                    color,
                 },
                 ColoredVertex {
                     position: [x + width, y - height, 0.0],
-                    color,
                 },
                 ColoredVertex {
                     position: [x + width, y, 0.0],
-                    color,
                 },
             ],
             [0, 1, 2, 0, 2, 3],
@@ -73,10 +61,9 @@ impl ColoredVertex {
         y: f32,
         width: f32,
         height: f32,
-        color: &Color,
         compute: bool,
     ) -> (wgpu::Buffer, wgpu::Buffer, u32) {
-        let (vertices, indices) = ColoredVertex::atomic_rectangle(x, y, width, height, color);
+        let (vertices, indices) = ColoredVertex::atomic_rectangle(x, y, width, height);
 
         let vertex_buffer;
 
@@ -112,7 +99,6 @@ impl ColoredVertex {
 
     pub fn rectangle(
         desc: RectangleDescriptor,
-        color: &Color,
     ) -> (Vec<ColoredVertex>, Vec<u16>) {
         let (raw_vertex, index) = rectangle(desc);
 
@@ -121,7 +107,6 @@ impl ColoredVertex {
         for raw_vertex in raw_vertex {
             vertex.push(ColoredVertex {
                 position: raw_vertex.position,
-                color: color.to_rgba_f32(),
             });
         }
 
@@ -131,10 +116,9 @@ impl ColoredVertex {
     pub fn rectangle_buffer(
         context: &ApplicationContext,
         desc: RectangleDescriptor,
-        color: &Color,
         compute: bool,
     ) -> (wgpu::Buffer, wgpu::Buffer, u32) {
-        let (vertices, indices) = ColoredVertex::rectangle(desc, color);
+        let (vertices, indices) = ColoredVertex::rectangle(desc);
 
         let vertex_buffer;
 

@@ -177,7 +177,6 @@ impl super::RenderingTrait for SquareNode {
             let (vertex, index, index_len) = ColoredVertex::rectangle_buffer(
                 context,
                 RectangleDescriptor::new(size.width, size.height).radius(self.radius),
-                &self.background_color,
                 false,
             );
 
@@ -189,10 +188,11 @@ impl super::RenderingTrait for SquareNode {
         encoder.draw(
             super::RenderItem {
                 object: vec![crate::ui::Object::Colored {
+                    object_affine: nalgebra::Matrix4::identity(),
                     vertex_buffer: self.vertex_buffer.as_ref().unwrap().clone(),
                     index_buffer: self.index_buffer.as_ref().unwrap().clone(),
                     index_len: self.index_len,
-                    instance_affine: nalgebra::Matrix4::identity(),
+                    color: self.background_color,
                 }],
             },
             affine,

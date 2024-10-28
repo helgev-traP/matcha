@@ -2,14 +2,13 @@ use crate::{
     application_context::ApplicationContext,
     events::UiEvent,
     renderer::RendererCommandEncoder,
-    types::size::{PxSize, Size, SizeUnit},
+    types::{size::{PxSize, Size, SizeUnit}, style::Style},
     ui::{Dom, Widget},
 };
 
 pub struct ContainerDescriptor<T> {
     pub label: Option<String>,
-    pub size: Size,
-    pub properties: (),
+    pub properties: Style,
     pub children: Vec<Box<dyn Dom<T>>>,
 }
 
@@ -17,11 +16,7 @@ impl<T> Default for ContainerDescriptor<T> {
     fn default() -> Self {
         Self {
             label: None,
-            size: Size {
-                width: SizeUnit::Pixel(100.0),
-                height: SizeUnit::Pixel(100.0),
-            },
-            properties: (),
+            properties: Style::default(),
             children: vec![],
         }
     }
@@ -29,8 +24,7 @@ impl<T> Default for ContainerDescriptor<T> {
 
 pub struct Container<T> {
     label: Option<String>,
-    size: Size,
-    properties: (),
+    properties: Style,
     children: Vec<Box<dyn Dom<T>>>,
 }
 
@@ -38,7 +32,6 @@ impl<T> Container<T> {
     pub fn new(disc: ContainerDescriptor<T>) -> Self {
         Self {
             label: disc.label,
-            size: disc.size,
             properties: disc.properties,
             children: disc.children,
         }
@@ -49,8 +42,7 @@ impl<T: Send + 'static> Dom<T> for Container<T> {
     fn build_render_tree(&self) -> Box<dyn Widget<T>> {
         Box::new(ContainerNode {
             label: self.label.clone(),
-            size: self.size,
-            properties: self.properties,
+            properties: self.properties.clone(),
             children: self
                 .children
                 .iter()
@@ -66,8 +58,7 @@ impl<T: Send + 'static> Dom<T> for Container<T> {
 
 pub struct ContainerNode<T> {
     label: Option<String>,
-    size: Size,
-    properties: (),
+    properties: Style,
     children: Vec<Box<dyn Widget<T>>>,
 }
 
@@ -114,11 +105,11 @@ impl<T: Send + 'static> super::WidgetTrait<T> for ContainerNode<T> {
 
 impl<T> super::RenderingTrait for ContainerNode<T> {
     fn size(&self) -> Size {
-        self.size
+        self.properties.size
     }
 
     fn px_size(&self, parent_size: PxSize, context: &ApplicationContext) -> PxSize {
-        self.size.to_px(parent_size, context)
+        self.properties.size.to_px(parent_size, context)
     }
 
     fn default_size(&self) -> PxSize {

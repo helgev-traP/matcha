@@ -284,7 +284,7 @@ impl RenderingTrait for TeacupRenderNode {
                         index_buffer: self.index_buffer.as_ref().unwrap().clone(),
                         index_len: self.index_len,
                         texture: self.texture.as_ref().unwrap().clone(),
-                        instance_affine: na::Matrix4::identity(),
+                        object_affine: na::Matrix4::identity(),
                     }],
                 },
                 nalgebra::Matrix4::new_translation(&na::Vector3::new(
