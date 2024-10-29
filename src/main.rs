@@ -29,19 +29,19 @@ fn view(_: &u32) -> Box<dyn Dom<()>> {
         },
         item: Box::new(Square::new(SquareDescriptor {
             size: Size {
-                width: SizeUnit::Pixel(200.0),
-                height: SizeUnit::Pixel(500.0),
+                width: SizeUnit::Pixel(500.0),
+                height: SizeUnit::Pixel(200.0),
             },
-            radius: 200.0,
+            radius: 50.0,
             background_color: Color::Rgba8USrgb {
-                r: 0,
-                g: 0,
-                b: 0,
-                a: 0,
+                r: 255,
+                g: 255,
+                b: 255,
+                a: 255,
             },
             label: None,
-            border_width: 5.0,
-            border_color: Color::Rgb8USrgb { r: 255, g: 0, b: 0 },
+            border_width: 7.0,
+            border_color: Color::Rgb8USrgb { r: 0, g: 255, b: 255 },
         })),
     }))
 }
