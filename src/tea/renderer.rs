@@ -120,7 +120,7 @@ impl Renderer {
                     bias: wgpu::DepthBiasState::default(),
                 }),
                 multisample: wgpu::MultisampleState {
-                    count: 1,
+                    count: 4,
                     mask: !0,
                     alpha_to_coverage_enabled: false,
                 },
@@ -192,7 +192,7 @@ impl Renderer {
                     bias: wgpu::DepthBiasState::default(),
                 }),
                 multisample: wgpu::MultisampleState {
-                    count: 1,
+                    count: 4,
                     mask: !0,
                     alpha_to_coverage_enabled: false,
                 },
@@ -213,6 +213,7 @@ impl Renderer {
     pub fn encoder(
         &mut self,
         target_texture_view: wgpu::TextureView,
+        multisampled_texture_view: wgpu::TextureView,
         depth_texture_view: wgpu::TextureView,
         size: PxSize,
     ) -> RendererCommandEncoder {
@@ -230,6 +231,7 @@ impl Renderer {
             affine_bind_group_layout: &self.affine_bind_group_layout,
             encoder,
             target_texture_view,
+            multisampled_texture_view,
             depth_texture_view,
             normalizer,
         }
@@ -256,6 +258,7 @@ pub struct RendererCommandEncoder<'a> {
     // encoder
     encoder: Arc<Mutex<wgpu::CommandEncoder>>,
     target_texture_view: wgpu::TextureView,
+    multisampled_texture_view: wgpu::TextureView,
     depth_texture_view: wgpu::TextureView,
 
     // linear transformation
@@ -279,8 +282,8 @@ impl<'a> RendererCommandEncoder<'a> {
         encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Panel Render Pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &self.target_texture_view,
-                resolve_target: None,
+                view: &self.multisampled_texture_view,
+                resolve_target: Some(&self.target_texture_view),
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color {
                         r: base_color_f64[0],
@@ -362,8 +365,8 @@ impl<'a> RendererCommandEncoder<'a> {
                             encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                                 label: Some("Renderer TexturedVertex Render Pass"),
                                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                                    view: &self.target_texture_view,
-                                    resolve_target: None,
+                                    view: &self.multisampled_texture_view,
+                                    resolve_target: Some(&self.target_texture_view),
                                     ops: wgpu::Operations {
                                         load: wgpu::LoadOp::Load,
                                         store: wgpu::StoreOp::Store,
@@ -446,8 +449,8 @@ impl<'a> RendererCommandEncoder<'a> {
                             encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                                 label: Some("Renderer ColoredVertex Render Pass"),
                                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                                    view: &self.target_texture_view,
-                                    resolve_target: None,
+                                    view: &self.multisampled_texture_view,
+                                    resolve_target: Some(&self.target_texture_view),
                                     ops: wgpu::Operations {
                                         load: wgpu::LoadOp::Load,
                                         store: wgpu::StoreOp::Store,

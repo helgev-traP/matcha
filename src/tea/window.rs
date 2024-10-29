@@ -49,7 +49,7 @@ pub struct Window<'a, Model: Send + 'static, Message: 'static> {
     // mouse settings
     mouse_primary_button: winit::event::MouseButton,
     scroll_pixel_per_line: f32,
-    
+
     // keyboard
     keyboard_state: Option<keyboard_state::KeyboardState>,
 }
@@ -142,11 +142,16 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
         let depth_texture = self.gpu_state.as_ref().unwrap().get_depth_texture();
         let depth_texture_view = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
+        // multisample texture
+        let multisampled_texture = self.gpu_state.as_ref().unwrap().get_multisampled_texture();
+        let multisampled_texture_view = multisampled_texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        // viewport size
         let viewport_size = self.gpu_state.as_ref().unwrap().get_viewport_size();
 
         // render
         let render = self.render.as_mut().unwrap();
-        let mut encoder = render.encoder(surface_texture_view, depth_texture_view, viewport_size);
+        let mut encoder = render.encoder(surface_texture_view, multisampled_texture_view, depth_texture_view, viewport_size);
         let render_tree = self.render_tree.as_mut().unwrap().for_rendering();
 
         rayon::scope(|s| {

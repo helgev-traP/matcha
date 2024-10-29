@@ -10,6 +10,7 @@ pub struct GpuState<'a> {
     app_context: ApplicationContext,
     config: wgpu::SurfaceConfiguration,
     surface: wgpu::Surface<'a>,
+    multisampled_texture: wgpu::Texture,
     depth_texture: wgpu::Texture,
 }
 
@@ -83,6 +84,21 @@ impl GpuState<'_> {
             view_formats: vec![],
         };
 
+        let multisampled_texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: None,
+            size: wgpu::Extent3d {
+                width: size.width,
+                height: size.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 4,
+            dimension: wgpu::TextureDimension::D2,
+            format: surface_format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[surface_format],
+        });
+
         let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: None,
             size: wgpu::Extent3d {
@@ -91,7 +107,7 @@ impl GpuState<'_> {
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
-            sample_count: 1,
+            sample_count: 4,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Depth32Float,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -114,6 +130,7 @@ impl GpuState<'_> {
             app_context,
             config,
             surface,
+            multisampled_texture,
             depth_texture,
         }
     }
@@ -128,6 +145,10 @@ impl GpuState<'_> {
 
     pub fn get_depth_texture(&self) -> &wgpu::Texture {
         &self.depth_texture
+    }
+
+    pub fn get_multisampled_texture(&self) -> &wgpu::Texture {
+        &self.multisampled_texture
     }
 
     pub fn get_config(&self) -> &wgpu::SurfaceConfiguration {
@@ -158,12 +179,29 @@ impl GpuState<'_> {
                     depth_or_array_layers: 1,
                 },
                 mip_level_count: 1,
-                sample_count: 1,
+                sample_count: 4,
                 dimension: wgpu::TextureDimension::D2,
                 format: wgpu::TextureFormat::Depth32Float,
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
                 view_formats: &[],
             });
+
+            // Update the multisampled texture
+            self.multisampled_texture =
+                self.app_context.device.create_texture(&wgpu::TextureDescriptor {
+                    label: None,
+                    size: wgpu::Extent3d {
+                        width: size.width,
+                        height: size.height,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 4,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: self.config.format,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                    view_formats: &[self.config.format],
+                });
         }
     }
 }
