@@ -273,11 +273,115 @@ pub fn border(desc: BorderDescriptor) -> (Vec<Vertex>, Vec<u16>) {
             indices.push(index_len + i);
         }
 
+        indices.push(desc.div * 4 + 3);
+        indices.push(0);
+        indices.push(index_len + desc.div * 4 + 3);
+
+        indices.push(0);
+        indices.push(index_len);
+        indices.push(index_len + desc.div * 4 + 3);
+
         (vertex, indices)
     } else if desc.border_width < desc.width / 2.0 && desc.border_width < desc.height / 2.0 {
-        todo!()
+        let mut vertex = make_rectangle_vertex(
+            desc.x,
+            desc.y,
+            desc.width,
+            desc.height,
+            desc.radius,
+            desc.div,
+        );
+
+        vertex.extend(vec![
+            Vertex {
+                position: [desc.x + desc.border_width, -desc.y - desc.border_width, 0.0],
+            },
+            Vertex {
+                position: [
+                    desc.x + desc.border_width,
+                    -desc.y - desc.height + desc.border_width,
+                    0.0,
+                ],
+            },
+            Vertex {
+                position: [
+                    desc.x + desc.width - desc.border_width,
+                    -desc.y - desc.height + desc.border_width,
+                    0.0,
+                ],
+            },
+            Vertex {
+                position: [
+                    desc.x + desc.width - desc.border_width,
+                    -desc.y - desc.border_width,
+                    0.0,
+                ],
+            },
+        ]);
+
+        let mut indices = Vec::with_capacity(desc.div as usize * 24 + 24);
+        let index_len = desc.div * 4 + 4;
+
+        // corners
+        for i in 0..desc.div {
+            // upper left
+            indices.push(i);
+            indices.push(i + 1);
+            indices.push(index_len);
+            // lower left
+            indices.push(desc.div + 1 + i);
+            indices.push(desc.div + 1 + i + 1);
+            indices.push(index_len + 1);
+            // lower right
+            indices.push(desc.div * 2 + 2 + i);
+            indices.push(desc.div * 2 + 2 + i + 1);
+            indices.push(index_len + 2);
+            // upper right
+            indices.push(desc.div * 3 + 3 + i);
+            indices.push(desc.div * 3 + 3 + i + 1);
+            indices.push(index_len + 3);
+        }
+
+        // left
+        indices.push(desc.div);
+        indices.push(desc.div + 1);
+        indices.push(index_len);
+
+        indices.push(desc.div + 1);
+        indices.push(index_len + 1);
+        indices.push(index_len);
+        // bottom
+        indices.push(desc.div * 2 + 1);
+        indices.push(desc.div * 2 + 2);
+        indices.push(index_len + 1);
+
+        indices.push(desc.div * 2 + 2);
+        indices.push(index_len + 2);
+        indices.push(index_len + 1);
+        // right
+        indices.push(desc.div * 3 + 2);
+        indices.push(desc.div * 3 + 3);
+        indices.push(index_len + 2);
+
+        indices.push(desc.div * 3 + 3);
+        indices.push(index_len + 3);
+        indices.push(index_len + 2);
+        // top
+        indices.push(desc.div * 4 + 3);
+        indices.push(0);
+        indices.push(index_len + 3);
+
+        indices.push(0);
+        indices.push(index_len);
+        indices.push(index_len + 3);
+
+        (vertex, indices)
     } else {
-        todo!()
+        rectangle(
+            RectangleDescriptor::new(desc.width, desc.height)
+                .offset(desc.x, desc.y)
+                .radius(desc.radius),
+        )
     }
 }
 
