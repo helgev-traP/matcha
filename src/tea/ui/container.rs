@@ -2,7 +2,7 @@ use crate::{
     application_context::ApplicationContext,
     events::UiEvent,
     renderer::RendererCommandEncoder,
-    types::{size::{PxSize, Size, SizeUnit}, style::Style},
+    types::{size::{PxSize, Size, SizeUnit}, style::{Style, Visibility}},
     ui::{Dom, Widget},
 };
 
@@ -126,6 +126,8 @@ impl<T> super::RenderingTrait for ContainerNode<T> {
         affine: nalgebra::Matrix4<f32>,
         encoder: &mut RendererCommandEncoder,
     ) {
-        todo!()
+        if let Visibility::Visible = self.properties.visibility {
+            todo!() // rendering
+        }
     }
 }

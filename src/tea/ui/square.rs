@@ -8,7 +8,10 @@ use crate::{
         size::{PxSize, Size, SizeUnit},
     },
     ui::{Dom, Widget},
-    vertex::{colored_vertex::ColoredVertex, vertex_generator::RectangleDescriptor},
+    vertex::{
+        colored_vertex::ColoredVertex,
+        vertex_generator::{BorderDescriptor, RectangleDescriptor},
+    },
 };
 
 pub struct SquareDescriptor {
@@ -16,6 +19,9 @@ pub struct SquareDescriptor {
     pub size: Size,
     pub radius: f32,
     pub background_color: Color,
+
+    pub border_width: f32,
+    pub border_color: Color,
 }
 
 impl Default for SquareDescriptor {
@@ -28,6 +34,8 @@ impl Default for SquareDescriptor {
             },
             radius: 0.0,
             background_color: Color::Rgb8USrgb { r: 0, g: 0, b: 0 },
+            border_width: 0.0,
+            border_color: Color::Rgb8USrgb { r: 0, g: 0, b: 0 },
         }
     }
 }
@@ -38,6 +46,9 @@ pub struct Square {
     radius: f32,
 
     background_color: Color,
+
+    border_width: f32,
+    border_color: Color,
 }
 
 impl Square {
@@ -47,6 +58,8 @@ impl Square {
             size: disc.size,
             radius: disc.radius,
             background_color: disc.background_color,
+            border_width: disc.border_width,
+            border_color: disc.border_color,
         }
     }
 }
@@ -58,9 +71,14 @@ impl<R: Copy + Send + 'static> Dom<R> for Square {
             size: self.size,
             radius: self.radius,
             background_color: self.background_color,
+            border_width: self.border_width,
+            border_color: self.border_color,
             vertex_buffer: None,
             index_buffer: None,
             index_len: 0,
+            border_vertex_buffer: None,
+            border_index_buffer: None,
+            border_index_len: 0,
         })
     }
 
@@ -75,10 +93,18 @@ pub struct SquareNode {
     size: Size,
     radius: f32,
     background_color: Color,
+    border_width: f32,
+    border_color: Color,
 
+    // box
     vertex_buffer: Option<Arc<wgpu::Buffer>>,
     index_buffer: Option<Arc<wgpu::Buffer>>,
     index_len: u32,
+
+    // border
+    border_vertex_buffer: Option<Arc<wgpu::Buffer>>,
+    border_index_buffer: Option<Arc<wgpu::Buffer>>,
+    border_index_len: u32,
 }
 
 impl<R: Copy + Send + 'static> super::WidgetTrait<R> for SquareNode {
@@ -185,15 +211,38 @@ impl super::RenderingTrait for SquareNode {
             self.index_len = index_len;
         }
 
+        if self.border_vertex_buffer.is_none() {
+            let (vertex, index, index_len) = ColoredVertex::border_buffer(
+                context,
+                BorderDescriptor::new(size.width, size.height, self.border_width)
+                    .radius(self.radius)
+                    .border_width(self.border_width),
+                false,
+            );
+
+            self.border_vertex_buffer = Some(Arc::new(vertex));
+            self.border_index_buffer = Some(Arc::new(index));
+            self.border_index_len = index_len;
+        }
+
         encoder.draw(
             super::RenderItem {
-                object: vec![crate::ui::Object::Colored {
-                    object_affine: nalgebra::Matrix4::identity(),
-                    vertex_buffer: self.vertex_buffer.as_ref().unwrap().clone(),
-                    index_buffer: self.index_buffer.as_ref().unwrap().clone(),
-                    index_len: self.index_len,
-                    color: self.background_color,
-                }],
+                object: vec![
+                    crate::ui::Object::Colored {
+                        object_affine: nalgebra::Matrix4::identity(),
+                        vertex_buffer: self.vertex_buffer.as_ref().unwrap().clone(),
+                        index_buffer: self.index_buffer.as_ref().unwrap().clone(),
+                        index_len: self.index_len,
+                        color: self.background_color,
+                    },
+                    crate::ui::Object::Colored {
+                        object_affine: nalgebra::Matrix4::identity(),
+                        vertex_buffer: self.border_vertex_buffer.as_ref().unwrap().clone(),
+                        index_buffer: self.border_index_buffer.as_ref().unwrap().clone(),
+                        index_len: self.border_index_len,
+                        color: self.border_color,
+                    },
+                ],
             },
             affine,
         );
