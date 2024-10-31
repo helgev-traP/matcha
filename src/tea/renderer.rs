@@ -240,7 +240,7 @@ impl Renderer {
 
 pub struct RendererCommandEncoder<'a> {
     // context
-    app_context: &'a mut ApplicationContext,
+    app_context: &'a ApplicationContext,
     size: PxSize,
 
     // wgpu state
@@ -266,7 +266,7 @@ pub struct RendererCommandEncoder<'a> {
 }
 
 impl<'a> RendererCommandEncoder<'a> {
-    pub fn get_context(&mut self) -> &mut ApplicationContext {
+    pub fn get_context(&self) -> &ApplicationContext {
         self.app_context
     }
 
@@ -274,7 +274,7 @@ impl<'a> RendererCommandEncoder<'a> {
         self.size
     }
 
-    pub fn clear(&mut self, color: Color) {
+    pub fn clear(&self, color: Color) {
         let mut encoder = self.encoder.lock().unwrap();
 
         let base_color_f64 = color.to_rgba_f64();
@@ -300,7 +300,7 @@ impl<'a> RendererCommandEncoder<'a> {
         });
     }
 
-    pub fn draw(&mut self, item: RenderItem, affine: na::Matrix4<f32>) {
+    pub fn draw(&self, item: RenderItem, affine: na::Matrix4<f32>) {
         let device = self.app_context.get_wgpu_device();
         for object in item.object {
             match object {

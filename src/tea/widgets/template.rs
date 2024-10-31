@@ -3,7 +3,7 @@ use crate::{
     events::UiEvent,
     renderer::RendererCommandEncoder,
     types::size::{PxSize, Size, SizeUnit},
-    ui::{Dom, Widget},
+    ui::{Dom, DomComPareResult, RenderingTrait, Widget, WidgetTrait},
 };
 
 pub struct TemplateDescriptor {
@@ -55,7 +55,7 @@ pub struct TemplateNode {
     size: Size,
 }
 
-impl<T: Send + 'static> super::WidgetTrait<T> for TemplateNode {
+impl<T: Send + 'static> WidgetTrait<T> for TemplateNode {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
@@ -82,16 +82,16 @@ impl<T: Send + 'static> super::WidgetTrait<T> for TemplateNode {
         }
     }
 
-    fn compare(&self, dom: &dyn Dom<T>) -> super::DomComPareResult {
+    fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult {
         if let Some(_) = dom.as_any().downcast_ref::<Template>() {
             todo!()
         } else {
-            super::DomComPareResult::Different
+            DomComPareResult::Different
         }
     }
 }
 
-impl super::RenderingTrait for TemplateNode {
+impl RenderingTrait for TemplateNode {
     fn size(&self) -> Size {
         self.size
     }
@@ -112,7 +112,7 @@ impl super::RenderingTrait for TemplateNode {
         s: &rayon::Scope,
         parent_size: PxSize,
         affine: nalgebra::Matrix4<f32>,
-        encoder: &mut RendererCommandEncoder,
+        encoder: &RendererCommandEncoder,
     ) {
         todo!()
     }

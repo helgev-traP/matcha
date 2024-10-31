@@ -4,9 +4,9 @@ use crate::cosmic::{FontContext, RenderAttribute, TextureAttribute, TextureAttri
 
 pub struct ApplicationContext {
     winit_window: Arc<winit::window::Window>,
-    pub device: Arc<wgpu::Device>,
-    pub queue: Arc<wgpu::Queue>,
-    pub surface_format: wgpu::TextureFormat,
+    device: Arc<wgpu::Device>,
+    queue: Arc<wgpu::Queue>,
+    surface_format: wgpu::TextureFormat,
 
     cosmic_text: FontContext,
 }
@@ -77,7 +77,7 @@ impl ApplicationContext {
     }
 
     pub fn text_render(
-        &mut self,
+        &self,
         text: &str,
         atr: RenderAttribute,
         texture: TextureAttribute,

@@ -1,43 +1,37 @@
-pub mod column;
-pub mod container;
-pub mod drag_field;
-pub mod row;
-pub mod square;
-pub mod teacup;
-pub mod template;
-pub mod text;
-
 use nalgebra as na;
-use std::{any::Any, sync::Arc};
+use std::any::Any;
 
 use super::{
     application_context::ApplicationContext,
     events::{UiEvent, UiEventResult},
     renderer::RendererCommandEncoder,
-    types::{color::Color, size::{PxSize, Size}},
+    types::{
+        color::Color,
+        size::{PxSize, Size},
+    },
 };
 
 // render item
 
-pub enum Object {
+pub enum Object<'a> {
     Textured {
         object_affine: na::Matrix4<f32>,
-        vertex_buffer: Arc<wgpu::Buffer>,
-        index_buffer: Arc<wgpu::Buffer>,
+        vertex_buffer: &'a wgpu::Buffer,
+        index_buffer: &'a wgpu::Buffer,
         index_len: u32,
-        texture: Arc<wgpu::Texture>,
+        texture: &'a wgpu::Texture,
     },
     Colored {
         object_affine: na::Matrix4<f32>,
-        vertex_buffer: Arc<wgpu::Buffer>,
-        index_buffer: Arc<wgpu::Buffer>,
+        vertex_buffer: &'a wgpu::Buffer,
+        index_buffer: &'a wgpu::Buffer,
         index_len: u32,
         color: Color,
     },
 }
 
-pub struct RenderItem {
-    pub object: Vec<Object>,
+pub struct RenderItem<'a> {
+    pub object: Vec<Object<'a>>,
     // pub px_size: super::types::size::PxSize,
     // pub property: crate::ui::Property,
 }
@@ -115,6 +109,6 @@ pub trait RenderingTrait: Send {
         s: &rayon::Scope,
         parent_size: PxSize,
         affine: na::Matrix4<f32>,
-        encoder: &mut RendererCommandEncoder,
+        encoder: &RendererCommandEncoder,
     );
 }

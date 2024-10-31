@@ -1,10 +1,3 @@
-pub mod display;
-pub use display::*;
-pub mod position;
-pub use position::*;
-pub mod overflow;
-pub use overflow::*;
-
 pub mod margin;
 pub use margin::*;
 pub mod padding;
@@ -22,16 +15,10 @@ pub use visibility::*;
 pub mod cursor;
 pub use cursor::*;
 
-use super::{color::Color, size::{Size, SizeUnit}};
+use crate::types::{color::Color, size::{Size, SizeUnit}};
 
 #[derive(Debug, Clone)]
 pub struct Style {
-    // layouts
-    pub display: Display,
-    pub grid_item: GritItem,
-    pub position: Position,
-    pub overflow: Overflow,
-
     // size
     pub size: Size,
 
@@ -60,21 +47,11 @@ pub struct Style {
     pub opacity: u8,
     pub visibility: Visibility,
     pub cursor: Cursor,
-    // pub transition: Transition,
 }
 
 impl Default for Style {
     fn default() -> Self {
         Self {
-            // layouts
-            display: Display::default(),
-            grid_item: GritItem {
-                row: [0, 0],
-                column: [0, 0],
-            },
-            position: Position::default(),
-            overflow: Overflow::default(),
-
             // size
             size: Size {
                 width: SizeUnit::Content(1.0),
@@ -89,7 +66,7 @@ impl Default for Style {
 
             // colors
             text_color: Color::Rgb8USrgb { r: 0, g: 0, b: 0 },
-            background_color: Color::Rgb8USrgb { r: 255, g: 255, b: 255 },
+            background_color: Color::Rgba8USrgb { r: 255, g: 255, b: 255, a: 0 },
 
             // font
             font_family: "Arial".to_string(),

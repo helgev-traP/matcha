@@ -3,8 +3,8 @@ use crate::{
     device::mouse::MouseButton,
     events::UiEvent,
     renderer::RendererCommandEncoder,
-    types::size::{PxSize, Size, SizeUnit},
-    ui::{Dom, Widget},
+    types::size::{PxSize, Size},
+    ui::{Dom, DomComPareResult, RenderingTrait, Widget, WidgetTrait},
 };
 
 use nalgebra as na;
@@ -60,7 +60,7 @@ pub struct DragFieldNode<T> {
     item: Box<dyn Widget<T>>,
 }
 
-impl<T: Send + 'static> super::WidgetTrait<T> for DragFieldNode<T> {
+impl<T: Send + 'static> WidgetTrait<T> for DragFieldNode<T> {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
@@ -147,16 +147,16 @@ impl<T: Send + 'static> super::WidgetTrait<T> for DragFieldNode<T> {
         }
     }
 
-    fn compare(&self, dom: &dyn Dom<T>) -> super::DomComPareResult {
+    fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult {
         if let Some(_) = dom.as_any().downcast_ref::<DragField<T>>() {
             todo!()
         } else {
-            super::DomComPareResult::Different
+            DomComPareResult::Different
         }
     }
 }
 
-impl<T> super::RenderingTrait for DragFieldNode<T> {
+impl<T> RenderingTrait for DragFieldNode<T> {
     fn size(&self) -> Size {
         self.size
     }
@@ -177,7 +177,7 @@ impl<T> super::RenderingTrait for DragFieldNode<T> {
         s: &rayon::Scope,
         parent_size: PxSize,
         affine: nalgebra::Matrix4<f32>,
-        encoder: &mut RendererCommandEncoder,
+        encoder: &RendererCommandEncoder,
     ) {
         let current_size = self.size.to_px(parent_size, encoder.get_context());
 

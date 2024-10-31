@@ -7,14 +7,10 @@ use tea_ui::{
         color::Color,
         size::{Size, SizeUnit},
     },
-    ui::{
-        column::{Column, ColumnDescriptor},
+    ui::Dom,
+    widgets::{
         drag_field::{DragField, DragFieldDescriptor},
-        row::{Row, RowDescriptor},
         square::{Square, SquareDescriptor},
-        teacup::{Teacup, TeacupDescriptor},
-        text::{Text, TextDescriptor},
-        Dom,
     },
 };
 
@@ -40,7 +36,7 @@ fn view(_: &u32) -> Box<dyn Dom<()>> {
                 a: 255,
             },
             label: None,
-            border_width: 7.0,
+            border_width: -10.0,
             border_color: Color::Rgb8USrgb { r: 0, g: 255, b: 255 },
         })),
     }))

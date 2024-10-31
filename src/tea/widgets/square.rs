@@ -7,7 +7,7 @@ use crate::{
         color::Color,
         size::{PxSize, Size, SizeUnit},
     },
-    ui::{Dom, Widget},
+    ui::{Dom, DomComPareResult, RenderItem, RenderingTrait, Widget, WidgetTrait},
     vertex::{
         colored_vertex::ColoredVertex,
         vertex_generator::{BorderDescriptor, RectangleDescriptor},
@@ -97,17 +97,17 @@ pub struct SquareNode {
     border_color: Color,
 
     // box
-    vertex_buffer: Option<Arc<wgpu::Buffer>>,
-    index_buffer: Option<Arc<wgpu::Buffer>>,
+    vertex_buffer: Option<wgpu::Buffer>,
+    index_buffer:  Option<wgpu::Buffer>,
     index_len: u32,
 
     // border
-    border_vertex_buffer: Option<Arc<wgpu::Buffer>>,
-    border_index_buffer: Option<Arc<wgpu::Buffer>>,
+    border_vertex_buffer: Option<wgpu::Buffer>,
+    border_index_buffer:  Option<wgpu::Buffer>,
     border_index_len: u32,
 }
 
-impl<R: Copy + Send + 'static> super::WidgetTrait<R> for SquareNode {
+impl<R: Copy + Send + 'static> WidgetTrait<R> for SquareNode {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
@@ -153,22 +153,22 @@ impl<R: Copy + Send + 'static> super::WidgetTrait<R> for SquareNode {
         Ok(())
     }
 
-    fn compare(&self, dom: &dyn Dom<R>) -> super::DomComPareResult {
+    fn compare(&self, dom: &dyn Dom<R>) -> DomComPareResult {
         if let Some(super_simple_button) = dom.as_any().downcast_ref::<Square>() {
             if self.size == super_simple_button.size
                 && self.background_color == super_simple_button.background_color
             {
-                super::DomComPareResult::Same
+                DomComPareResult::Same
             } else {
-                super::DomComPareResult::Changed
+                DomComPareResult::Changed
             }
         } else {
-            super::DomComPareResult::Different
+            DomComPareResult::Different
         }
     }
 }
 
-impl super::RenderingTrait for SquareNode {
+impl RenderingTrait for SquareNode {
     fn size(&self) -> Size {
         self.size
     }
@@ -193,7 +193,7 @@ impl super::RenderingTrait for SquareNode {
         _: &rayon::Scope,
         parent_size: crate::types::size::PxSize,
         affine: nalgebra::Matrix4<f32>,
-        encoder: &mut crate::renderer::RendererCommandEncoder,
+        encoder: &crate::renderer::RendererCommandEncoder,
     ) {
         let context = encoder.get_context();
 
@@ -206,8 +206,8 @@ impl super::RenderingTrait for SquareNode {
                 false,
             );
 
-            self.vertex_buffer = Some(Arc::new(vertex));
-            self.index_buffer = Some(Arc::new(index));
+            self.vertex_buffer = Some(vertex);
+            self.index_buffer = Some(index);
             self.index_len = index_len;
         }
 
@@ -220,25 +220,25 @@ impl super::RenderingTrait for SquareNode {
                 false,
             );
 
-            self.border_vertex_buffer = Some(Arc::new(vertex));
-            self.border_index_buffer = Some(Arc::new(index));
+            self.border_vertex_buffer = Some(vertex);
+            self.border_index_buffer = Some(index);
             self.border_index_len = index_len;
         }
 
         encoder.draw(
-            super::RenderItem {
+            RenderItem {
                 object: vec![
                     crate::ui::Object::Colored {
                         object_affine: nalgebra::Matrix4::identity(),
-                        vertex_buffer: self.vertex_buffer.as_ref().unwrap().clone(),
-                        index_buffer: self.index_buffer.as_ref().unwrap().clone(),
+                        vertex_buffer: self.vertex_buffer.as_ref().unwrap(),
+                        index_buffer: self.index_buffer.as_ref().unwrap(),
                         index_len: self.index_len,
                         color: self.background_color,
                     },
                     crate::ui::Object::Colored {
                         object_affine: nalgebra::Matrix4::identity(),
-                        vertex_buffer: self.border_vertex_buffer.as_ref().unwrap().clone(),
-                        index_buffer: self.border_index_buffer.as_ref().unwrap().clone(),
+                        vertex_buffer: self.border_vertex_buffer.as_ref().unwrap(),
+                        index_buffer: self.border_index_buffer.as_ref().unwrap(),
                         index_len: self.border_index_len,
                         color: self.border_color,
                     },

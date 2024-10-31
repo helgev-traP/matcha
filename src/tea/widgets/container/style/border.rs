@@ -1,5 +1,7 @@
 use crate::types::color::Color;
 
+/// # Border
+/// **Individual border radius are currently NOT supported.**
 #[derive(Debug, Clone)]
 pub struct Border {
     pub px: f32,
@@ -23,6 +25,7 @@ impl Default for Border {
     }
 }
 
+/// **Individual border radius are currently NOT supported.**
 #[macro_export] macro_rules! border {
     () => {
         Border {

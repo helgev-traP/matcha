@@ -168,10 +168,10 @@ impl GpuState<'_> {
             self.config.width = size.width;
             self.config.height = size.height;
             self.surface
-                .configure(&self.app_context.device, &self.config);
+                .configure(&self.app_context.get_wgpu_device(), &self.config);
 
             // Update the depth texture
-            self.depth_texture = self.app_context.device.create_texture(&wgpu::TextureDescriptor {
+            self.depth_texture = self.app_context.get_wgpu_device().create_texture(&wgpu::TextureDescriptor {
                 label: None,
                 size: wgpu::Extent3d {
                     width: size.width,
@@ -188,7 +188,7 @@ impl GpuState<'_> {
 
             // Update the multisampled texture
             self.multisampled_texture =
-                self.app_context.device.create_texture(&wgpu::TextureDescriptor {
+                self.app_context.get_wgpu_device().create_texture(&wgpu::TextureDescriptor {
                     label: None,
                     size: wgpu::Extent3d {
                         width: size.width,

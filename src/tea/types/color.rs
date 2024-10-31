@@ -36,6 +36,15 @@ macro_rules! convert_srgb_u8 {
 }
 
 impl Color {
+    pub fn is_transparent(&self) -> bool {
+        match self {
+            Color::Rgba8USrgb { a, .. } => *a == 0,
+            Color::RgbaF32 { a, .. } => *a <= 0.0,
+            Color::RgbaF64 { a, .. } => *a <= 0.0,
+            _ => false,
+        }
+    }
+
     pub fn to_rgba_u8(&self) -> [u8; 4] {
         match self {
             Color::Rgb8USrgb { r, g, b } => {

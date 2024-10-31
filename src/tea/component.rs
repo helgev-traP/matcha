@@ -9,17 +9,14 @@ use super::{
     ui::{Dom, DomComPareResult, RenderingTrait, Widget, WidgetTrait},
 };
 
-pub struct Component<Model, Message, OuterResponse, InnerResponse>
-{
+pub struct Component<Model, Message, OuterResponse, InnerResponse> {
     label: Option<String>,
 
     model: Arc<Mutex<Model>>,
     model_updated: Arc<Mutex<bool>>,
     fn_update: fn(ComponentAccess<Model>, Message),
-    fn_local_update: fn(
-        &ComponentAccess<Model>,
-        UiEventResult<InnerResponse>,
-    ) -> UiEventResult<OuterResponse>,
+    fn_local_update:
+        fn(&ComponentAccess<Model>, UiEventResult<InnerResponse>) -> UiEventResult<OuterResponse>,
     fn_view: fn(&Model) -> Box<dyn Dom<InnerResponse>>,
 
     render_tree: Option<Arc<Mutex<Box<dyn Widget<InnerResponse>>>>>,
@@ -154,10 +151,8 @@ where
 {
     label: Option<String>,
     component_model: ComponentAccess<Model>,
-    local_update_component: fn(
-        &ComponentAccess<Model>,
-        UiEventResult<InnerResponse>,
-    ) -> UiEventResult<OuterResponse>,
+    local_update_component:
+        fn(&ComponentAccess<Model>, UiEventResult<InnerResponse>) -> UiEventResult<OuterResponse>,
     render_tree: Arc<Mutex<Box<dyn Widget<InnerResponse>>>>,
 }
 
@@ -185,10 +180,8 @@ where
 pub struct ComponentRenderNode<Model, OuterResponse: 'static, InnerResponse: 'static> {
     label: Option<String>,
     component_model: ComponentAccess<Model>,
-    local_update_component: fn(
-        &ComponentAccess<Model>,
-        UiEventResult<InnerResponse>,
-    ) -> UiEventResult<OuterResponse>,
+    local_update_component:
+        fn(&ComponentAccess<Model>, UiEventResult<InnerResponse>) -> UiEventResult<OuterResponse>,
     node: Arc<Mutex<Box<dyn Widget<InnerResponse>>>>,
 }
 
@@ -212,8 +205,16 @@ impl<Model, O, I> WidgetTrait<O> for ComponentRenderNode<Model, O, I> {
         )
     }
 
-    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &ApplicationContext) -> bool {
-        self.node.lock().unwrap().is_inside(position, parent_size, context)
+    fn is_inside(
+        &self,
+        position: [f32; 2],
+        parent_size: PxSize,
+        context: &ApplicationContext,
+    ) -> bool {
+        self.node
+            .lock()
+            .unwrap()
+            .is_inside(position, parent_size, context)
     }
 
     fn compare(&self, _: &dyn Dom<O>) -> DomComPareResult {
@@ -245,7 +246,7 @@ impl<Model: Send, OuterResponse, InnerResponse> RenderingTrait
         s: &Scope,
         parent_size: PxSize,
         affine: nalgebra::Matrix4<f32>,
-        encoder: &mut super::renderer::RendererCommandEncoder,
+        encoder: &super::renderer::RendererCommandEncoder,
     ) {
         self.node
             .lock()
