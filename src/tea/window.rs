@@ -156,7 +156,7 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
 
         rayon::scope(|s| {
             encoder.clear(self.base_color);
-            render_tree.render(s, viewport_size, na::Matrix4::identity(), &mut encoder);
+            render_tree.render(s, viewport_size, na::Matrix4::identity(), &encoder);
         });
 
         encoder.finish().unwrap();

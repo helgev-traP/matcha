@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use crate::{
     application_context::ApplicationContext,
     cosmic,
@@ -10,11 +8,9 @@ use crate::{
         color::Color,
         size::{PxSize, Size, SizeUnit},
     },
-    ui::{Dom, Widget},
+    ui::{Dom, DomComPareResult, Object, RenderItem, RenderingTrait, Widget, WidgetTrait},
     vertex::textured_vertex::TexturedVertex,
 };
-
-use super::{Object, RenderItem};
 
 pub struct TextDescriptor {
     pub label: Option<String>,
@@ -98,16 +94,16 @@ pub struct TextNode {
 
     text_cursor: usize,
 
-    texture: Option<Arc<wgpu::Texture>>,
+    texture: Option<wgpu::Texture>,
     redraw_texture: bool,
 
-    vertex_buffer: Option<Arc<wgpu::Buffer>>,
-    index_buffer: Option<Arc<wgpu::Buffer>>,
+    vertex_buffer: Option<wgpu::Buffer>,
+    index_buffer: Option<wgpu::Buffer>,
     index_len: u32,
     reset_vertex: bool,
 }
 
-impl<T: Send + 'static> super::WidgetTrait<T> for TextNode {
+impl<T: Send + 'static> WidgetTrait<T> for TextNode {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
@@ -202,16 +198,16 @@ impl<T: Send + 'static> super::WidgetTrait<T> for TextNode {
         }
     }
 
-    fn compare(&self, dom: &dyn Dom<T>) -> super::DomComPareResult {
+    fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult {
         if let Some(_) = dom.as_any().downcast_ref::<Text>() {
             todo!()
         } else {
-            super::DomComPareResult::Different
+            DomComPareResult::Different
         }
     }
 }
 
-impl super::RenderingTrait for TextNode {
+impl RenderingTrait for TextNode {
     fn size(&self) -> Size {
         self.size
     }
@@ -232,7 +228,7 @@ impl super::RenderingTrait for TextNode {
         s: &rayon::Scope,
         parent_size: PxSize,
         affine: nalgebra::Matrix4<f32>,
-        encoder: &mut RendererCommandEncoder,
+        encoder: &RendererCommandEncoder,
     ) {
         if self.redraw_texture {
             let context = encoder.get_context();
@@ -240,7 +236,7 @@ impl super::RenderingTrait for TextNode {
 
             // allocate texture
             if self.texture.is_none() {
-                let texture = context.device.create_texture(&wgpu::TextureDescriptor {
+                let texture = context.get_wgpu_device().create_texture(&wgpu::TextureDescriptor {
                     size: wgpu::Extent3d {
                         width: current_size.width as u32,
                         height: current_size.height as u32,
@@ -292,8 +288,8 @@ impl super::RenderingTrait for TextNode {
                 false,
             );
 
-            self.vertex_buffer = Some(vertex_buffer.into());
-            self.index_buffer = Some(index_buffer.into());
+            self.vertex_buffer = Some(vertex_buffer);
+            self.index_buffer = Some(index_buffer);
             self.index_len = index_len;
 
             self.reset_vertex = false;
@@ -305,10 +301,10 @@ impl super::RenderingTrait for TextNode {
             RenderItem {
                 object: vec![Object::Textured {
                     object_affine: nalgebra::Matrix4::identity(),
-                    vertex_buffer: self.vertex_buffer.as_ref().unwrap().clone(),
-                    index_buffer: self.index_buffer.as_ref().unwrap().clone(),
+                    vertex_buffer: self.vertex_buffer.as_ref().unwrap(),
+                    index_buffer: self.index_buffer.as_ref().unwrap(),
                     index_len: self.index_len,
-                    texture: self.texture.as_ref().unwrap().clone(),
+                    texture: self.texture.as_ref().unwrap(),
                 }],
             },
             affine,

@@ -1,5 +1,5 @@
 use nalgebra as na;
-use std::{any::Any, sync::Arc};
+use std::any::Any;
 use wgpu::util::DeviceExt;
 use wgpu::ImageCopyTextureBase;
 
@@ -10,10 +10,9 @@ use crate::{
     application_context::ApplicationContext,
     events::UiEventResult,
     types::size::{PxSize, StdSize},
+    ui::{Dom, DomComPareResult, RenderItem, RenderingTrait, Widget, WidgetTrait},
     vertex::textured_vertex::TexturedVertex,
 };
-
-use super::{Dom, DomComPareResult, RenderItem, RenderingTrait, Widget, WidgetTrait};
 
 pub struct TeacupDescriptor {
     pub label: Option<String>,
@@ -110,9 +109,9 @@ pub struct TeacupRenderNode {
     visible: bool,
 
     // previous_size: Option<PxSize>,
-    texture: Option<Arc<wgpu::Texture>>,
-    vertex_buffer: Option<Arc<wgpu::Buffer>>,
-    index_buffer: Option<Arc<wgpu::Buffer>>,
+    texture: Option<wgpu::Texture>,
+    vertex_buffer: Option<wgpu::Buffer>,
+    index_buffer: Option<wgpu::Buffer>,
     index_len: u32,
 }
 
@@ -125,7 +124,12 @@ impl<R: 'static> WidgetTrait<R> for TeacupRenderNode {
         Default::default()
     }
 
-    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &ApplicationContext) -> bool {
+    fn is_inside(
+        &self,
+        position: [f32; 2],
+        parent_size: PxSize,
+        context: &ApplicationContext,
+    ) -> bool {
         let size = PxSize::from_size_parent_size(self.size, parent_size, context);
 
         if position[0] < self.position[0]
@@ -181,7 +185,7 @@ impl RenderingTrait for TeacupRenderNode {
         _: &rayon::Scope,
         parent_size: PxSize,
         affine: na::Matrix4<f32>,
-        encoder: &mut RendererCommandEncoder,
+        encoder: &RendererCommandEncoder,
     ) {
         let context = encoder.get_context();
         let device = context.get_wgpu_device();
@@ -254,7 +258,7 @@ impl RenderingTrait for TeacupRenderNode {
             // );
             // context.get_wgpu_queue().submit(Some(encoder.finish()));
 
-            self.texture = Some(Arc::new(texture));
+            self.texture = Some(texture);
         }
 
         // create / update vertex buffer
@@ -269,8 +273,8 @@ impl RenderingTrait for TeacupRenderNode {
                 false,
             );
 
-            self.vertex_buffer = Some(Arc::new(vertex));
-            self.index_buffer = Some(Arc::new(index));
+            self.vertex_buffer = Some(vertex);
+            self.index_buffer = Some(index);
             self.index_len = index_len;
         }
 
@@ -280,8 +284,8 @@ impl RenderingTrait for TeacupRenderNode {
             encoder.draw(
                 RenderItem {
                     object: vec![crate::ui::Object::Textured {
-                        vertex_buffer: self.vertex_buffer.as_ref().unwrap().clone(),
-                        index_buffer: self.index_buffer.as_ref().unwrap().clone(),
+                        vertex_buffer: self.vertex_buffer.as_ref().unwrap(),
+                        index_buffer: self.index_buffer.as_ref().unwrap(),
                         index_len: self.index_len,
                         texture: self.texture.as_ref().unwrap().clone(),
                         object_affine: na::Matrix4::identity(),
@@ -297,14 +301,16 @@ impl RenderingTrait for TeacupRenderNode {
                         -size.height / 2.0,
                         0.0,
                     ))
-                    * nalgebra::Matrix4::new_rotation(
-                        nalgebra::Vector3::new(0.0, 0.0, self.rotate.to_radians()),
-                    )
-                *nalgebra::Matrix4::new_translation(&na::Vector3::new(
-                    -size.width / 2.0,
-                    size.height / 2.0,
-                    0.0,
-                )),
+                    * nalgebra::Matrix4::new_rotation(nalgebra::Vector3::new(
+                        0.0,
+                        0.0,
+                        self.rotate.to_radians(),
+                    ))
+                    * nalgebra::Matrix4::new_translation(&na::Vector3::new(
+                        -size.width / 2.0,
+                        size.height / 2.0,
+                        0.0,
+                    )),
             );
         }
     }

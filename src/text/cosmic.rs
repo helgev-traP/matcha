@@ -88,7 +88,7 @@ impl FontContext {
     }
 
     pub fn render(
-        &mut self,
+        &self,
         text: &str,
         atr: RenderAttribute,
         texture: &TextureAttributeGpu,

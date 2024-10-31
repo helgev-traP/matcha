@@ -82,10 +82,16 @@ impl Size {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PxSize {
     pub width: f32,
     pub height: f32,
+}
+
+impl Default for PxSize {
+    fn default() -> Self {
+        PxSize { width: 0.0, height: 0.0 }
+    }
 }
 
 impl PxSize {
