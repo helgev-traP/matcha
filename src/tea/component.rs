@@ -1,10 +1,9 @@
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use rayon::Scope;
-
 use super::{
     application_context::ApplicationContext,
     events::UiEventResult,
+    renderer::RendererCommandEncoder,
     types::size::PxSize,
     ui::{Dom, DomComPareResult, RenderingTrait, Widget, WidgetTrait},
 };
@@ -241,16 +240,18 @@ impl<Model: Send, OuterResponse, InnerResponse> RenderingTrait
         self.node.lock().unwrap().default_size()
     }
 
-    fn render(
-        &mut self,
-        s: &Scope,
+    fn render<'a, 'scope>(
+        &'a mut self,
+        s: &rayon::Scope<'scope>,
         parent_size: PxSize,
         affine: nalgebra::Matrix4<f32>,
-        encoder: &super::renderer::RendererCommandEncoder,
-    ) {
-        self.node
-            .lock()
-            .unwrap()
-            .render(s, parent_size, affine, encoder)
+        encoder: RendererCommandEncoder<'a>,
+    ) where
+        'a: 'scope,
+    {
+        let node = self.node.clone();
+        rayon::scope(|s| {
+            node.lock().unwrap().render(s, parent_size, affine, encoder);
+        });
     }
 }

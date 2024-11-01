@@ -1,17 +1,13 @@
 use std::sync::Arc;
 
 use crate::{
-    application_context::ApplicationContext,
-    events::UiEvent,
-    types::{
+    application_context::ApplicationContext, events::UiEvent, renderer::RendererCommandEncoder, types::{
         color::Color,
         size::{PxSize, Size, SizeUnit},
-    },
-    ui::{Dom, DomComPareResult, RenderItem, RenderingTrait, Widget, WidgetTrait},
-    vertex::{
+    }, ui::{Dom, DomComPareResult, RenderItem, RenderingTrait, Widget, WidgetTrait}, vertex::{
         colored_vertex::ColoredVertex,
         vertex_generator::{BorderDescriptor, RectangleDescriptor},
-    },
+    }
 };
 
 pub struct SquareDescriptor {
@@ -98,12 +94,12 @@ pub struct SquareNode {
 
     // box
     vertex_buffer: Option<wgpu::Buffer>,
-    index_buffer:  Option<wgpu::Buffer>,
+    index_buffer: Option<wgpu::Buffer>,
     index_len: u32,
 
     // border
     border_vertex_buffer: Option<wgpu::Buffer>,
-    border_index_buffer:  Option<wgpu::Buffer>,
+    border_index_buffer: Option<wgpu::Buffer>,
     border_index_len: u32,
 }
 
@@ -188,13 +184,15 @@ impl RenderingTrait for SquareNode {
         }
     }
 
-    fn render(
-        &mut self,
-        _: &rayon::Scope,
-        parent_size: crate::types::size::PxSize,
+    fn render<'a, 'scope>(
+        &'a mut self,
+        s: &rayon::Scope<'scope>,
+        parent_size: PxSize,
         affine: nalgebra::Matrix4<f32>,
-        encoder: &crate::renderer::RendererCommandEncoder,
-    ) {
+        encoder: RendererCommandEncoder<'a>,
+    ) where
+        'a: 'scope,
+    {
         let context = encoder.get_context();
 
         let size = self.size.to_px(parent_size, context);

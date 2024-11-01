@@ -158,13 +158,15 @@ impl<R> RenderingTrait for ColumnRenderNode<R> {
         }
     }
 
-    fn render(
-        &mut self,
-        s: &rayon::Scope,
+    fn render<'a, 'scope>(
+        &'a mut self,
+        s: &rayon::Scope<'scope>,
         parent_size: PxSize,
         affine: nalgebra::Matrix4<f32>,
-        encoder: &RendererCommandEncoder,
-    ) {
+        encoder: RendererCommandEncoder<'a>,
+    )
+    where 'a: 'scope
+    {
         let current_size = self.px_size(parent_size, encoder.get_context());
 
         let mut accumulated_height: f32 = 0.0;
@@ -173,7 +175,10 @@ impl<R> RenderingTrait for ColumnRenderNode<R> {
             let child_affine =
                 na::Matrix4::new_translation(&na::Vector3::new(0.0, -accumulated_height, 0.0))
                     * affine;
-            child.render(s, child_px_size, child_affine, encoder);
+            let encoder = encoder.clone();
+            s.spawn(move |s| {
+                child.render(s, child_px_size, child_affine, encoder);
+            });
             accumulated_height += child_px_size.height;
         }
     }

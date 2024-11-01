@@ -223,33 +223,37 @@ impl RenderingTrait for TextNode {
         }
     }
 
-    fn render(
-        &mut self,
-        s: &rayon::Scope,
+    fn render<'a, 'scope>(
+        &'a mut self,
+        s: &rayon::Scope<'scope>,
         parent_size: PxSize,
         affine: nalgebra::Matrix4<f32>,
-        encoder: &RendererCommandEncoder,
-    ) {
+        encoder: RendererCommandEncoder<'a>,
+    ) where
+        'a: 'scope,
+    {
         if self.redraw_texture {
             let context = encoder.get_context();
             let current_size = self.size.to_px(parent_size, context);
 
             // allocate texture
             if self.texture.is_none() {
-                let texture = context.get_wgpu_device().create_texture(&wgpu::TextureDescriptor {
-                    size: wgpu::Extent3d {
-                        width: current_size.width as u32,
-                        height: current_size.height as u32,
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                    usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
-                    label: Some("Text Texture"),
-                    view_formats: &[],
-                });
+                let texture = context
+                    .get_wgpu_device()
+                    .create_texture(&wgpu::TextureDescriptor {
+                        size: wgpu::Extent3d {
+                            width: current_size.width as u32,
+                            height: current_size.height as u32,
+                            depth_or_array_layers: 1,
+                        },
+                        mip_level_count: 1,
+                        sample_count: 1,
+                        dimension: wgpu::TextureDimension::D2,
+                        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                        usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
+                        label: Some("Text Texture"),
+                        view_formats: &[],
+                    });
 
                 self.texture = Some(texture.into());
             }

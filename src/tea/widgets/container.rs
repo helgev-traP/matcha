@@ -1,3 +1,4 @@
+use layout::LayoutNode;
 use nalgebra as na;
 
 use crate::{
@@ -15,7 +16,7 @@ pub use style::{Style, Visibility};
 pub mod layout;
 pub use layout::Layout;
 
-pub struct ContainerDescriptor<T> {
+pub struct ContainerDescriptor<T: 'static> {
     pub label: Option<String>,
     pub properties: Style,
     pub layout: Layout<T>,
@@ -31,7 +32,7 @@ impl<T> Default for ContainerDescriptor<T> {
     }
 }
 
-pub struct Container<T> {
+pub struct Container<T: 'static> {
     label: Option<String>,
     properties: Style,
     layout: Layout<T>,
@@ -52,11 +53,7 @@ impl<T: Send + 'static> Dom<T> for Container<T> {
         Box::new(ContainerNode {
             label: self.label.clone(),
             properties: self.properties.clone(),
-            children: self
-                .children
-                .iter()
-                .map(|child| child.build_render_tree())
-                .collect(),
+            layout: self.layout.build(),
             box_vertex_buffer: None,
             box_index_buffer: None,
             box_index_len: 0,
@@ -72,7 +69,7 @@ pub struct ContainerNode<T> {
     // entity info
     label: Option<String>,
     properties: Style,
-    children: Vec<Box<dyn Widget<T>>>,
+    layout: LayoutNode<T>,
 
     // rendering
     box_vertex_buffer: Option<wgpu::Buffer>,
@@ -137,13 +134,15 @@ impl<T> RenderingTrait for ContainerNode<T> {
         }
     }
 
-    fn render(
-        &mut self,
-        s: &rayon::Scope,
+    fn render<'a, 'scope>(
+        &'a mut self,
+        s: &rayon::Scope<'scope>,
         parent_size: PxSize,
         affine: nalgebra::Matrix4<f32>,
-        encoder: &mut RendererCommandEncoder,
-    ) {
+        encoder: RendererCommandEncoder<'a>,
+    ) where
+        'a: 'scope,
+    {
         if let Visibility::Visible = self.properties.visibility {
             // render box
             if !self.properties.background_color.is_transparent() {

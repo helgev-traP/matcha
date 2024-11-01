@@ -210,11 +210,11 @@ impl Renderer {
         }
     }
 
-    pub fn encoder(
-        &mut self,
-        target_texture_view: wgpu::TextureView,
-        multisampled_texture_view: wgpu::TextureView,
-        depth_texture_view: wgpu::TextureView,
+    pub fn encoder<'a>(
+        &'a mut self,
+        target_texture_view: &'a wgpu::TextureView,
+        multisampled_texture_view: &'a wgpu::TextureView,
+        depth_texture_view: &'a wgpu::TextureView,
         size: PxSize,
     ) -> RendererCommandEncoder {
         let encoder = Arc::new(Mutex::new(self.app_context.get_wgpu_encoder()));
@@ -230,9 +230,9 @@ impl Renderer {
             colored_render_pipeline: &self.colored_render_pipeline,
             affine_bind_group_layout: &self.affine_bind_group_layout,
             encoder,
-            target_texture_view,
-            multisampled_texture_view,
-            depth_texture_view,
+            target_texture_view: &target_texture_view,
+            multisampled_texture_view: &multisampled_texture_view,
+            depth_texture_view: &depth_texture_view,
             normalizer,
         }
     }
@@ -257,12 +257,31 @@ pub struct RendererCommandEncoder<'a> {
 
     // encoder
     encoder: Arc<Mutex<wgpu::CommandEncoder>>,
-    target_texture_view: wgpu::TextureView,
-    multisampled_texture_view: wgpu::TextureView,
-    depth_texture_view: wgpu::TextureView,
+    target_texture_view: &'a wgpu::TextureView,
+    multisampled_texture_view: &'a wgpu::TextureView,
+    depth_texture_view: &'a wgpu::TextureView,
 
     // linear transformation
     normalizer: na::Matrix4<f32>,
+}
+
+impl Clone for RendererCommandEncoder<'_> {
+    fn clone(&self) -> Self {
+        Self {
+            app_context: self.app_context,
+            size: self.size,
+            texture_bind_group_layout: self.texture_bind_group_layout,
+            textured_render_pipeline: self.textured_render_pipeline,
+            color_bind_group_layout: self.color_bind_group_layout,
+            colored_render_pipeline: self.colored_render_pipeline,
+            affine_bind_group_layout: self.affine_bind_group_layout,
+            encoder: Arc::clone(&self.encoder),
+            target_texture_view: self.target_texture_view,
+            multisampled_texture_view: self.multisampled_texture_view,
+            depth_texture_view: self.depth_texture_view,
+            normalizer: self.normalizer,
+        }
+    }
 }
 
 impl<'a> RendererCommandEncoder<'a> {

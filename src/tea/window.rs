@@ -144,19 +144,25 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
 
         // multisample texture
         let multisampled_texture = self.gpu_state.as_ref().unwrap().get_multisampled_texture();
-        let multisampled_texture_view = multisampled_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let multisampled_texture_view =
+            multisampled_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         // viewport size
         let viewport_size = self.gpu_state.as_ref().unwrap().get_viewport_size();
 
         // render
         let render = self.render.as_mut().unwrap();
-        let mut encoder = render.encoder(surface_texture_view, multisampled_texture_view, depth_texture_view, viewport_size);
+        let mut encoder = render.encoder(
+            &surface_texture_view,
+            &multisampled_texture_view,
+            &depth_texture_view,
+            viewport_size,
+        );
         let render_tree = self.render_tree.as_mut().unwrap().for_rendering();
 
         rayon::scope(|s| {
             encoder.clear(self.base_color);
-            render_tree.render(s, viewport_size, na::Matrix4::identity(), &encoder);
+            render_tree.render(s, viewport_size, na::Matrix4::identity(), encoder.clone());
         });
 
         encoder.finish().unwrap();
@@ -326,7 +332,12 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
                 event,
                 is_synthetic,
             } => {
-                if let Some(event) = self.keyboard_state.as_mut().unwrap().key_event(self.frame, event) {
+                if let Some(event) = self
+                    .keyboard_state
+                    .as_mut()
+                    .unwrap()
+                    .key_event(self.frame, event)
+                {
                     event
                 } else {
                     return;
