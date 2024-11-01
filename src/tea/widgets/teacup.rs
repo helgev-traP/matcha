@@ -180,13 +180,15 @@ impl<R: 'static> WidgetTrait<R> for TeacupRenderNode {
 }
 
 impl RenderingTrait for TeacupRenderNode {
-    fn render(
-        &mut self,
-        _: &rayon::Scope,
+    fn render<'a, 'scope>(
+        &'a mut self,
+        s: &rayon::Scope<'scope>,
         parent_size: PxSize,
-        affine: na::Matrix4<f32>,
-        encoder: &RendererCommandEncoder,
-    ) {
+        affine: nalgebra::Matrix4<f32>,
+        encoder: RendererCommandEncoder<'a>,
+    ) where
+        'a: 'scope,
+    {
         let context = encoder.get_context();
         let device = context.get_wgpu_device();
 

@@ -172,13 +172,14 @@ impl<T> RenderingTrait for DragFieldNode<T> {
         }
     }
 
-    fn render(
-        &mut self,
-        s: &rayon::Scope,
+    fn render<'a, 'scope>(
+        &'a mut self,
+        s: &rayon::Scope<'scope>,
         parent_size: PxSize,
         affine: nalgebra::Matrix4<f32>,
-        encoder: &RendererCommandEncoder,
-    ) {
+        encoder: RendererCommandEncoder<'a>,
+    )
+    where 'a: 'scope{
         let current_size = self.size.to_px(parent_size, encoder.get_context());
 
         let item_position_matrix = if let Some(drag_delta) = self.drag_delta {

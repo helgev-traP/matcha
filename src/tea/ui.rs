@@ -104,11 +104,12 @@ pub trait RenderingTrait: Send {
     /// Default size of widget with pixel value.
     fn default_size(&self) -> PxSize;
 
-    fn render(
-        &mut self,
-        s: &rayon::Scope,
+    fn render<'a, 'scope>(
+        &'a mut self,
+        s: &rayon::Scope<'scope>,
         parent_size: PxSize,
         affine: na::Matrix4<f32>,
-        encoder: &RendererCommandEncoder,
-    );
+        encoder: RendererCommandEncoder<'a>,
+    ) where
+        'a: 'scope;
 }

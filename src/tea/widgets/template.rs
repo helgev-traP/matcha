@@ -69,7 +69,12 @@ impl<T: Send + 'static> WidgetTrait<T> for TemplateNode {
         todo!()
     }
 
-    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &ApplicationContext) -> bool {
+    fn is_inside(
+        &self,
+        position: [f32; 2],
+        parent_size: PxSize,
+        context: &ApplicationContext,
+    ) -> bool {
         todo!()
     }
 
@@ -107,13 +112,15 @@ impl RenderingTrait for TemplateNode {
         }
     }
 
-    fn render(
-        &mut self,
-        s: &rayon::Scope,
+    fn render<'a, 'scope>(
+        &'a mut self,
+        s: &rayon::Scope<'scope>,
         parent_size: PxSize,
         affine: nalgebra::Matrix4<f32>,
-        encoder: &RendererCommandEncoder,
-    ) {
+        encoder: RendererCommandEncoder<'a>,
+    ) where
+        'a: 'scope,
+    {
         todo!()
     }
 }
