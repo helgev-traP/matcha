@@ -94,7 +94,7 @@ pub enum DomComPareResult {
     Different,
 }
 
-pub trait RenderingTrait: Send {
+pub trait RenderingTrait {
     /// The size configuration of the widget.
     fn size(&self) -> Size;
 
@@ -104,12 +104,10 @@ pub trait RenderingTrait: Send {
     /// Default size of widget with pixel value.
     fn default_size(&self) -> PxSize;
 
-    fn render<'a, 'scope>(
-        &'a mut self,
-        s: &rayon::Scope<'scope>,
+    fn render(
+        &mut self,
         parent_size: PxSize,
         affine: na::Matrix4<f32>,
-        encoder: RendererCommandEncoder<'a>,
-    ) where
-        'a: 'scope;
+        encoder: RendererCommandEncoder,
+    );
 }

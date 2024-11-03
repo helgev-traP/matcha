@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::{cell::RefCell, rc::Rc, sync::{Arc, Mutex, MutexGuard}};
 
 use super::{
     application_context::ApplicationContext,
@@ -18,7 +18,7 @@ pub struct Component<Model, Message, OuterResponse, InnerResponse> {
         fn(&ComponentAccess<Model>, UiEventResult<InnerResponse>) -> UiEventResult<OuterResponse>,
     fn_view: fn(&Model) -> Box<dyn Dom<InnerResponse>>,
 
-    render_tree: Option<Arc<Mutex<Box<dyn Widget<InnerResponse>>>>>,
+    render_tree: Option<Rc<RefCell<Box<dyn Widget<InnerResponse>>>>>,
 }
 
 impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'static>
@@ -92,12 +92,12 @@ impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'sta
         let dom = (self.fn_view)(&*self.model.lock().unwrap());
 
         if let Some(ref mut render_tree) = self.render_tree {
-            if let Ok(_) = render_tree.lock().unwrap().update_render_tree(&*dom) {
+            if let Ok(_) = render_tree.borrow_mut().update_render_tree(&*dom) {
                 return;
             }
-            self.render_tree = Some(Arc::new(Mutex::new(dom.build_render_tree())));
+            self.render_tree = Some(Rc::new(RefCell::new(dom.build_render_tree())));
         } else {
-            self.render_tree = Some(Arc::new(Mutex::new(dom.build_render_tree())));
+            self.render_tree = Some(Rc::new(RefCell::new(dom.build_render_tree())));
         }
     }
 
@@ -152,7 +152,7 @@ where
     component_model: ComponentAccess<Model>,
     local_update_component:
         fn(&ComponentAccess<Model>, UiEventResult<InnerResponse>) -> UiEventResult<OuterResponse>,
-    render_tree: Arc<Mutex<Box<dyn Widget<InnerResponse>>>>,
+    render_tree: Rc<RefCell<Box<dyn Widget<InnerResponse>>>>,
 }
 
 impl<Model: Send, OuterResponse, InnerResponse> Dom<OuterResponse>
@@ -181,7 +181,7 @@ pub struct ComponentRenderNode<Model, OuterResponse: 'static, InnerResponse: 'st
     component_model: ComponentAccess<Model>,
     local_update_component:
         fn(&ComponentAccess<Model>, UiEventResult<InnerResponse>) -> UiEventResult<OuterResponse>,
-    node: Arc<Mutex<Box<dyn Widget<InnerResponse>>>>,
+    node: Rc<RefCell<Box<dyn Widget<InnerResponse>>>>,
 }
 
 impl<Model, O, I> WidgetTrait<O> for ComponentRenderNode<Model, O, I> {
@@ -198,8 +198,7 @@ impl<Model, O, I> WidgetTrait<O> for ComponentRenderNode<Model, O, I> {
         (self.local_update_component)(
             &self.component_model,
             self.node
-                .lock()
-                .unwrap()
+                .borrow_mut()
                 .widget_event(event, parent_size, context),
         )
     }
@@ -211,8 +210,7 @@ impl<Model, O, I> WidgetTrait<O> for ComponentRenderNode<Model, O, I> {
         context: &ApplicationContext,
     ) -> bool {
         self.node
-            .lock()
-            .unwrap()
+            .borrow()
             .is_inside(position, parent_size, context)
     }
 
@@ -229,29 +227,24 @@ impl<Model: Send, OuterResponse, InnerResponse> RenderingTrait
     for ComponentRenderNode<Model, OuterResponse, InnerResponse>
 {
     fn size(&self) -> super::types::size::Size {
-        self.node.lock().unwrap().size()
+        self.node.borrow().size()
     }
 
     fn px_size(&self, parent_size: PxSize, context: &ApplicationContext) -> PxSize {
-        self.node.lock().unwrap().px_size(parent_size, context)
+        self.node.borrow().px_size(parent_size, context)
     }
 
     fn default_size(&self) -> super::types::size::PxSize {
-        self.node.lock().unwrap().default_size()
+        self.node.borrow().default_size()
     }
 
-    fn render<'a, 'scope>(
-        &'a mut self,
-        s: &rayon::Scope<'scope>,
+    fn render(
+        &mut self,
         parent_size: PxSize,
         affine: nalgebra::Matrix4<f32>,
-        encoder: RendererCommandEncoder<'a>,
-    ) where
-        'a: 'scope,
+        encoder: RendererCommandEncoder,
+    )
     {
-        let node = self.node.clone();
-        rayon::scope(|s| {
-            node.lock().unwrap().render(s, parent_size, affine, encoder);
-        });
+        self.node.borrow_mut().render(parent_size, affine, encoder);
     }
 }
