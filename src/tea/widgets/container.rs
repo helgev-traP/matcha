@@ -134,14 +134,12 @@ impl<T> RenderingTrait for ContainerNode<T> {
         }
     }
 
-    fn render<'a, 'scope>(
-        &'a mut self,
-        s: &rayon::Scope<'scope>,
+    fn render(
+        &mut self,
         parent_size: PxSize,
-        affine: nalgebra::Matrix4<f32>,
-        encoder: RendererCommandEncoder<'a>,
-    ) where
-        'a: 'scope,
+        affine: na::Matrix4<f32>,
+        encoder: RendererCommandEncoder,
+    )
     {
         if let Visibility::Visible = self.properties.visibility {
             // render box

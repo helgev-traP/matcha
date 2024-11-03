@@ -88,7 +88,8 @@ impl<R: 'static> WidgetTrait<R> for ColumnRenderNode<R> {
         parent_size: PxSize,
         context: &ApplicationContext,
     ) -> bool {
-        todo!()
+        // todo
+        true
     }
 
     fn update_render_tree(&mut self, dom: &dyn Dom<R>) -> Result<(), ()> {
@@ -158,15 +159,12 @@ impl<R> RenderingTrait for ColumnRenderNode<R> {
         }
     }
 
-    fn render<'a, 'scope>(
-        &'a mut self,
-        s: &rayon::Scope<'scope>,
+    fn render(
+        &mut self,
         parent_size: PxSize,
-        affine: nalgebra::Matrix4<f32>,
-        encoder: RendererCommandEncoder<'a>,
-    )
-    where 'a: 'scope
-    {
+        affine: na::Matrix4<f32>,
+        encoder: RendererCommandEncoder,
+    ) {
         let current_size = self.px_size(parent_size, encoder.get_context());
 
         let mut accumulated_height: f32 = 0.0;
@@ -176,9 +174,9 @@ impl<R> RenderingTrait for ColumnRenderNode<R> {
                 na::Matrix4::new_translation(&na::Vector3::new(0.0, -accumulated_height, 0.0))
                     * affine;
             let encoder = encoder.clone();
-            s.spawn(move |s| {
-                child.render(s, child_px_size, child_affine, encoder);
-            });
+
+            child.render(child_px_size, child_affine, encoder);
+
             accumulated_height += child_px_size.height;
         }
     }

@@ -223,14 +223,12 @@ impl RenderingTrait for TextNode {
         }
     }
 
-    fn render<'a, 'scope>(
-        &'a mut self,
-        s: &rayon::Scope<'scope>,
+    fn render(
+        &mut self,
         parent_size: PxSize,
         affine: nalgebra::Matrix4<f32>,
-        encoder: RendererCommandEncoder<'a>,
-    ) where
-        'a: 'scope,
+        encoder: RendererCommandEncoder,
+    )
     {
         if self.redraw_texture {
             let context = encoder.get_context();
