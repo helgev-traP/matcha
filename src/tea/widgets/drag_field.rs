@@ -82,9 +82,12 @@ impl<T: Send + 'static> WidgetTrait<T> for DragFieldNode<T> {
                         crate::events::ElementState::Pressed(_) => {
                             // todo: check if the cursor is inside the item
                             if self.item.is_inside(
-                                [position[0] - self.item_position[0], position[1] - self.item_position[1]],
+                                [
+                                    position[0] - self.item_position[0],
+                                    position[1] - self.item_position[1],
+                                ],
                                 parent_size,
-                                context
+                                context,
                             ) {
                                 self.drag_delta = Some([0.0, 0.0]);
                             }
@@ -172,14 +175,12 @@ impl<T> RenderingTrait for DragFieldNode<T> {
         }
     }
 
-    fn render<'a, 'scope>(
-        &'a mut self,
-        s: &rayon::Scope<'scope>,
+    fn render(
+        &mut self,
         parent_size: PxSize,
-        affine: nalgebra::Matrix4<f32>,
-        encoder: RendererCommandEncoder<'a>,
-    )
-    where 'a: 'scope{
+        affine: na::Matrix4<f32>,
+        encoder: RendererCommandEncoder,
+    ) {
         let current_size = self.size.to_px(parent_size, encoder.get_context());
 
         let item_position_matrix = if let Some(drag_delta) = self.drag_delta {
@@ -197,6 +198,6 @@ impl<T> RenderingTrait for DragFieldNode<T> {
         };
 
         self.item
-            .render(s, current_size, item_position_matrix * affine, encoder);
+            .render(current_size, item_position_matrix * affine, encoder);
     }
 }

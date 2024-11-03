@@ -160,9 +160,7 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
 
         // render
 
-        #[cfg(debug_assertions)] // benchmark timer start ----------------------------------
-        self.benchmark.as_mut().unwrap().start();
-
+        // make encoder
         let render = self.render.as_mut().unwrap();
         let encoder = render.encoder(
             &surface_texture_view,
@@ -170,12 +168,14 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
             &depth_texture_view,
             viewport_size,
         );
-        let render_tree = self.render_tree.as_mut().unwrap().for_rendering();
 
-        rayon::scope(|s| {
-            encoder.clear(self.base_color);
-            render_tree.render(s, viewport_size, na::Matrix4::identity(), encoder.clone());
-        });
+        // encode render tree
+        let render_tree = self.render_tree.as_mut().unwrap().for_rendering();
+        encoder.clear(self.base_color);
+        render_tree.render(viewport_size, na::Matrix4::identity(), encoder.clone());
+
+        #[cfg(debug_assertions)] // benchmark timer start ----------------------------------
+        self.benchmark.as_mut().unwrap().start();
 
         encoder.finish().unwrap();
 
@@ -188,7 +188,8 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
         // print frame (debug)
         #[cfg(debug_assertions)]
         {
-            print!("\rframe rendering time: {}, average: {}, max in second: {} | frame: {}",
+            print!(
+                "\rframe rendering time: {}, average: {}, max in second: {} | frame: {}",
                 self.benchmark.as_ref().unwrap().last_time(),
                 self.benchmark.as_ref().unwrap().average_time(),
                 self.benchmark.as_ref().unwrap().max_time(),

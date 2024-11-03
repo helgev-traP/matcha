@@ -90,7 +90,8 @@ impl<R> WidgetTrait<R> for RowRenderNode<R> {
         parent_size: PxSize,
         context: &ApplicationContext,
     ) -> bool {
-        todo!()
+        // todo: inside check
+        true
     }
 
     fn update_render_tree(&mut self, dom: &dyn Dom<R>) -> Result<(), ()> {
@@ -162,14 +163,12 @@ impl<R: Send + 'static> RenderingTrait for RowRenderNode<R> {
         }
     }
 
-    fn render<'a, 'scope>(
-        &'a mut self,
-        s: &rayon::Scope<'scope>,
+    fn render(
+        &mut self,
         parent_size: PxSize,
-        affine: nalgebra::Matrix4<f32>,
-        encoder: RendererCommandEncoder<'a>,
-    )
-    where 'a: 'scope{
+        affine: na::Matrix4<f32>,
+        encoder: RendererCommandEncoder,
+    ) {
         let current_size = self.px_size(parent_size, encoder.get_context());
 
         let mut accumulated_width: f32 = 0.0;
@@ -179,9 +178,9 @@ impl<R: Send + 'static> RenderingTrait for RowRenderNode<R> {
                 na::Matrix4::new_translation(&na::Vector3::new(accumulated_width, 0.0, 0.0))
                     * affine;
             let encoder = encoder.clone();
-            s.spawn(move |s| {
-                child.render(s, current_size, child_affine, encoder);
-            });
+
+            child.render(current_size, child_affine, encoder);
+
             accumulated_width += child_px_size.width;
         }
     }
