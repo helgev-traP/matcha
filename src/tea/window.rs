@@ -56,7 +56,6 @@ pub struct Window<'a, Model: Send + 'static, Message: 'static> {
     keyboard_state: Option<keyboard_state::KeyboardState>,
 
     // --- benchmark ---
-    #[cfg(debug_assertions)]
     benchmark: Option<benchmark::Benchmark>,
 }
 
@@ -82,7 +81,6 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
             mouse_primary_button: winit::event::MouseButton::Left,
             scroll_pixel_per_line: 40.0,
             keyboard_state: None,
-            // #[cfg(debug_assertions)]
             benchmark: None,
         }
     }
@@ -169,24 +167,23 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
             viewport_size,
         );
 
+        // benchmark timer start ----------------------------------
+        self.benchmark.as_mut().unwrap().start();
+
         // encode render tree
         let render_tree = self.render_tree.as_mut().unwrap().for_rendering();
         encoder.clear(self.base_color);
         render_tree.render(viewport_size, na::Matrix4::identity(), encoder.clone());
 
-        #[cfg(debug_assertions)] // benchmark timer start ----------------------------------
-        self.benchmark.as_mut().unwrap().start();
-
         encoder.finish().unwrap();
 
-        #[cfg(debug_assertions)] // benchmark timer stop -----------------------------------
+        // benchmark timer stop -----------------------------------
         self.benchmark.as_mut().unwrap().stop();
 
         // present
         surface.present();
 
         // print frame (debug)
-        #[cfg(debug_assertions)]
         {
             print!(
                 "\rframe rendering time: {}, average: {}, max in second: {} | frame: {}",
@@ -259,7 +256,6 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
 
         // prepare benchmark
 
-        #[cfg(debug_assertions)]
         {
             let rate = self
                 .winit_window
