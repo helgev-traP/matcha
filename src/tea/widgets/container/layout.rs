@@ -239,10 +239,9 @@ impl<T> LayoutNode<T> {
 
     pub fn render(
         &mut self,
-        s: &rayon::Scope,
         parent_size: PxSize,
         affine: na::Matrix4<f32>,
-        encoder: &mut RendererCommandEncoder,
+        encoder: RendererCommandEncoder,
     ) {
         match &self {
             LayoutNode::Flex { size, .. } | LayoutNode::Grid { size, .. } => {
@@ -262,12 +261,11 @@ impl<T> LayoutNode<T> {
                 justify_content,
                 align_content,
                 size,
-                item_cache_valid
+                item_cache_valid,
             } => {
                 if *item_cache_valid {
                     // render as cache
-                    for item in item {
-                    }
+                    for item in item {}
                 }
             }
             LayoutNode::Grid {
@@ -277,7 +275,7 @@ impl<T> LayoutNode<T> {
                 gap_columns,
                 gap_rows,
                 size,
-                item_cache_valid
+                item_cache_valid,
             } => todo!(),
         }
     }

@@ -13,6 +13,8 @@ mod gpu_state;
 mod keyboard_state;
 mod mouse_state;
 
+mod benchmark;
+
 pub struct Window<'a, Model: Send + 'static, Message: 'static> {
     // --- rendering context ---
     // boot status
@@ -52,6 +54,9 @@ pub struct Window<'a, Model: Send + 'static, Message: 'static> {
 
     // keyboard
     keyboard_state: Option<keyboard_state::KeyboardState>,
+
+    // --- benchmark ---
+    benchmark: Option<benchmark::Benchmark>,
 }
 
 // setup
@@ -76,6 +81,7 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
             mouse_primary_button: winit::event::MouseButton::Left,
             scroll_pixel_per_line: 40.0,
             keyboard_state: None,
+            benchmark: None,
         }
     }
 
@@ -151,33 +157,41 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
         let viewport_size = self.gpu_state.as_ref().unwrap().get_viewport_size();
 
         // render
+
+        // make encoder
         let render = self.render.as_mut().unwrap();
-        let mut encoder = render.encoder(
+        let encoder = render.encoder(
             &surface_texture_view,
             &multisampled_texture_view,
             &depth_texture_view,
             viewport_size,
         );
-        let render_tree = self.render_tree.as_mut().unwrap().for_rendering();
 
-        rayon::scope(|s| {
-            encoder.clear(self.base_color);
-            render_tree.render(s, viewport_size, na::Matrix4::identity(), encoder.clone());
-        });
+        // benchmark timer start ----------------------------------
+        self.benchmark.as_mut().unwrap().start();
+
+        // encode render tree
+        let render_tree = self.render_tree.as_mut().unwrap().for_rendering();
+        encoder.clear(self.base_color);
+        render_tree.render(viewport_size, na::Matrix4::identity(), encoder.clone());
 
         encoder.finish().unwrap();
+
+        // benchmark timer stop -----------------------------------
+        self.benchmark.as_mut().unwrap().stop();
 
         // present
         surface.present();
 
         // print frame (debug)
-        #[cfg(debug_assertions)]
         {
             print!(
-                "{}",
-                "\x08".to_string().repeat(self.frame.to_string().len() + 7),
+                "\rframe rendering time: {}, average: {}, max in second: {} | frame: {}",
+                self.benchmark.as_ref().unwrap().last_time(),
+                self.benchmark.as_ref().unwrap().average_time(),
+                self.benchmark.as_ref().unwrap().max_time(),
+                self.frame,
             );
-            print!("frame: {}", self.frame);
             // flush
             std::io::Write::flush(&mut std::io::stdout()).unwrap();
         }
@@ -239,6 +253,21 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
         // todo: calculate double click and long press duration from monitor refresh rate
         self.mouse_state = Some(mouse_state::MouseState::new(12, 60).unwrap());
         self.keyboard_state = Some(keyboard_state::KeyboardState::new());
+
+        // prepare benchmark
+
+        {
+            let rate = self
+                .winit_window
+                .as_ref()
+                .unwrap()
+                .current_monitor()
+                .unwrap()
+                .refresh_rate_millihertz()
+                .unwrap();
+            println!("Monitor refresh rate: {}.{} Hz", rate / 1000, rate % 1000);
+            self.benchmark = Some(benchmark::Benchmark::new((rate / 1000) as usize));
+        }
 
         // render
 
