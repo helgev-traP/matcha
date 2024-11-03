@@ -27,25 +27,25 @@ fn view(_: &u32) -> Box<dyn Dom<()>> {
         },
         item: Box::new(Column::new(ColumnDescriptor {
             label: None,
-            vec: (0..10)
+            vec: (0..100)
                 .map(|_| {
                     Box::new(Row::new(RowDescriptor {
                         label: None,
-                        vec: (0..10)
+                        vec: (0..100)
                             .map(|_| {
                                 Box::new(Square::new(SquareDescriptor {
                                     label: None,
                                     size: Size {
-                                        width: SizeUnit::Pixel(50.0),
-                                        height: SizeUnit::Pixel(50.0),
+                                        width: SizeUnit::Pixel(5.0),
+                                        height: SizeUnit::Pixel(5.0),
                                     },
-                                    radius: 25.0,
+                                    radius: 1.0,
                                     background_color: Color::Rgb8USrgb {
                                         r: 255,
                                         g: 255,
                                         b: 255,
                                     },
-                                    border_width: 5.0,
+                                    border_width: 1.0,
                                     border_color: Color::Rgb8USrgb { r: 0, g: 240, b: 200 },
                                     div: 1,
                                 })) as Box<dyn Dom<()>>

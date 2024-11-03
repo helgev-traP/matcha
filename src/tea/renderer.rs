@@ -230,6 +230,7 @@ impl Renderer {
             colored_render_pipeline: &self.colored_render_pipeline,
             affine_bind_group_layout: &self.affine_bind_group_layout,
             encoder,
+            encoder_buffer_count: Arc::new(Mutex::new(0)),
             target_texture_view: &target_texture_view,
             multisampled_texture_view: &multisampled_texture_view,
             depth_texture_view: &depth_texture_view,
@@ -257,6 +258,7 @@ pub struct RendererCommandEncoder<'a> {
 
     // encoder
     encoder: Arc<Mutex<wgpu::CommandEncoder>>,
+    encoder_buffer_count: Arc<Mutex<u32>>,
     target_texture_view: &'a wgpu::TextureView,
     multisampled_texture_view: &'a wgpu::TextureView,
     depth_texture_view: &'a wgpu::TextureView,
@@ -276,6 +278,7 @@ impl Clone for RendererCommandEncoder<'_> {
             colored_render_pipeline: self.colored_render_pipeline,
             affine_bind_group_layout: self.affine_bind_group_layout,
             encoder: Arc::clone(&self.encoder),
+            encoder_buffer_count: Arc::clone(&self.encoder_buffer_count),
             target_texture_view: self.target_texture_view,
             multisampled_texture_view: self.multisampled_texture_view,
             depth_texture_view: self.depth_texture_view,
@@ -379,6 +382,7 @@ impl<'a> RendererCommandEncoder<'a> {
 
                     {
                         let mut encoder = self.encoder.lock().unwrap();
+                        *self.encoder_buffer_count.lock().unwrap() += 1;
 
                         let mut render_pass =
                             encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -463,6 +467,7 @@ impl<'a> RendererCommandEncoder<'a> {
 
                     {
                         let mut encoder = self.encoder.lock().unwrap();
+                        *self.encoder_buffer_count.lock().unwrap() += 1;
 
                         let mut render_pass =
                             encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -498,6 +503,33 @@ impl<'a> RendererCommandEncoder<'a> {
                         render_pass.draw_indexed(0..index_len, 0, 0..1);
                     }
                 }
+            }
+        }
+
+        {
+            let mut encoder_buffer_count = self.encoder_buffer_count.lock().unwrap();
+            if *encoder_buffer_count >= 10 {
+                // finish encoder
+                {
+                    let mut free_encoder = self
+                        .app_context
+                        .get_wgpu_device()
+                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("Renderer Command Encoder"),
+                        });
+
+                    let mut shared_encoder = self.encoder.lock().unwrap();
+
+                    // swap encoder
+                    std::mem::swap(&mut *shared_encoder, &mut free_encoder);
+
+                    // finish free encoder
+                    let queue = self.app_context.get_wgpu_queue();
+                    queue.submit(std::iter::once(free_encoder.finish()));
+                }
+
+                // reset buffer count
+                *encoder_buffer_count = 0;
             }
         }
     }
