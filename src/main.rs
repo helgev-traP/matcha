@@ -1,4 +1,4 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+// #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use tea_ui::{
     app::App,
@@ -27,26 +27,27 @@ fn view(_: &u32) -> Box<dyn Dom<()>> {
         },
         item: Box::new(Column::new(ColumnDescriptor {
             label: None,
-            vec: (0..30)
+            vec: (0..10)
                 .map(|_| {
                     Box::new(Row::new(RowDescriptor {
                         label: None,
-                        vec: (0..30)
+                        vec: (0..10)
                             .map(|_| {
                                 Box::new(Square::new(SquareDescriptor {
                                     label: None,
                                     size: Size {
-                                        width: SizeUnit::Pixel(20.0),
-                                        height: SizeUnit::Pixel(20.0),
+                                        width: SizeUnit::Pixel(50.0),
+                                        height: SizeUnit::Pixel(50.0),
                                     },
-                                    radius: 10.0,
+                                    radius: 25.0,
                                     background_color: Color::Rgb8USrgb {
                                         r: 255,
                                         g: 255,
                                         b: 255,
                                     },
-                                    border_width: 2.0,
-                                    border_color: Color::Rgb8USrgb { r: 0, g: 0, b: 0 },
+                                    border_width: 5.0,
+                                    border_color: Color::Rgb8USrgb { r: 0, g: 240, b: 200 },
+                                    div: 1,
                                 })) as Box<dyn Dom<()>>
                             })
                             .collect(),
@@ -62,9 +63,9 @@ fn main() {
 
     App::new(component)
         .base_color(Color::Rgb8USrgb {
-            r: 30,
-            g: 30,
-            b: 30,
+            r: 50,
+            g: 50,
+            b: 50,
         })
         .title("matcha UI")
         .run();

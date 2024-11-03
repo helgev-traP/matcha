@@ -144,7 +144,7 @@ impl BorderDescriptor {
             height,
             radius: 0.0,
             div: 0,
-            border_width,
+            border_width: border_width.min(width / 2.0).min(height / 2.0),
         }
     }
 
@@ -162,11 +162,6 @@ impl BorderDescriptor {
 
     pub fn division(mut self, div: u16) -> Self {
         self.div = div.max(1);
-        self
-    }
-
-    pub fn border_width(mut self, border_width: f32) -> Self {
-        self.border_width = border_width.min(self.width / 2.0).min(self.height / 2.0);
         self
     }
 }

@@ -368,7 +368,7 @@ impl<'a> RendererCommandEncoder<'a> {
                                         contents: bytemuck::cast_slice(
                                             (self.normalizer * affine * instance_affine).as_slice(),
                                         ),
-                                        usage: wgpu::BufferUsages::UNIFORM
+                                        usage: wgpu::BufferUsages::UNIFORM,
                                     },
                                 ),
                                 offset: 0,
@@ -433,7 +433,7 @@ impl<'a> RendererCommandEncoder<'a> {
                                         contents: bytemuck::cast_slice(
                                             (self.normalizer * affine * instance_affine).as_slice(),
                                         ),
-                                        usage: wgpu::BufferUsages::UNIFORM
+                                        usage: wgpu::BufferUsages::UNIFORM,
                                     },
                                 ),
                                 offset: 0,
@@ -452,7 +452,7 @@ impl<'a> RendererCommandEncoder<'a> {
                                     &wgpu::util::BufferInitDescriptor {
                                         label: Some("Render ColoredVertex Color Buffer"),
                                         contents: bytemuck::cast_slice(&color.to_rgba_f32()),
-                                        usage: wgpu::BufferUsages::UNIFORM
+                                        usage: wgpu::BufferUsages::UNIFORM,
                                     },
                                 ),
                                 offset: 0,
