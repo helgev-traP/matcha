@@ -115,16 +115,17 @@ pub struct TeacupRenderNode {
     index_len: u32,
 }
 
+#[async_trait::async_trait]
 impl<R: 'static> WidgetTrait<R> for TeacupRenderNode {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
 
-    fn widget_event(&mut self, _: &UiEvent, _: PxSize, _: &ApplicationContext) -> UiEventResult<R> {
+    async fn widget_event(&mut self, _: &UiEvent, _: PxSize, _: &ApplicationContext) -> UiEventResult<R> {
         Default::default()
     }
 
-    fn is_inside(
+    async fn is_inside(
         &self,
         position: [f32; 2],
         parent_size: PxSize,
@@ -179,15 +180,14 @@ impl<R: 'static> WidgetTrait<R> for TeacupRenderNode {
     }
 }
 
+#[async_trait::async_trait]
 impl RenderingTrait for TeacupRenderNode {
-    fn render<'a, 'scope>(
-        &'a mut self,
-        s: &rayon::Scope<'scope>,
+    async fn render(
+        &mut self,
         parent_size: PxSize,
         affine: nalgebra::Matrix4<f32>,
-        encoder: RendererCommandEncoder<'a>,
-    ) where
-        'a: 'scope,
+        encoder: RendererCommandEncoder,
+    )
     {
         let context = encoder.get_context();
         let device = context.get_wgpu_device();
@@ -317,11 +317,11 @@ impl RenderingTrait for TeacupRenderNode {
         }
     }
 
-    fn size(&self) -> crate::types::size::Size {
+    async fn size(&self) -> crate::types::size::Size {
         self.frame_size
     }
 
-    fn px_size(&self, parent_size: PxSize, context: &ApplicationContext) -> PxSize {
+    async fn px_size(&self, parent_size: PxSize, context: &ApplicationContext) -> PxSize {
         let mut size = StdSize::from_parent_size(self.frame_size, parent_size, context);
         if size.width.is_none() {
             size.width = StdSizeUnit::Pixel(self.picture_size.width);
@@ -330,7 +330,7 @@ impl RenderingTrait for TeacupRenderNode {
         size.unwrap()
     }
 
-    fn default_size(&self) -> PxSize {
+    async fn default_size(&self) -> PxSize {
         self.picture_size
     }
 }

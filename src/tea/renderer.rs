@@ -12,19 +12,19 @@ use super::{
 
 pub struct Renderer {
     // context
-    app_context: ApplicationContext,
+    app_context: Arc<ApplicationContext>,
 
     // wgpu state
     // texture
-    texture_bind_group_layout: wgpu::BindGroupLayout,
-    textured_render_pipeline: wgpu::RenderPipeline,
+    texture_bind_group_layout: Arc<wgpu::BindGroupLayout>,
+    textured_render_pipeline:  Arc<wgpu::RenderPipeline>,
 
     // color
-    color_bind_group_layout: wgpu::BindGroupLayout,
-    colored_render_pipeline: wgpu::RenderPipeline,
+    color_bind_group_layout:   Arc<wgpu::BindGroupLayout>,
+    colored_render_pipeline:   Arc<wgpu::RenderPipeline>,
 
     // common
-    affine_bind_group_layout: wgpu::BindGroupLayout,
+    affine_bind_group_layout:  Arc<wgpu::BindGroupLayout>,
 }
 
 impl Renderer {
@@ -201,20 +201,20 @@ impl Renderer {
             });
 
         Self {
-            app_context: context,
-            texture_bind_group_layout,
-            textured_render_pipeline,
-            color_bind_group_layout,
-            colored_render_pipeline,
-            affine_bind_group_layout,
+            app_context: context.into(),
+            texture_bind_group_layout: texture_bind_group_layout.into(),
+            textured_render_pipeline: textured_render_pipeline.into(),
+            color_bind_group_layout: color_bind_group_layout.into(),
+            colored_render_pipeline: colored_render_pipeline.into(),
+            affine_bind_group_layout: affine_bind_group_layout.into(),
         }
     }
 
     pub fn encoder<'a>(
         &'a mut self,
-        target_texture_view: &'a wgpu::TextureView,
-        multisampled_texture_view: &'a wgpu::TextureView,
-        depth_texture_view: &'a wgpu::TextureView,
+        target_texture_view: Arc<wgpu::TextureView>,
+        multisampled_texture_view: Arc<wgpu::TextureView>,
+        depth_texture_view: Arc<wgpu::TextureView>,
         size: PxSize,
     ) -> RendererCommandEncoder {
         let encoder = Arc::new(Mutex::new(self.app_context.get_wgpu_encoder()));
@@ -222,71 +222,71 @@ impl Renderer {
         let normalizer = size.make_normalizer();
 
         RendererCommandEncoder {
-            app_context: &mut self.app_context,
+            app_context: self.app_context.clone(),
             size,
-            texture_bind_group_layout: &self.texture_bind_group_layout,
-            textured_render_pipeline: &self.textured_render_pipeline,
-            color_bind_group_layout: &self.color_bind_group_layout,
-            colored_render_pipeline: &self.colored_render_pipeline,
-            affine_bind_group_layout: &self.affine_bind_group_layout,
+            texture_bind_group_layout: self.texture_bind_group_layout.clone(),
+            textured_render_pipeline:  self.textured_render_pipeline.clone(),
+            color_bind_group_layout:   self.color_bind_group_layout.clone(),
+            colored_render_pipeline:   self.colored_render_pipeline.clone(),
+            affine_bind_group_layout:  self.affine_bind_group_layout.clone(),
             encoder,
-            target_texture_view: &target_texture_view,
-            multisampled_texture_view: &multisampled_texture_view,
-            depth_texture_view: &depth_texture_view,
+            target_texture_view:       target_texture_view.clone(),
+            multisampled_texture_view: multisampled_texture_view.clone(),
+            depth_texture_view:        depth_texture_view.clone(),
             normalizer,
         }
     }
 }
 
-pub struct RendererCommandEncoder<'a> {
+pub struct RendererCommandEncoder {
     // context
-    app_context: &'a ApplicationContext,
+    app_context: Arc<ApplicationContext>,
     size: PxSize,
 
     // wgpu state
     // texture
-    texture_bind_group_layout: &'a wgpu::BindGroupLayout,
-    textured_render_pipeline: &'a wgpu::RenderPipeline,
+    texture_bind_group_layout: Arc<wgpu::BindGroupLayout>,
+    textured_render_pipeline: Arc<wgpu::RenderPipeline>,
 
     // color
-    color_bind_group_layout: &'a wgpu::BindGroupLayout,
-    colored_render_pipeline: &'a wgpu::RenderPipeline,
+    color_bind_group_layout: Arc<wgpu::BindGroupLayout>,
+    colored_render_pipeline: Arc<wgpu::RenderPipeline>,
 
     // common
-    affine_bind_group_layout: &'a wgpu::BindGroupLayout,
+    affine_bind_group_layout: Arc<wgpu::BindGroupLayout>,
 
     // encoder
     encoder: Arc<Mutex<wgpu::CommandEncoder>>,
-    target_texture_view: &'a wgpu::TextureView,
-    multisampled_texture_view: &'a wgpu::TextureView,
-    depth_texture_view: &'a wgpu::TextureView,
+    target_texture_view: Arc<wgpu::TextureView>,
+    multisampled_texture_view: Arc<wgpu::TextureView>,
+    depth_texture_view: Arc<wgpu::TextureView>,
 
     // linear transformation
     normalizer: na::Matrix4<f32>,
 }
 
-impl Clone for RendererCommandEncoder<'_> {
+impl Clone for RendererCommandEncoder {
     fn clone(&self) -> Self {
         Self {
-            app_context: self.app_context,
+            app_context: self.app_context.clone(),
             size: self.size,
-            texture_bind_group_layout: self.texture_bind_group_layout,
-            textured_render_pipeline: self.textured_render_pipeline,
-            color_bind_group_layout: self.color_bind_group_layout,
-            colored_render_pipeline: self.colored_render_pipeline,
-            affine_bind_group_layout: self.affine_bind_group_layout,
+            texture_bind_group_layout: self.texture_bind_group_layout.clone(),
+            textured_render_pipeline: self.textured_render_pipeline.clone(),
+            color_bind_group_layout: self.color_bind_group_layout.clone(),
+            colored_render_pipeline: self.colored_render_pipeline.clone(),
+            affine_bind_group_layout: self.affine_bind_group_layout.clone(),
             encoder: Arc::clone(&self.encoder),
-            target_texture_view: self.target_texture_view,
-            multisampled_texture_view: self.multisampled_texture_view,
-            depth_texture_view: self.depth_texture_view,
+            target_texture_view: self.target_texture_view.clone(),
+            multisampled_texture_view: self.multisampled_texture_view.clone(),
+            depth_texture_view: self.depth_texture_view.clone(),
             normalizer: self.normalizer,
         }
     }
 }
 
-impl<'a> RendererCommandEncoder<'a> {
+impl RendererCommandEncoder {
     pub fn get_context(&self) -> &ApplicationContext {
-        self.app_context
+        &*self.app_context
     }
 
     pub fn get_size(&self) -> PxSize {
@@ -368,7 +368,7 @@ impl<'a> RendererCommandEncoder<'a> {
                                         contents: bytemuck::cast_slice(
                                             (self.normalizer * affine * instance_affine).as_slice(),
                                         ),
-                                        usage: wgpu::BufferUsages::UNIFORM
+                                        usage: wgpu::BufferUsages::UNIFORM,
                                     },
                                 ),
                                 offset: 0,
@@ -433,7 +433,7 @@ impl<'a> RendererCommandEncoder<'a> {
                                         contents: bytemuck::cast_slice(
                                             (self.normalizer * affine * instance_affine).as_slice(),
                                         ),
-                                        usage: wgpu::BufferUsages::UNIFORM
+                                        usage: wgpu::BufferUsages::UNIFORM,
                                     },
                                 ),
                                 offset: 0,
@@ -452,7 +452,7 @@ impl<'a> RendererCommandEncoder<'a> {
                                     &wgpu::util::BufferInitDescriptor {
                                         label: Some("Render ColoredVertex Color Buffer"),
                                         contents: bytemuck::cast_slice(&color.to_rgba_f32()),
-                                        usage: wgpu::BufferUsages::UNIFORM
+                                        usage: wgpu::BufferUsages::UNIFORM,
                                     },
                                 ),
                                 offset: 0,
@@ -512,5 +512,9 @@ impl<'a> RendererCommandEncoder<'a> {
             }
             Err(_) => Err(()),
         }
+    }
+
+    pub fn arc_strong_count(&self) -> usize {
+        Arc::strong_count(&self.encoder)
     }
 }

@@ -1,5 +1,6 @@
 use nalgebra as na;
 use std::{sync::Arc, time::Instant};
+use tokio::sync::Mutex;
 
 use super::{
     application_context,
@@ -13,7 +14,12 @@ mod gpu_state;
 mod keyboard_state;
 mod mouse_state;
 
+mod benchmark;
+
 pub struct Window<'a, Model: Send + 'static, Message: 'static> {
+    // runtime
+    runtime: tokio::runtime::Runtime,
+
     // --- rendering context ---
     // boot status
     performance: wgpu::PowerPreference,
@@ -37,7 +43,7 @@ pub struct Window<'a, Model: Send + 'static, Message: 'static> {
     render_tree: Option<Box<dyn Widget<Message>>>,
 
     // root component
-    root_component: Component<Model, Message, Message, Message>,
+    root_component: Arc<Mutex<Component<Model, Message, Message, Message>>>,
 
     // frame
     frame: u64,
@@ -52,12 +58,20 @@ pub struct Window<'a, Model: Send + 'static, Message: 'static> {
 
     // keyboard
     keyboard_state: Option<keyboard_state::KeyboardState>,
+
+    // --- benchmark ---
+    // #[cfg(debug_assertions)]
+    benchmark: Option<benchmark::Benchmark>,
 }
 
 // setup
 impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
-    pub fn new(component: Component<Model, Message, Message, Message>) -> Self {
+    pub fn new(
+        component: Component<Model, Message, Message, Message>,
+        runtime: tokio::runtime::Runtime,
+    ) -> Self {
         Self {
+            runtime,
             performance: wgpu::PowerPreference::default(),
             title: "Tea".to_string(),
             init_size: [800, 600],
@@ -70,12 +84,14 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
             context: None,
             render: None,
             render_tree: None,
-            root_component: component,
+            root_component: Arc::new(Mutex::new(component)),
             frame: 0,
             mouse_state: None,
             mouse_primary_button: winit::event::MouseButton::Left,
             scroll_pixel_per_line: 40.0,
             keyboard_state: None,
+            // #[cfg(debug_assertions)]
+            benchmark: None,
         }
     }
 
@@ -151,33 +167,44 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
         let viewport_size = self.gpu_state.as_ref().unwrap().get_viewport_size();
 
         // render
+
+        // #[cfg(debug_assertions)] // vvvvv----------------------------------
+        self.benchmark.as_mut().unwrap().start();
+
         let render = self.render.as_mut().unwrap();
-        let mut encoder = render.encoder(
-            &surface_texture_view,
-            &multisampled_texture_view,
-            &depth_texture_view,
+        let encoder = render.encoder(
+            surface_texture_view.into(),
+            multisampled_texture_view.into(),
+            depth_texture_view.into(),
             viewport_size,
         );
         let render_tree = self.render_tree.as_mut().unwrap().for_rendering();
 
-        rayon::scope(|s| {
-            encoder.clear(self.base_color);
-            render_tree.render(s, viewport_size, na::Matrix4::identity(), encoder.clone());
-        });
+        encoder.clear(self.base_color);
+
+        self.runtime.block_on(render_tree.render(
+            viewport_size,
+            na::Matrix4::identity(),
+            encoder.clone(),
+        ));
 
         encoder.finish().unwrap();
+
+        // #[cfg(debug_assertions)] // ^^^^^----------------------------------
+        self.benchmark.as_mut().unwrap().stop();
 
         // present
         surface.present();
 
         // print frame (debug)
-        #[cfg(debug_assertions)]
+        // #[cfg(debug_assertions)]
         {
-            print!(
-                "{}",
-                "\x08".to_string().repeat(self.frame.to_string().len() + 7),
+            print!("\rframe rendering time: {}, average: {}, max in second: {} | frame: {3}",
+                self.benchmark.as_ref().unwrap().last_time(),
+                self.benchmark.as_ref().unwrap().average_time(),
+                self.benchmark.as_ref().unwrap().max_time(),
+                self.frame,
             );
-            print!("frame: {}", self.frame);
             // flush
             std::io::Write::flush(&mut std::io::stdout()).unwrap();
         }
@@ -187,7 +214,7 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
 }
 
 // winit event handler
-impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Message>
+impl<Model: Send, Message: Send + 'static> winit::application::ApplicationHandler<Message>
     for Window<'_, Model, Message>
 {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
@@ -232,13 +259,40 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
 
         // crate render tree
 
-        self.render_tree = Some(self.root_component.view().unwrap().build_render_tree());
+        let root_component = self.root_component.clone();
+        self.render_tree = self.runtime.block_on(async move {
+            Some(
+                root_component
+                    .lock()
+                    .await
+                    .view()
+                    .await
+                    .unwrap()
+                    .build_render_tree(),
+            )
+        });
 
         // crate input states
 
         // todo: calculate double click and long press duration from monitor refresh rate
         self.mouse_state = Some(mouse_state::MouseState::new(12, 60).unwrap());
         self.keyboard_state = Some(keyboard_state::KeyboardState::new());
+
+        // prepare benchmark
+
+        // #[cfg(debug_assertions)]
+        {
+            let rate = self
+                .winit_window
+                .as_ref()
+                .unwrap()
+                .current_monitor()
+                .unwrap()
+                .refresh_rate_millihertz()
+                .unwrap();
+            println!("Monitor refresh rate: {}.{} Hz", rate / 1000, rate % 1000);
+            self.benchmark = Some(benchmark::Benchmark::new((rate / 1000) as usize));
+        }
 
         // render
 
@@ -346,11 +400,12 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
             _ => return,
         };
 
-        self.render_tree.as_mut().unwrap().widget_event(
-            &ui_event,
-            self.gpu_state.as_ref().unwrap().get_viewport_size(),
-            self.context.as_ref().unwrap(),
-        );
+        self.runtime
+            .block_on(self.render_tree.as_mut().unwrap().widget_event(
+                &ui_event,
+                self.gpu_state.as_ref().unwrap().get_viewport_size(),
+                self.context.as_ref().unwrap(),
+            ));
     }
 
     fn new_events(
@@ -385,7 +440,11 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
     }
 
     fn user_event(&mut self, event_loop: &winit::event_loop::ActiveEventLoop, event: Message) {
-        self.root_component.update(event);
+        let root_component = self.root_component.clone();
+
+        self.runtime.spawn(async move {
+            root_component.lock().await.update(event);
+        });
     }
 
     fn device_event(

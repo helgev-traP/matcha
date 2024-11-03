@@ -103,12 +103,13 @@ pub struct TextNode {
     reset_vertex: bool,
 }
 
+#[async_trait::async_trait]
 impl<T: Send + 'static> WidgetTrait<T> for TextNode {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
 
-    fn widget_event(
+    async fn widget_event(
         &mut self,
         event: &UiEvent,
         parent_size: PxSize,
@@ -170,7 +171,7 @@ impl<T: Send + 'static> WidgetTrait<T> for TextNode {
         }
     }
 
-    fn is_inside(
+    async fn is_inside(
         &self,
         position: [f32; 2],
         parent_size: PxSize,
@@ -207,31 +208,29 @@ impl<T: Send + 'static> WidgetTrait<T> for TextNode {
     }
 }
 
+#[async_trait::async_trait]
 impl RenderingTrait for TextNode {
-    fn size(&self) -> Size {
+    async fn size(&self) -> Size {
         self.size
     }
 
-    fn px_size(&self, parent_size: PxSize, context: &ApplicationContext) -> PxSize {
+    async fn px_size(&self, parent_size: PxSize, context: &ApplicationContext) -> PxSize {
         self.size.to_px(parent_size, context)
     }
 
-    fn default_size(&self) -> PxSize {
+    async fn default_size(&self) -> PxSize {
         PxSize {
             width: 0.0,
             height: 0.0,
         }
     }
 
-    fn render<'a, 'scope>(
-        &'a mut self,
-        s: &rayon::Scope<'scope>,
+    async fn render(
+        &mut self,
         parent_size: PxSize,
         affine: nalgebra::Matrix4<f32>,
-        encoder: RendererCommandEncoder<'a>,
-    ) where
-        'a: 'scope,
-    {
+        encoder: RendererCommandEncoder,
+    ) {
         if self.redraw_texture {
             let context = encoder.get_context();
             let current_size = self.size.to_px(parent_size, context);

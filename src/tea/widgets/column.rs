@@ -1,5 +1,6 @@
 use nalgebra as na;
-use std::{any::Any, cell::Cell};
+use std::{any::Any, cell::Cell, sync::Arc};
+use tokio::sync::Mutex;
 
 use crate::{
     application_context::ApplicationContext,
@@ -41,7 +42,7 @@ impl<R: 'static> Column<R> {
     }
 }
 
-impl<R: 'static> Dom<R> for Column<R> {
+impl<R: Send + 'static> Dom<R> for Column<R> {
     fn build_render_tree(&self) -> Box<dyn Widget<R>> {
         Box::new(ColumnRenderNode {
             label: self.label.clone(),
@@ -49,9 +50,8 @@ impl<R: 'static> Dom<R> for Column<R> {
             children: self
                 .children
                 .iter()
-                .map(|child| child.build_render_tree())
+                .map(|child| Arc::new(Mutex::new(child.build_render_tree())))
                 .collect(),
-            cache_self_size: Cell::new(None),
         })
     }
 
@@ -60,19 +60,19 @@ impl<R: 'static> Dom<R> for Column<R> {
     }
 }
 
-pub struct ColumnRenderNode<R: 'static> {
+pub struct ColumnRenderNode<R: Send + 'static> {
     label: Option<String>,
     redraw: bool,
-    children: Vec<Box<dyn Widget<R>>>,
-    cache_self_size: Cell<Option<PxSize>>,
+    children: Vec<Arc<Mutex<Box<dyn Widget<R>>>>>,
 }
 
-impl<R: 'static> WidgetTrait<R> for ColumnRenderNode<R> {
+#[async_trait::async_trait]
+impl<R: Send + 'static> WidgetTrait<R> for ColumnRenderNode<R> {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
 
-    fn widget_event(
+    async fn widget_event(
         &mut self,
         event: &UiEvent,
         parent_size: PxSize,
@@ -82,13 +82,18 @@ impl<R: 'static> WidgetTrait<R> for ColumnRenderNode<R> {
         UiEventResult::default()
     }
 
-    fn is_inside(
+    async fn is_inside(
         &self,
         position: [f32; 2],
         parent_size: PxSize,
         context: &ApplicationContext,
     ) -> bool {
-        todo!()
+        let size = self.px_size(parent_size, context).await;
+
+        0.0 <= position[0]
+            && position[0] <= size.width
+            && 0.0 >= -position[1]
+            && -position[1] >= -size.height
     }
 
     fn update_render_tree(&mut self, dom: &dyn Dom<R>) -> Result<(), ()> {
@@ -99,7 +104,8 @@ impl<R: 'static> WidgetTrait<R> for ColumnRenderNode<R> {
             // todo: differential update
             self.children.clear();
             for child in dom.children.iter() {
-                self.children.push(child.build_render_tree());
+                self.children
+                    .push(Arc::new(Mutex::new(child.build_render_tree())));
             }
             Ok(())
         }
@@ -116,70 +122,88 @@ impl<R: 'static> WidgetTrait<R> for ColumnRenderNode<R> {
     }
 }
 
-impl<R> RenderingTrait for ColumnRenderNode<R> {
-    fn size(&self) -> Size {
+#[async_trait::async_trait]
+impl<R: Send> RenderingTrait for ColumnRenderNode<R> {
+    async fn size(&self) -> Size {
         Size {
             width: SizeUnit::Content(1.0),
             height: SizeUnit::Content(1.0),
         }
     }
 
-    fn px_size(&self, _: PxSize, context: &ApplicationContext) -> PxSize {
+    async fn px_size(&self, _: PxSize, context: &ApplicationContext) -> PxSize {
         let mut width: f32 = 0.0;
         let mut height_px: f32 = 0.0;
         let mut height_percent: f32 = 0.0;
 
         for child in &self.children {
-            let child_std_size = StdSize::from_size(child.size(), context);
+            let child_std_size = StdSize::from_size(child.lock().await.size().await, context);
 
             match child_std_size.width {
                 StdSizeUnit::Pixel(px) => width = width.max(px),
                 StdSizeUnit::Percent(_) => (),
-                StdSizeUnit::None => width = width.max(child.default_size().width),
+                StdSizeUnit::None => {
+                    width = width.max(child.lock().await.default_size().await.width)
+                }
             }
 
             match child_std_size.height {
                 StdSizeUnit::Pixel(px) => height_px += px,
                 StdSizeUnit::Percent(percent) => height_percent += percent,
-                StdSizeUnit::None => height_px += child.default_size().height,
+                StdSizeUnit::None => height_px += child.lock().await.default_size().await.height,
             }
         }
 
         let height = height_px / (1.0 - height_percent);
 
-        self.cache_self_size.set(Some(PxSize { width, height }));
         PxSize { width, height }
     }
 
-    fn default_size(&self) -> PxSize {
+    async fn default_size(&self) -> PxSize {
         PxSize {
             width: 0.0,
             height: 0.0,
         }
     }
 
-    fn render<'a, 'scope>(
-        &'a mut self,
-        s: &rayon::Scope<'scope>,
+    async fn render(
+        &mut self,
         parent_size: PxSize,
         affine: nalgebra::Matrix4<f32>,
-        encoder: RendererCommandEncoder<'a>,
-    )
-    where 'a: 'scope
-    {
-        let current_size = self.px_size(parent_size, encoder.get_context());
+        encoder: RendererCommandEncoder,
+    ) {
+        let current_size = self
+            .px_size(parent_size, encoder.get_context())
+            .as_mut()
+            .await;
+
+        let mut join_handles = Vec::new();
 
         let mut accumulated_height: f32 = 0.0;
         for child in &mut self.children {
-            let child_px_size = child.px_size(current_size, encoder.get_context());
+            let child_px_size = child
+                .lock()
+                .await
+                .px_size(current_size, encoder.get_context())
+                .await;
             let child_affine =
                 na::Matrix4::new_translation(&na::Vector3::new(0.0, -accumulated_height, 0.0))
                     * affine;
+
             let encoder = encoder.clone();
-            s.spawn(move |s| {
-                child.render(s, child_px_size, child_affine, encoder);
-            });
+            let child = child.clone();
+            join_handles.push(tokio::spawn(async move {
+                child
+                    .lock()
+                    .await
+                    .render(child_px_size, child_affine, encoder)
+                    .await;
+            }));
             accumulated_height += child_px_size.height;
+        }
+
+        for join_handle in join_handles {
+            join_handle.await.unwrap();
         }
     }
 }

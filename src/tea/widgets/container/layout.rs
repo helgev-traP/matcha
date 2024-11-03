@@ -1,11 +1,12 @@
 pub mod display;
-use std::cell::RefCell;
+use std::{cell::RefCell, sync::Arc};
 
 pub use display::*;
 pub mod position;
 pub use position::*;
 pub mod overflow;
 pub use overflow::*;
+use tokio::sync::Mutex;
 
 use crate::{
     application_context::ApplicationContext,
@@ -100,7 +101,7 @@ impl<T> Layout<T> {
             Self::None { item } => LayoutNode::None {
                 item: item
                     .into_iter()
-                    .map(|item| item.build_render_tree())
+                    .map(|item| Arc::new(Mutex::new(item.build_render_tree())))
                     .collect(),
             },
             Self::Flex {
@@ -113,7 +114,7 @@ impl<T> Layout<T> {
                 item: item
                     .into_iter()
                     .map(|item| FlexItemNode {
-                        item: item.item.build_render_tree(),
+                        item: Arc::new(Mutex::new(item.item.build_render_tree())),
                         grow: item.grow.clone(),
                         size: Default::default(),
                         position: Default::default(),
@@ -123,7 +124,7 @@ impl<T> Layout<T> {
                 wrap: wrap.clone(),
                 justify_content: justify_content.clone(),
                 align_content: align_content.clone(),
-                size: RefCell::new(None),
+                size: Mutex::new(None),
                 item_cache_valid: false,
             },
             Self::Grid {
@@ -136,7 +137,7 @@ impl<T> Layout<T> {
                 item: item
                     .into_iter()
                     .map(|item| GridItemNode {
-                        item: item.item.build_render_tree(),
+                        item: Arc::new(Mutex::new(item.item.build_render_tree())),
                         column_start: item.column_start,
                         column_end: item.column_end,
                         row_start: item.row_start,
@@ -149,7 +150,7 @@ impl<T> Layout<T> {
                 template_rows: template_rows.clone(),
                 gap_columns: gap_columns.clone(),
                 gap_rows: gap_rows.clone(),
-                size: RefCell::new(None),
+                size: Mutex::new(None),
                 item_cache_valid: false,
             },
         }
@@ -173,7 +174,7 @@ pub struct GridItem<T> {
 
 pub(super) enum LayoutNode<T> {
     None {
-        item: Vec<Box<dyn Widget<T>>>,
+        item: Vec<Arc<Mutex<Box<dyn Widget<T>>>>>,
     },
     Flex {
         item: Vec<FlexItemNode<T>>,
@@ -183,7 +184,7 @@ pub(super) enum LayoutNode<T> {
         align_content: AlignContent,
 
         // cache
-        size: RefCell<Option<PxSize>>,
+        size: Mutex<Option<PxSize>>,
         item_cache_valid: bool,
     },
     Grid {
@@ -194,7 +195,7 @@ pub(super) enum LayoutNode<T> {
         gap_rows: SizeUnit,
 
         // cache
-        size: RefCell<Option<PxSize>>,
+        size: Mutex<Option<PxSize>>,
         item_cache_valid: bool,
     },
 }
@@ -237,16 +238,15 @@ impl<T> LayoutNode<T> {
         todo!()
     }
 
-    pub fn render(
+    pub async fn render(
         &mut self,
-        s: &rayon::Scope,
         parent_size: PxSize,
         affine: na::Matrix4<f32>,
         encoder: &mut RendererCommandEncoder,
     ) {
         match &self {
             LayoutNode::Flex { size, .. } | LayoutNode::Grid { size, .. } => {
-                if size.borrow().is_none() {
+                if size.lock().await.is_none() {
                     self.px_size(parent_size, encoder.get_context());
                 }
             }
@@ -262,12 +262,11 @@ impl<T> LayoutNode<T> {
                 justify_content,
                 align_content,
                 size,
-                item_cache_valid
+                item_cache_valid,
             } => {
                 if *item_cache_valid {
                     // render as cache
-                    for item in item {
-                    }
+                    for item in item {}
                 }
             }
             LayoutNode::Grid {
@@ -277,14 +276,14 @@ impl<T> LayoutNode<T> {
                 gap_columns,
                 gap_rows,
                 size,
-                item_cache_valid
+                item_cache_valid,
             } => todo!(),
         }
     }
 }
 
 pub(super) struct FlexItemNode<T> {
-    item: Box<dyn Widget<T>>,
+    item: Arc<Mutex<Box<dyn Widget<T>>>>,
     grow: FlexGrow,
 
     // cache
@@ -293,7 +292,7 @@ pub(super) struct FlexItemNode<T> {
 }
 
 pub(super) struct GridItemNode<T> {
-    item: Box<dyn Widget<T>>,
+    item: Arc<Mutex<Box<dyn Widget<T>>>>,
     column_start: u32,
     column_end: u32,
     row_start: u32,

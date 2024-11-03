@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::{
     application_context::ApplicationContext,
     device::mouse::MouseButton,
@@ -8,6 +10,7 @@ use crate::{
 };
 
 use nalgebra as na;
+use tokio::sync::Mutex;
 
 pub struct DragFieldDescriptor<R> {
     pub label: Option<String>,
@@ -42,7 +45,7 @@ impl<T: Send + 'static> Dom<T> for DragField<T> {
 
             item_position: [0.0, 0.0],
             drag_delta: None,
-            item: self.item.build_render_tree(),
+            item: Arc::new(Mutex::new(self.item.build_render_tree())),
         })
     }
 
@@ -57,15 +60,16 @@ pub struct DragFieldNode<T> {
 
     item_position: [f32; 2],
     drag_delta: Option<[f32; 2]>,
-    item: Box<dyn Widget<T>>,
+    item: Arc<Mutex<Box<dyn Widget<T>>>>,
 }
 
+#[async_trait::async_trait]
 impl<T: Send + 'static> WidgetTrait<T> for DragFieldNode<T> {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
 
-    fn widget_event(
+    async fn widget_event(
         &mut self,
         event: &UiEvent,
         parent_size: PxSize,
@@ -80,12 +84,20 @@ impl<T: Send + 'static> WidgetTrait<T> for DragFieldNode<T> {
                 if let MouseButton::Primary = button {
                     match &click_state {
                         crate::events::ElementState::Pressed(_) => {
-                            // todo: check if the cursor is inside the item
-                            if self.item.is_inside(
-                                [position[0] - self.item_position[0], position[1] - self.item_position[1]],
-                                parent_size,
-                                context
-                            ) {
+                            if self
+                                .item
+                                .lock()
+                                .await
+                                .is_inside(
+                                    [
+                                        position[0] - self.item_position[0],
+                                        position[1] - self.item_position[1],
+                                    ],
+                                    self.size.to_px(parent_size, context),
+                                    context,
+                                )
+                                .await
+                            {
                                 self.drag_delta = Some([0.0, 0.0]);
                             }
                         }
@@ -119,7 +131,7 @@ impl<T: Send + 'static> WidgetTrait<T> for DragFieldNode<T> {
         crate::events::UiEventResult::default()
     }
 
-    fn is_inside(
+    async fn is_inside(
         &self,
         position: [f32; 2],
         parent_size: PxSize,
@@ -156,30 +168,29 @@ impl<T: Send + 'static> WidgetTrait<T> for DragFieldNode<T> {
     }
 }
 
+#[async_trait::async_trait]
 impl<T> RenderingTrait for DragFieldNode<T> {
-    fn size(&self) -> Size {
+    async fn size(&self) -> Size {
         self.size
     }
 
-    fn px_size(&self, parent_size: PxSize, context: &ApplicationContext) -> PxSize {
+    async fn px_size(&self, parent_size: PxSize, context: &ApplicationContext) -> PxSize {
         self.size.to_px(parent_size, context)
     }
 
-    fn default_size(&self) -> PxSize {
+    async fn default_size(&self) -> PxSize {
         PxSize {
             width: 0.0,
             height: 0.0,
         }
     }
 
-    fn render<'a, 'scope>(
-        &'a mut self,
-        s: &rayon::Scope<'scope>,
+    async fn render(
+        &mut self,
         parent_size: PxSize,
-        affine: nalgebra::Matrix4<f32>,
-        encoder: RendererCommandEncoder<'a>,
-    )
-    where 'a: 'scope{
+        affine: na::Matrix4<f32>,
+        encoder: RendererCommandEncoder,
+    ) {
         let current_size = self.size.to_px(parent_size, encoder.get_context());
 
         let item_position_matrix = if let Some(drag_delta) = self.drag_delta {
@@ -197,6 +208,9 @@ impl<T> RenderingTrait for DragFieldNode<T> {
         };
 
         self.item
-            .render(s, current_size, item_position_matrix * affine, encoder);
+            .lock()
+            .await
+            .render(current_size, item_position_matrix * affine, encoder)
+            .await;
     }
 }

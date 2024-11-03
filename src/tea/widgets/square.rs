@@ -103,12 +103,13 @@ pub struct SquareNode {
     border_index_len: u32,
 }
 
+#[async_trait::async_trait]
 impl<R: Copy + Send + 'static> WidgetTrait<R> for SquareNode {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
 
-    fn widget_event(
+    async fn widget_event(
         &mut self,
         event: &UiEvent,
         parent_size: PxSize,
@@ -117,7 +118,7 @@ impl<R: Copy + Send + 'static> WidgetTrait<R> for SquareNode {
         crate::events::UiEventResult::default()
     }
 
-    fn is_inside(
+    async fn is_inside(
         &self,
         position: [f32; 2],
         parent_size: PxSize,
@@ -164,12 +165,13 @@ impl<R: Copy + Send + 'static> WidgetTrait<R> for SquareNode {
     }
 }
 
+#[async_trait::async_trait]
 impl RenderingTrait for SquareNode {
-    fn size(&self) -> Size {
+    async fn size(&self) -> Size {
         self.size
     }
 
-    fn px_size(
+    async fn px_size(
         &self,
         parent_size: crate::types::size::PxSize,
         context: &crate::application_context::ApplicationContext,
@@ -177,21 +179,19 @@ impl RenderingTrait for SquareNode {
         self.size.to_px(parent_size, context)
     }
 
-    fn default_size(&self) -> crate::types::size::PxSize {
+    async fn default_size(&self) -> crate::types::size::PxSize {
         crate::types::size::PxSize {
             width: 0.0,
             height: 0.0,
         }
     }
 
-    fn render<'a, 'scope>(
-        &'a mut self,
-        s: &rayon::Scope<'scope>,
+    async fn render(
+        &mut self,
         parent_size: PxSize,
         affine: nalgebra::Matrix4<f32>,
-        encoder: RendererCommandEncoder<'a>,
-    ) where
-        'a: 'scope,
+        encoder: RendererCommandEncoder,
+    )
     {
         let context = encoder.get_context();
 
