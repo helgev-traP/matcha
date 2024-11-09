@@ -1,15 +1,14 @@
+use vello::Scene;
+
 use crate::{
-    application_context::ApplicationContext,
-    cosmic,
+    context::SharedContext,
     device::keyboard,
     events::{ElementState, UiEvent},
-    renderer::RendererCommandEncoder,
     types::{
         color::Color,
         size::{PxSize, Size, SizeUnit},
     },
-    ui::{Dom, DomComPareResult, Object, RenderItem, RenderingTrait, Widget, WidgetTrait},
-    vertex::textured_vertex::TexturedVertex,
+    ui::{Dom, DomComPareResult, LayerStack, Widget},
 };
 
 pub struct TextDescriptor {
@@ -70,12 +69,6 @@ impl<T: Send + 'static> Dom<T> for Text {
             font_color: self.font_color,
             text: self.text.clone(),
             text_cursor: self.text.len(),
-            texture: None,
-            redraw_texture: true,
-            vertex_buffer: None,
-            index_buffer: None,
-            index_len: 0,
-            reset_vertex: true,
         })
     }
 
@@ -93,26 +86,18 @@ pub struct TextNode {
     text: String,
 
     text_cursor: usize,
-
-    texture: Option<wgpu::Texture>,
-    redraw_texture: bool,
-
-    vertex_buffer: Option<wgpu::Buffer>,
-    index_buffer: Option<wgpu::Buffer>,
-    index_len: u32,
-    reset_vertex: bool,
 }
 
-impl<T: Send + 'static> WidgetTrait<T> for TextNode {
+impl<T: Send + 'static> Widget<T> for TextNode {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
 
-    fn widget_event(
+    fn event(
         &mut self,
         event: &UiEvent,
         parent_size: PxSize,
-        context: &ApplicationContext,
+        context: &SharedContext,
     ) -> crate::events::UiEventResult<T> {
         match &event.content {
             crate::events::UiEventContent::KeyboardInput { key, element_state } => {
@@ -121,34 +106,24 @@ impl<T: Send + 'static> WidgetTrait<T> for TextNode {
                         keyboard::Key::Character(c) => {
                             self.text.insert(self.text_cursor, *c);
                             self.text_cursor += 1;
-                            self.redraw_texture = true;
-                            self.reset_vertex = true;
                         }
                         keyboard::Key::Spacial(keyboard::NamedKey::Space) => {
                             self.text.insert(self.text_cursor, ' ');
                             self.text_cursor += 1;
-                            self.redraw_texture = true;
-                            self.reset_vertex = true;
                         }
                         keyboard::Key::Spacial(keyboard::NamedKey::Return) => {
                             self.text.insert(self.text_cursor, '\n');
                             self.text_cursor += 1;
-                            self.redraw_texture = true;
-                            self.reset_vertex = true;
                         }
                         keyboard::Key::Spacial(keyboard::NamedKey::Backspace) => {
                             if self.text_cursor > 0 {
                                 self.text_cursor -= 1;
                                 self.text.remove(self.text_cursor);
-                                self.redraw_texture = true;
-                                self.reset_vertex = true;
                             }
                         }
                         keyboard::Key::Spacial(keyboard::NamedKey::Delete) => {
                             if self.text_cursor < self.text.len() {
                                 self.text.remove(self.text_cursor);
-                                self.redraw_texture = true;
-                                self.reset_vertex = true;
                             }
                         }
                         keyboard::Key::Spacial(keyboard::NamedKey::ArrowLeft) => {
@@ -174,7 +149,7 @@ impl<T: Send + 'static> WidgetTrait<T> for TextNode {
         &self,
         position: [f32; 2],
         parent_size: PxSize,
-        context: &ApplicationContext,
+        context: &SharedContext,
     ) -> bool {
         let current_size = self.size.to_px(parent_size, context);
 
@@ -205,14 +180,12 @@ impl<T: Send + 'static> WidgetTrait<T> for TextNode {
             DomComPareResult::Different
         }
     }
-}
 
-impl RenderingTrait for TextNode {
     fn size(&self) -> Size {
         self.size
     }
 
-    fn px_size(&self, parent_size: PxSize, context: &ApplicationContext) -> PxSize {
+    fn px_size(&self, parent_size: PxSize, context: &SharedContext) -> PxSize {
         self.size.to_px(parent_size, context)
     }
 
@@ -225,91 +198,14 @@ impl RenderingTrait for TextNode {
 
     fn render(
         &mut self,
+        scene: &mut Scene,
+        texture_layer: &mut LayerStack,
         parent_size: PxSize,
-        affine: nalgebra::Matrix4<f32>,
-        encoder: RendererCommandEncoder,
+        affine: vello::kurbo::Affine,
+        context: &SharedContext,
     )
     {
-        if self.redraw_texture {
-            let context = encoder.get_context();
-            let current_size = self.size.to_px(parent_size, context);
-
-            // allocate texture
-            if self.texture.is_none() {
-                let texture = context
-                    .get_wgpu_device()
-                    .create_texture(&wgpu::TextureDescriptor {
-                        size: wgpu::Extent3d {
-                            width: current_size.width as u32,
-                            height: current_size.height as u32,
-                            depth_or_array_layers: 1,
-                        },
-                        mip_level_count: 1,
-                        sample_count: 1,
-                        dimension: wgpu::TextureDimension::D2,
-                        format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                        usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
-                        label: Some("Text Texture"),
-                        view_formats: &[],
-                    });
-
-                self.texture = Some(texture.into());
-            }
-
-            let texture = self.texture.as_ref().unwrap();
-
-            context.text_render(
-                &self.text,
-                cosmic::RenderAttribute {
-                    font_size: self.font_size,
-                    font_color: self.font_color.to_rgba_u8(),
-                    offset_px: [0.0, 0.0],
-                    text_attr: cosmic_text::Attrs::new(),
-                    line_height: self.font_size,
-                },
-                cosmic::TextureAttribute {
-                    width: current_size.width as u32,
-                    height: current_size.height as u32,
-                    texture,
-                },
-            );
-
-            self.redraw_texture = false;
-        }
-
-        if self.reset_vertex {
-            let context = encoder.get_context();
-            let current_size = self.size.to_px(parent_size, context);
-
-            let (vertex_buffer, index_buffer, index_len) = TexturedVertex::atomic_rectangle_buffer(
-                &context,
-                0.0,
-                0.0,
-                current_size.width,
-                current_size.height,
-                false,
-            );
-
-            self.vertex_buffer = Some(vertex_buffer);
-            self.index_buffer = Some(index_buffer);
-            self.index_len = index_len;
-
-            self.reset_vertex = false;
-        }
-
         // render texture
-
-        encoder.draw(
-            RenderItem {
-                object: vec![Object::Textured {
-                    object_affine: nalgebra::Matrix4::identity(),
-                    vertex_buffer: self.vertex_buffer.as_ref().unwrap(),
-                    index_buffer: self.index_buffer.as_ref().unwrap(),
-                    index_len: self.index_len,
-                    texture: self.texture.as_ref().unwrap(),
-                }],
-            },
-            affine,
-        );
+        todo!()
     }
 }

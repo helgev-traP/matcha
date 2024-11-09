@@ -1,18 +1,15 @@
 use std::sync::Arc;
 
+use vello::{kurbo, peniko, Scene};
+
 use crate::{
-    application_context::ApplicationContext,
+    context::SharedContext,
     events::UiEvent,
-    renderer::RendererCommandEncoder,
     types::{
         color::Color,
         size::{PxSize, Size, SizeUnit},
     },
-    ui::{Dom, DomComPareResult, RenderItem, RenderingTrait, Widget, WidgetTrait},
-    vertex::{
-        colored_vertex::ColoredVertex,
-        vertex_generator::{BorderDescriptor, RectangleDescriptor},
-    },
+    ui::{Dom, DomComPareResult, LayerStack, Widget},
 };
 
 pub struct SquareDescriptor {
@@ -23,8 +20,6 @@ pub struct SquareDescriptor {
 
     pub border_width: f32,
     pub border_color: Color,
-
-    pub div: u16,
 }
 
 impl Default for SquareDescriptor {
@@ -39,7 +34,6 @@ impl Default for SquareDescriptor {
             background_color: Color::Rgb8USrgb { r: 0, g: 0, b: 0 },
             border_width: 0.0,
             border_color: Color::Rgb8USrgb { r: 0, g: 0, b: 0 },
-            div: 0,
         }
     }
 }
@@ -53,8 +47,6 @@ pub struct Square {
 
     border_width: f32,
     border_color: Color,
-
-    div: u16,
 }
 
 impl Square {
@@ -66,7 +58,6 @@ impl Square {
             background_color: disc.background_color,
             border_width: disc.border_width,
             border_color: disc.border_color,
-            div: disc.div,
         }
     }
 }
@@ -80,13 +71,6 @@ impl<R: Copy + Send + 'static> Dom<R> for Square {
             background_color: self.background_color,
             border_width: self.border_width,
             border_color: self.border_color,
-            div: self.div,
-            vertex_buffer: None,
-            index_buffer: None,
-            index_len: 0,
-            border_vertex_buffer: None,
-            border_index_buffer: None,
-            border_index_len: 0,
         })
     }
 
@@ -103,40 +87,23 @@ pub struct SquareNode {
     background_color: Color,
     border_width: f32,
     border_color: Color,
-
-    div: u16,
-
-    // box
-    vertex_buffer: Option<wgpu::Buffer>,
-    index_buffer: Option<wgpu::Buffer>,
-    index_len: u32,
-
-    // border
-    border_vertex_buffer: Option<wgpu::Buffer>,
-    border_index_buffer: Option<wgpu::Buffer>,
-    border_index_len: u32,
 }
 
-impl<R: Copy + Send + 'static> WidgetTrait<R> for SquareNode {
+impl<R: Copy + Send + 'static> Widget<R> for SquareNode {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
 
-    fn widget_event(
+    fn event(
         &mut self,
         event: &UiEvent,
         parent_size: PxSize,
-        context: &ApplicationContext,
+        context: &SharedContext,
     ) -> crate::events::UiEventResult<R> {
         crate::events::UiEventResult::default()
     }
 
-    fn is_inside(
-        &self,
-        position: [f32; 2],
-        parent_size: PxSize,
-        context: &ApplicationContext,
-    ) -> bool {
+    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool {
         let current_size = self.size.to_px(parent_size, context);
 
         if position[0] < 0.0
@@ -176,18 +143,12 @@ impl<R: Copy + Send + 'static> WidgetTrait<R> for SquareNode {
             DomComPareResult::Different
         }
     }
-}
 
-impl RenderingTrait for SquareNode {
     fn size(&self) -> Size {
         self.size
     }
 
-    fn px_size(
-        &self,
-        parent_size: crate::types::size::PxSize,
-        context: &crate::application_context::ApplicationContext,
-    ) -> crate::types::size::PxSize {
+    fn px_size(&self, parent_size: PxSize, context: &SharedContext) -> crate::types::size::PxSize {
         self.size.to_px(parent_size, context)
     }
 
@@ -200,66 +161,54 @@ impl RenderingTrait for SquareNode {
 
     fn render(
         &mut self,
+        scene: &mut Scene,
+        _: &mut LayerStack,
         parent_size: PxSize,
-        affine: nalgebra::Matrix4<f32>,
-        encoder: RendererCommandEncoder,
+        affine: vello::kurbo::Affine,
+        context: &SharedContext,
     ) {
-        let context = encoder.get_context();
+        let context = context;
 
         let size = self.size.to_px(parent_size, context);
 
-        if self.vertex_buffer.is_none() || self.index_buffer.is_none() || self.index_len == 0 {
-            let mut rec_desc = RectangleDescriptor::new(size.width, size.height).radius(self.radius);
-            if self.div > 0 {
-                rec_desc = rec_desc.division(self.div);
-            }
-            let (vertex, index, index_len) =
-                ColoredVertex::rectangle_buffer(context, rec_desc, false);
+        // fill background
 
-            self.vertex_buffer = Some(vertex);
-            self.index_buffer = Some(index);
-            self.index_len = index_len;
-        }
+        // fill background
+        if !self.background_color.is_transparent() {
+            let color = peniko::Color::from(self.background_color.to_rgba_u8());
 
-        if self.border_vertex_buffer.is_none() {
-            let mut bor_desc = BorderDescriptor::new(size.width, size.height, self.border_width)
-                .radius(self.radius);
-
-            if self.div > 0 {
-                bor_desc = bor_desc.division(self.div);
-            }
-
-            let (vertex, index, index_len) = ColoredVertex::border_buffer(
-                context,
-                bor_desc,
-                false,
+            scene.fill(
+                peniko::Fill::NonZero,
+                affine,
+                color,
+                None,
+                &kurbo::RoundedRect::new(
+                    0.0,
+                    0.0,
+                    size.width as f64,
+                    size.height as f64,
+                    self.border_width as f64,
+                ),
             );
-
-            self.border_vertex_buffer = Some(vertex);
-            self.border_index_buffer = Some(index);
-            self.border_index_len = index_len;
         }
 
-        encoder.draw(
-            RenderItem {
-                object: vec![
-                    crate::ui::Object::Colored {
-                        object_affine: nalgebra::Matrix4::identity(),
-                        vertex_buffer: self.vertex_buffer.as_ref().unwrap(),
-                        index_buffer: self.index_buffer.as_ref().unwrap(),
-                        index_len: self.index_len,
-                        color: self.background_color,
-                    },
-                    crate::ui::Object::Colored {
-                        object_affine: nalgebra::Matrix4::identity(),
-                        vertex_buffer: self.border_vertex_buffer.as_ref().unwrap(),
-                        index_buffer: self.border_index_buffer.as_ref().unwrap(),
-                        index_len: self.border_index_len,
-                        color: self.border_color,
-                    },
-                ],
-            },
-            affine,
-        );
+        // draw border
+        if self.border_width > 0.0 {
+            let color = peniko::Color::from(self.border_color.to_rgba_u8());
+
+            scene.stroke(
+                &kurbo::Stroke::new(self.border_width as f64),
+                affine,
+                color,
+                None,
+                &kurbo::RoundedRect::new(
+                    0.0,
+                    0.0,
+                    size.width as f64,
+                    size.height as f64,
+                    self.radius as f64,
+                ),
+            );
+        }
     }
 }

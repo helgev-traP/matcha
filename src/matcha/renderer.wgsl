@@ -3,14 +3,6 @@ struct VertexInput {
     @location(1) tex_coords: vec2<f32>,
 };
 
-struct VertexOutput {
-    @builtin(position) clip_position: vec4<f32>,
-    @location(0) tex_coords: vec2<f32>,
-};
-
-@group(0) @binding(0)
-var<uniform> affine: mat4x4<f32>;
-
 @vertex
 fn vs_main(
     model: VertexInput,
@@ -22,13 +14,18 @@ fn vs_main(
         1.0,
     );
 
-    let out: VertexOutput = VertexOutput(affine * model4, model.tex_coords);
+    let out: VertexOutput = VertexOutput(model4, model.tex_coords);
     return out;
 }
 
-@group(1) @binding(0)
+struct VertexOutput {
+    @builtin(position) clip_position: vec4<f32>,
+    @location(0) tex_coords: vec2<f32>,
+};
+
+@group(0) @binding(0)
 var t_diffuse: texture_2d<f32>;
-@group(1) @binding(1)
+@group(0) @binding(1)
 var s_diffuse: sampler;
 
 @fragment

@@ -1,14 +1,12 @@
-use nalgebra as na;
-use std::cell::Cell;
+use std::{any::Any, cell::Cell};
+use vello::Scene;
 
 use crate::{
-    application_context::ApplicationContext,
+    context::SharedContext,
     events::{UiEvent, UiEventResult},
-    renderer::RendererCommandEncoder,
-    types::size::{PxSize, Size, SizeUnit, StdSize},
-    ui::{Dom, DomComPareResult, RenderingTrait, Widget, WidgetTrait},
+    types::size::{PxSize, Size, SizeUnit, StdSize, StdSizeUnit},
+    ui::{Dom, DomComPareResult, LayerStack, Widget},
 };
-
 pub struct RowDescriptor<R> {
     pub label: Option<String>,
     pub vec: Vec<Box<dyn Dom<R>>>,
@@ -69,27 +67,22 @@ pub struct RowRenderNode<R: 'static> {
     cache_self_size: Cell<Option<PxSize>>,
 }
 
-impl<R> WidgetTrait<R> for RowRenderNode<R> {
+impl<R> Widget<R> for RowRenderNode<R> {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
 
-    fn widget_event(
+    fn event(
         &mut self,
         event: &UiEvent,
         parent_size: PxSize,
-        context: &ApplicationContext,
+        context: &SharedContext,
     ) -> crate::events::UiEventResult<R> {
         // todo: event handling
         UiEventResult::default()
     }
 
-    fn is_inside(
-        &self,
-        position: [f32; 2],
-        parent_size: PxSize,
-        context: &ApplicationContext,
-    ) -> bool {
+    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool {
         // todo: inside check
         true
     }
@@ -117,9 +110,7 @@ impl<R> WidgetTrait<R> for RowRenderNode<R> {
             DomComPareResult::Different
         }
     }
-}
 
-impl<R: Send + 'static> RenderingTrait for RowRenderNode<R> {
     fn size(&self) -> crate::types::size::Size {
         Size {
             width: SizeUnit::Content(1.0),
@@ -127,7 +118,7 @@ impl<R: Send + 'static> RenderingTrait for RowRenderNode<R> {
         }
     }
 
-    fn px_size(&self, _: PxSize, context: &ApplicationContext) -> PxSize {
+    fn px_size(&self, _: PxSize, context: &SharedContext) -> PxSize {
         let mut width_px: f32 = 0.0;
         let mut width_percent: f32 = 0.0;
         let mut height: f32 = 0.0;
@@ -165,21 +156,22 @@ impl<R: Send + 'static> RenderingTrait for RowRenderNode<R> {
 
     fn render(
         &mut self,
+        scene: &mut Scene,
+        texture_layer: &mut LayerStack,
         parent_size: PxSize,
-        affine: na::Matrix4<f32>,
-        encoder: RendererCommandEncoder,
+        affine: vello::kurbo::Affine,
+        context: &SharedContext,
     ) {
-        let current_size = self.px_size(parent_size, encoder.get_context());
+        let current_size = self.px_size(parent_size, context);
 
         let mut accumulated_width: f32 = 0.0;
         for child in &mut self.children {
-            let child_px_size = child.px_size(current_size, encoder.get_context());
-            let child_affine =
-                na::Matrix4::new_translation(&na::Vector3::new(accumulated_width, 0.0, 0.0))
-                    * affine;
-            let encoder = encoder.clone();
+            let child_px_size = child.px_size(current_size, context);
 
-            child.render(current_size, child_affine, encoder);
+            let child_affine =
+                vello::kurbo::Affine::translate((accumulated_width as f64, 0.0)) * affine;
+
+            child.render(scene, texture_layer, child_px_size, child_affine, context);
 
             accumulated_width += child_px_size.width;
         }

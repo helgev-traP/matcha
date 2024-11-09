@@ -1,11 +1,12 @@
 [package]
-name = "tea-ui"
+name = "matcha"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-wgpu = "22"
 winit = "0.30"
+vello = "0.3.0"
+
 pollster = "0.3"
 bytemuck = { version = "1.17", features = ["derive"] }
 nalgebra = "0.33"

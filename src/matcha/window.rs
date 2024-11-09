@@ -1,15 +1,14 @@
-use nalgebra as na;
-use std::{sync::Arc, time::Instant};
+use std::sync::Arc;
+use vello::wgpu;
 
 use super::{
-    application_context,
-    component::Component,
+    component::{Component, ComponentRenderNode},
     events::{self, UiEventContent},
     types::{color::Color, size::PxSize},
-    ui::{RenderingTrait, Widget, WidgetTrait},
+    ui::Widget,
 };
 
-mod gpu_state;
+mod gpu_context;
 mod keyboard_state;
 mod mouse_state;
 
@@ -24,22 +23,17 @@ pub struct Window<'a, Model: Send + 'static, Message: 'static> {
     maximized: bool,
     full_screen: bool,
 
-    font_context: Option<crate::cosmic::FontContext>,
-
     base_color: Color,
 
     // rendering
     winit_window: Option<Arc<winit::window::Window>>,
-    gpu_state: Option<gpu_state::GpuState<'a>>,
-    context: Option<application_context::ApplicationContext>,
+    gpu_context: Option<gpu_context::GpuContext<'a>>,
 
     render: Option<crate::renderer::Renderer>,
 
-    // render tree
-    render_tree: Option<Box<dyn Widget<Message>>>,
-
     // root component
     root_component: Component<Model, Message, Message, Message>,
+    root_component_render_tree: Option<ComponentRenderNode<Model, Message, Message>>,
 
     // frame
     frame: u64,
@@ -68,14 +62,12 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
             init_size: [800, 600],
             maximized: false,
             full_screen: false,
-            font_context: None,
             base_color: Color::Rgb8USrgb { r: 0, g: 0, b: 0 },
             winit_window: None,
-            gpu_state: None,
-            context: None,
+            gpu_context: None,
             render: None,
-            render_tree: None,
             root_component: component,
+            root_component_render_tree: None,
             frame: 0,
             mouse_state: None,
             mouse_primary_button: winit::event::MouseButton::Left,
@@ -111,10 +103,6 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
         self.full_screen = full_screen;
     }
 
-    pub fn font_context(&mut self, font_context: crate::cosmic::FontContext) {
-        self.font_context = Some(font_context);
-    }
-
     // input
 
     pub fn mouse_primary_button(&mut self, button: crate::device::mouse::MousePhysicalButton) {
@@ -139,43 +127,41 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
 impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
     fn render(&mut self) {
         // surface
-        let surface = self.gpu_state.as_ref().unwrap().get_current_texture();
+        let surface = self
+            .gpu_context
+            .as_ref()
+            .unwrap()
+            .get_current_surface_texture();
         let surface_texture_view = surface
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
         // depth texture
-        let depth_texture = self.gpu_state.as_ref().unwrap().get_depth_texture();
+        let depth_texture = self.gpu_context.as_ref().unwrap().get_depth_texture();
         let depth_texture_view = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         // multisample texture
-        let multisampled_texture = self.gpu_state.as_ref().unwrap().get_multisampled_texture();
+        let multisampled_texture = self
+            .gpu_context
+            .as_ref()
+            .unwrap()
+            .get_multisampled_texture();
         let multisampled_texture_view =
             multisampled_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         // viewport size
-        let viewport_size = self.gpu_state.as_ref().unwrap().get_viewport_size();
+        let viewport_size = self.gpu_context.as_ref().unwrap().get_viewport_size();
 
         // render
-
-        // make encoder
-        let render = self.render.as_mut().unwrap();
-        let encoder = render.encoder(
-            &surface_texture_view,
-            &multisampled_texture_view,
-            &depth_texture_view,
-            viewport_size,
-        );
 
         // benchmark timer start ----------------------------------
         self.benchmark.as_mut().unwrap().start();
 
-        // encode render tree
-        let render_tree = self.render_tree.as_mut().unwrap().for_rendering();
-        encoder.clear(self.base_color);
-        render_tree.render(viewport_size, na::Matrix4::identity(), encoder.clone());
+        todo!();
 
-        encoder.finish().unwrap();
+        // render texture stack
+
+        todo!();
 
         // benchmark timer stop -----------------------------------
         self.benchmark.as_mut().unwrap().stop();
@@ -224,15 +210,11 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
             winit_window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
         }
         self.winit_window = Some(winit_window);
-
-        let context = std::mem::take(&mut self.font_context);
-        let gpu_state = pollster::block_on(gpu_state::GpuState::new(
+        let gpu_state = pollster::block_on(gpu_context::GpuContext::new(
             self.winit_window.as_ref().unwrap().clone(),
             self.performance,
-            context,
         ));
-        self.context = Some(gpu_state.get_app_context());
-        self.gpu_state = Some(gpu_state);
+        self.gpu_context = Some(gpu_state);
 
         // set winit control flow
 
@@ -241,12 +223,9 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
         // crate renderer
 
         self.render = Some(crate::renderer::Renderer::new(
-            self.gpu_state.as_ref().unwrap().get_app_context(),
+            self.gpu_context.as_ref().unwrap().get_context(),
+            self.gpu_context.as_ref().unwrap().get_surface_format(),
         ));
-
-        // crate render tree
-
-        self.render_tree = Some(self.root_component.view().unwrap().build_render_tree());
 
         // crate input states
 
@@ -271,6 +250,8 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
 
         // render
 
+        self.root_component_render_tree = Some(self.root_component.component_render_node());
+
         self.render();
     }
 
@@ -287,7 +268,7 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
                 return;
             }
             winit::event::WindowEvent::Resized(size) => {
-                self.gpu_state.as_mut().unwrap().resize(size);
+                self.gpu_context.as_mut().unwrap().resize(size);
                 return;
             }
             // mouse
@@ -375,11 +356,7 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
             _ => return,
         };
 
-        self.render_tree.as_mut().unwrap().widget_event(
-            &ui_event,
-            self.gpu_state.as_ref().unwrap().get_viewport_size(),
-            self.context.as_ref().unwrap(),
-        );
+        // todo: give event to root component
     }
 
     fn new_events(

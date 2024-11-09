@@ -1,13 +1,11 @@
 use layout::LayoutNode;
-use nalgebra as na;
+use vello::{kurbo, peniko, Scene};
 
 use crate::{
-    application_context::ApplicationContext,
+    context::SharedContext,
     events::UiEvent,
-    renderer::RendererCommandEncoder,
     types::size::{PxSize, Size},
-    ui::{Dom, DomComPareResult, Object, RenderItem, RenderingTrait, Widget, WidgetTrait},
-    vertex::{colored_vertex::ColoredVertex, vertex_generator::RectangleDescriptor},
+    ui::{Dom, DomComPareResult, LayerStack, Widget},
 };
 
 pub mod style;
@@ -54,9 +52,6 @@ impl<T: Send + 'static> Dom<T> for Container<T> {
             label: self.label.clone(),
             properties: self.properties.clone(),
             layout: self.layout.build(),
-            box_vertex_buffer: None,
-            box_index_buffer: None,
-            box_index_len: 0,
         })
     }
 
@@ -70,33 +65,23 @@ pub struct ContainerNode<T> {
     label: Option<String>,
     properties: Style,
     layout: LayoutNode<T>,
-
-    // rendering
-    box_vertex_buffer: Option<wgpu::Buffer>,
-    box_index_buffer: Option<wgpu::Buffer>,
-    box_index_len: u32,
 }
 
-impl<T: Send + 'static> WidgetTrait<T> for ContainerNode<T> {
+impl<T: Send + 'static> Widget<T> for ContainerNode<T> {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
 
-    fn widget_event(
+    fn event(
         &mut self,
         event: &UiEvent,
         parent_size: PxSize,
-        context: &ApplicationContext,
+        context: &SharedContext,
     ) -> crate::events::UiEventResult<T> {
         todo!()
     }
 
-    fn is_inside(
-        &self,
-        position: [f32; 2],
-        parent_size: PxSize,
-        context: &ApplicationContext,
-    ) -> bool {
+    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool {
         todo!()
     }
 
@@ -116,14 +101,12 @@ impl<T: Send + 'static> WidgetTrait<T> for ContainerNode<T> {
             DomComPareResult::Different
         }
     }
-}
 
-impl<T> RenderingTrait for ContainerNode<T> {
     fn size(&self) -> Size {
         self.properties.size
     }
 
-    fn px_size(&self, parent_size: PxSize, context: &ApplicationContext) -> PxSize {
+    fn px_size(&self, parent_size: PxSize, context: &SharedContext) -> PxSize {
         self.properties.size.to_px(parent_size, context)
     }
 
@@ -136,45 +119,68 @@ impl<T> RenderingTrait for ContainerNode<T> {
 
     fn render(
         &mut self,
+        scene: &mut Scene,
+        texture_layer: &mut LayerStack,
         parent_size: PxSize,
-        affine: na::Matrix4<f32>,
-        encoder: RendererCommandEncoder,
-    )
-    {
+        affine: vello::kurbo::Affine,
+        context: &SharedContext,
+    ) {
         if let Visibility::Visible = self.properties.visibility {
+            let size = self.px_size(parent_size, context);
+
             // render box
+            // fill background
             if !self.properties.background_color.is_transparent() {
-                if self.box_vertex_buffer.is_none() {
-                    let (vertex_buffer, index_buffer, index_len) = ColoredVertex::rectangle_buffer(
-                        encoder.get_context(),
-                        RectangleDescriptor {
-                            x: 0.0,
-                            y: 0.0,
-                            width: parent_size.width,
-                            height: parent_size.height,
-                            radius: self.properties.border.top_left_radius,
-                            div: (self.properties.border.top_left_radius as u16).min(16),
-                        },
-                        false,
-                    );
-                    self.box_vertex_buffer = Some(vertex_buffer);
-                    self.box_index_buffer = Some(index_buffer);
-                    self.box_index_len = index_len;
-                }
+                let color = peniko::Color::from(self.properties.background_color.to_rgba_u8());
+
+                scene.fill(
+                    peniko::Fill::NonZero,
+                    affine,
+                    color,
+                    None,
+                    &kurbo::RoundedRect::new(
+                        0.0,
+                        0.0,
+                        size.width as f64,
+                        size.height as f64,
+                        (
+                            self.properties.border.top_left_radius as f64,
+                            self.properties.border.top_right_radius as f64,
+                            self.properties.border.bottom_right_radius as f64,
+                            self.properties.border.bottom_left_radius as f64,
+                        ),
+                    ),
+                );
             }
 
-            encoder.draw(
-                RenderItem {
-                    object: vec![Object::Colored {
-                        object_affine: affine,
-                        vertex_buffer: self.box_vertex_buffer.as_ref().unwrap(),
-                        index_buffer: self.box_index_buffer.as_ref().unwrap(),
-                        index_len: self.box_index_len,
-                        color: self.properties.background_color,
-                    }],
-                },
-                na::Matrix4::identity(),
-            );
+            // draw border
+            if self.properties.border.px > 0.0 {
+                let color = peniko::Color::from(self.properties.border.color.to_rgba_u8());
+
+                scene.stroke(
+                    &kurbo::Stroke::new(self.properties.border.px as f64),
+                    affine,
+                    color,
+                    None,
+                    &kurbo::RoundedRect::new(
+                        0.0,
+                        0.0,
+                        size.width as f64,
+                        size.height as f64,
+                        (
+                            self.properties.border.top_left_radius as f64,
+                            self.properties.border.top_right_radius as f64,
+                            self.properties.border.bottom_right_radius as f64,
+                            self.properties.border.bottom_left_radius as f64,
+                        ),
+                    ),
+                );
+            }
+
+            // render children
+            self.layout
+                .render(scene, texture_layer, size, affine, context);
+            todo!();
         }
     }
 }

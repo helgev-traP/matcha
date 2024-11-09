@@ -1,6 +1,6 @@
 // #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tea_ui::{
+use matcha::{
     app::App,
     component::{Component, ComponentAccess},
     types::{
@@ -47,7 +47,6 @@ fn view(_: &u32) -> Box<dyn Dom<()>> {
                                     },
                                     border_width: 1.0,
                                     border_color: Color::Rgb8USrgb { r: 0, g: 240, b: 200 },
-                                    div: 1,
                                 })) as Box<dyn Dom<()>>
                             })
                             .collect(),

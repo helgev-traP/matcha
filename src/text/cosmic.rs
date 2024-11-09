@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use cosmic_text as ct;
-use wgpu;
+use vello::wgpu;
 
 pub struct TextureAttribute<'a> {
     pub width: u32,

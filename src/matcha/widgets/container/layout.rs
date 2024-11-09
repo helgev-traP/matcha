@@ -6,13 +6,13 @@ pub mod position;
 pub use position::*;
 pub mod overflow;
 pub use overflow::*;
+use vello::Scene;
 
 use crate::{
-    application_context::ApplicationContext,
+    context::SharedContext,
     events::{UiEvent, UiEventResult},
-    renderer::RendererCommandEncoder,
     types::size::{PxSize, SizeUnit},
-    ui::{Dom, Widget},
+    ui::{Dom, LayerStack, Widget},
 };
 use nalgebra as na;
 
@@ -210,7 +210,7 @@ impl<T> LayoutNode<T> {
         &mut self,
         event: &UiEvent,
         parent_size: PxSize,
-        context: &ApplicationContext,
+        context: &SharedContext,
     ) -> UiEventResult<T> {
         // todo: event handling
         UiEventResult::default()
@@ -220,7 +220,7 @@ impl<T> LayoutNode<T> {
         &self,
         position: [f32; 2],
         parent_size: PxSize,
-        context: &ApplicationContext,
+        context: &SharedContext,
     ) -> bool {
         todo!()
     }
@@ -229,7 +229,7 @@ impl<T> LayoutNode<T> {
         todo!()
     }
 
-    pub fn px_size(&self, parent_size: PxSize, context: &ApplicationContext) -> PxSize {
+    pub fn px_size(&self, parent_size: PxSize, context: &SharedContext) -> PxSize {
         todo!()
     }
 
@@ -239,14 +239,16 @@ impl<T> LayoutNode<T> {
 
     pub fn render(
         &mut self,
+        scene: &mut Scene,
+        texture_layer: &mut LayerStack,
         parent_size: PxSize,
-        affine: na::Matrix4<f32>,
-        encoder: RendererCommandEncoder,
+        affine: vello::kurbo::Affine,
+        context: &SharedContext,
     ) {
         match &self {
             LayoutNode::Flex { size, .. } | LayoutNode::Grid { size, .. } => {
                 if size.borrow().is_none() {
-                    self.px_size(parent_size, encoder.get_context());
+                    self.px_size(parent_size, context);
                 }
             }
             _ => (),
