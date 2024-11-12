@@ -2,11 +2,11 @@ use nalgebra as na;
 use std::{sync::Arc, time::Instant};
 
 use super::{
-    application_context,
-    component::Component,
+    component::{Component, ComponentRenderNode},
+    context,
     events::{self, UiEventContent},
     types::{color::Color, size::PxSize},
-    ui::{RenderingTrait, Widget, WidgetTrait},
+    ui::Widget,
 };
 
 mod gpu_state;
@@ -31,15 +31,11 @@ pub struct Window<'a, Model: Send + 'static, Message: 'static> {
     // rendering
     winit_window: Option<Arc<winit::window::Window>>,
     gpu_state: Option<gpu_state::GpuState<'a>>,
-    context: Option<application_context::ApplicationContext>,
-
-    render: Option<crate::renderer::Renderer>,
-
-    // render tree
-    render_tree: Option<Box<dyn Widget<Message>>>,
+    context: Option<context::SharedContext>,
 
     // root component
     root_component: Component<Model, Message, Message, Message>,
+    root_component_render_node: Option<Box<dyn Widget<Message>>>,
 
     // frame
     frame: u64,
@@ -73,9 +69,8 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
             winit_window: None,
             gpu_state: None,
             context: None,
-            render: None,
-            render_tree: None,
             root_component: component,
+            root_component_render_node: None,
             frame: 0,
             mouse_state: None,
             mouse_primary_button: winit::event::MouseButton::Left,
@@ -138,15 +133,12 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
 
 impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
     fn render(&mut self) {
+        // --- prepare texture ---
         // surface
         let surface = self.gpu_state.as_ref().unwrap().get_current_texture();
         let surface_texture_view = surface
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-
-        // depth texture
-        let depth_texture = self.gpu_state.as_ref().unwrap().get_depth_texture();
-        let depth_texture_view = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         // multisample texture
         let multisampled_texture = self.gpu_state.as_ref().unwrap().get_multisampled_texture();
@@ -156,26 +148,12 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
         // viewport size
         let viewport_size = self.gpu_state.as_ref().unwrap().get_viewport_size();
 
-        // render
-
-        // make encoder
-        let render = self.render.as_mut().unwrap();
-        let encoder = render.encoder(
-            &surface_texture_view,
-            &multisampled_texture_view,
-            &depth_texture_view,
-            viewport_size,
-        );
+        // --- rendering ---
 
         // benchmark timer start ----------------------------------
         self.benchmark.as_mut().unwrap().start();
 
-        // encode render tree
-        let render_tree = self.render_tree.as_mut().unwrap().for_rendering();
-        encoder.clear(self.base_color);
-        render_tree.render(viewport_size, na::Matrix4::identity(), encoder.clone());
-
-        encoder.finish().unwrap();
+        todo!();
 
         // benchmark timer stop -----------------------------------
         self.benchmark.as_mut().unwrap().stop();
@@ -184,12 +162,12 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
         surface.present();
 
         // print frame (debug)
-        {
+        if let Some(benchmark) = &self.benchmark {
             print!(
                 "\rframe rendering time: {}, average: {}, max in second: {} | frame: {}",
-                self.benchmark.as_ref().unwrap().last_time(),
-                self.benchmark.as_ref().unwrap().average_time(),
-                self.benchmark.as_ref().unwrap().max_time(),
+                benchmark.last_time(),
+                benchmark.average_time(),
+                benchmark.max_time(),
                 self.frame,
             );
             // flush
@@ -205,7 +183,7 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
     for Window<'_, Model, Message>
 {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        // crate window
+        // --- crate window ---
 
         let winit_window = Arc::new(
             event_loop
@@ -225,6 +203,8 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
         }
         self.winit_window = Some(winit_window);
 
+        // --- create gpu state / shared context ---
+
         let context = std::mem::take(&mut self.font_context);
         let gpu_state = pollster::block_on(gpu_state::GpuState::new(
             self.winit_window.as_ref().unwrap().clone(),
@@ -238,19 +218,10 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
 
         event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
 
-        // crate renderer
-
-        self.render = Some(crate::renderer::Renderer::new(
-            self.gpu_state.as_ref().unwrap().get_app_context(),
-        ));
-
-        // crate render tree
-
-        self.render_tree = Some(self.root_component.view().unwrap().build_render_tree());
-
         // crate input states
 
         // todo: calculate double click and long press duration from monitor refresh rate
+
         self.mouse_state = Some(mouse_state::MouseState::new(12, 60).unwrap());
         self.keyboard_state = Some(keyboard_state::KeyboardState::new());
 
@@ -269,7 +240,8 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
             self.benchmark = Some(benchmark::Benchmark::new((rate / 1000) as usize));
         }
 
-        // render
+        // --- render ---
+        self.root_component_render_node = Some(self.root_component.view().build_render_tree());
 
         self.render();
     }
@@ -375,11 +347,14 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
             _ => return,
         };
 
-        self.render_tree.as_mut().unwrap().widget_event(
-            &ui_event,
-            self.gpu_state.as_ref().unwrap().get_viewport_size(),
-            self.context.as_ref().unwrap(),
-        );
+        self.root_component_render_node
+            .as_mut()
+            .unwrap()
+            .widget_event(
+                &ui_event,
+                self.gpu_state.as_ref().unwrap().get_viewport_size(),
+                self.context.as_ref().unwrap(),
+            );
     }
 
     fn new_events(

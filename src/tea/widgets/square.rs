@@ -1,14 +1,13 @@
 use std::sync::Arc;
 
 use crate::{
-    application_context::ApplicationContext,
+    context::SharedContext,
     events::UiEvent,
-    renderer::RendererCommandEncoder,
     types::{
         color::Color,
         size::{PxSize, Size, SizeUnit},
     },
-    ui::{Dom, DomComPareResult, RenderItem, RenderingTrait, Widget, WidgetTrait},
+    ui::{Dom, DomComPareResult, TextureSet, Widget},
     vertex::{
         colored_vertex::ColoredVertex,
         vertex_generator::{BorderDescriptor, RectangleDescriptor},
@@ -117,7 +116,7 @@ pub struct SquareNode {
     border_index_len: u32,
 }
 
-impl<R: Copy + Send + 'static> WidgetTrait<R> for SquareNode {
+impl<R: Copy + Send + 'static> Widget<R> for SquareNode {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
@@ -126,7 +125,7 @@ impl<R: Copy + Send + 'static> WidgetTrait<R> for SquareNode {
         &mut self,
         event: &UiEvent,
         parent_size: PxSize,
-        context: &ApplicationContext,
+        context: &SharedContext,
     ) -> crate::events::UiEventResult<R> {
         crate::events::UiEventResult::default()
     }
@@ -135,7 +134,7 @@ impl<R: Copy + Send + 'static> WidgetTrait<R> for SquareNode {
         &self,
         position: [f32; 2],
         parent_size: PxSize,
-        context: &ApplicationContext,
+        context: &SharedContext,
     ) -> bool {
         let current_size = self.size.to_px(parent_size, context);
 
@@ -176,9 +175,7 @@ impl<R: Copy + Send + 'static> WidgetTrait<R> for SquareNode {
             DomComPareResult::Different
         }
     }
-}
 
-impl RenderingTrait for SquareNode {
     fn size(&self) -> Size {
         self.size
     }
@@ -186,7 +183,7 @@ impl RenderingTrait for SquareNode {
     fn px_size(
         &self,
         parent_size: crate::types::size::PxSize,
-        context: &crate::application_context::ApplicationContext,
+        context: &crate::context::SharedContext,
     ) -> crate::types::size::PxSize {
         self.size.to_px(parent_size, context)
     }
@@ -200,11 +197,12 @@ impl RenderingTrait for SquareNode {
 
     fn render(
         &mut self,
+        texture: Option<&TextureSet>,
         parent_size: PxSize,
         affine: nalgebra::Matrix4<f32>,
-        encoder: RendererCommandEncoder,
+        context: &SharedContext,
     ) {
-        let context = encoder.get_context();
+        let context = context;
 
         let size = self.size.to_px(parent_size, context);
 
@@ -240,26 +238,6 @@ impl RenderingTrait for SquareNode {
             self.border_index_len = index_len;
         }
 
-        encoder.draw(
-            RenderItem {
-                object: vec![
-                    crate::ui::Object::Colored {
-                        object_affine: nalgebra::Matrix4::identity(),
-                        vertex_buffer: self.vertex_buffer.as_ref().unwrap(),
-                        index_buffer: self.index_buffer.as_ref().unwrap(),
-                        index_len: self.index_len,
-                        color: self.background_color,
-                    },
-                    crate::ui::Object::Colored {
-                        object_affine: nalgebra::Matrix4::identity(),
-                        vertex_buffer: self.border_vertex_buffer.as_ref().unwrap(),
-                        index_buffer: self.border_index_buffer.as_ref().unwrap(),
-                        index_len: self.border_index_len,
-                        color: self.border_color,
-                    },
-                ],
-            },
-            affine,
-        );
+        todo!()
     }
 }

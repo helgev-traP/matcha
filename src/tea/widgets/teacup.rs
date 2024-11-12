@@ -4,13 +4,13 @@ use wgpu::util::DeviceExt;
 use wgpu::ImageCopyTextureBase;
 
 use crate::events::UiEvent;
-use crate::renderer::RendererCommandEncoder;
 use crate::types::size::StdSizeUnit;
+use crate::ui::TextureSet;
 use crate::{
-    application_context::ApplicationContext,
+    context::SharedContext,
     events::UiEventResult,
     types::size::{PxSize, StdSize},
-    ui::{Dom, DomComPareResult, RenderItem, RenderingTrait, Widget, WidgetTrait},
+    ui::{Dom, DomComPareResult, Widget},
     vertex::textured_vertex::TexturedVertex,
 };
 
@@ -115,12 +115,12 @@ pub struct TeacupRenderNode {
     index_len: u32,
 }
 
-impl<R: 'static> WidgetTrait<R> for TeacupRenderNode {
+impl<R: 'static> Widget<R> for TeacupRenderNode {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
 
-    fn widget_event(&mut self, _: &UiEvent, _: PxSize, _: &ApplicationContext) -> UiEventResult<R> {
+    fn widget_event(&mut self, _: &UiEvent, _: PxSize, _: &SharedContext) -> UiEventResult<R> {
         Default::default()
     }
 
@@ -128,7 +128,7 @@ impl<R: 'static> WidgetTrait<R> for TeacupRenderNode {
         &self,
         position: [f32; 2],
         parent_size: PxSize,
-        context: &ApplicationContext,
+        context: &SharedContext,
     ) -> bool {
         let size = PxSize::from_size_parent_size(self.size, parent_size, context);
 
@@ -177,17 +177,16 @@ impl<R: 'static> WidgetTrait<R> for TeacupRenderNode {
             DomComPareResult::Different
         }
     }
-}
 
-impl RenderingTrait for TeacupRenderNode {
     fn render(
         &mut self,
+        texture: Option<&TextureSet>,
         parent_size: PxSize,
         affine: na::Matrix4<f32>,
-        encoder: RendererCommandEncoder,
+        context: &SharedContext,
     )
     {
-        let context = encoder.get_context();
+        let context = context;
         let device = context.get_wgpu_device();
 
         // calculate actual size
@@ -281,37 +280,7 @@ impl RenderingTrait for TeacupRenderNode {
         // draw
 
         if self.visible {
-            encoder.draw(
-                RenderItem {
-                    object: vec![crate::ui::Object::Textured {
-                        vertex_buffer: self.vertex_buffer.as_ref().unwrap(),
-                        index_buffer: self.index_buffer.as_ref().unwrap(),
-                        index_len: self.index_len,
-                        texture: self.texture.as_ref().unwrap().clone(),
-                        object_affine: na::Matrix4::identity(),
-                    }],
-                },
-                nalgebra::Matrix4::new_translation(&na::Vector3::new(
-                    self.position[0],
-                    -self.position[1],
-                    0.0,
-                )) * affine
-                    * nalgebra::Matrix4::new_translation(&na::Vector3::new(
-                        size.width / 2.0,
-                        -size.height / 2.0,
-                        0.0,
-                    ))
-                    * nalgebra::Matrix4::new_rotation(nalgebra::Vector3::new(
-                        0.0,
-                        0.0,
-                        self.rotate.to_radians(),
-                    ))
-                    * nalgebra::Matrix4::new_translation(&na::Vector3::new(
-                        -size.width / 2.0,
-                        size.height / 2.0,
-                        0.0,
-                    )),
-            );
+            todo!()
         }
     }
 
@@ -319,7 +288,7 @@ impl RenderingTrait for TeacupRenderNode {
         self.frame_size
     }
 
-    fn px_size(&self, parent_size: PxSize, context: &ApplicationContext) -> PxSize {
+    fn px_size(&self, parent_size: PxSize, context: &SharedContext) -> PxSize {
         let mut size = StdSize::from_parent_size(self.frame_size, parent_size, context);
         if size.width.is_none() {
             size.width = StdSizeUnit::Pixel(self.picture_size.width);

@@ -1,6 +1,6 @@
 use wgpu::util::DeviceExt;
 
-use crate::application_context::ApplicationContext;
+use crate::context::SharedContext;
 
 use super::vertex_generator::{border, rectangle, BorderDescriptor, RectangleDescriptor};
 
@@ -56,7 +56,7 @@ impl ColoredVertex {
     }
 
     pub fn atomic_rectangle_buffer(
-        context: &ApplicationContext,
+        context: &SharedContext,
         x: f32,
         y: f32,
         width: f32,
@@ -114,7 +114,7 @@ impl ColoredVertex {
     }
 
     pub fn rectangle_buffer(
-        context: &ApplicationContext,
+        context: &SharedContext,
         desc: RectangleDescriptor,
         compute: bool,
     ) -> (wgpu::Buffer, wgpu::Buffer, u32) {
@@ -169,7 +169,7 @@ impl ColoredVertex {
     }
 
     pub fn border_buffer(
-        context: &ApplicationContext,
+        context: &SharedContext,
         desc: BorderDescriptor,
         compute: bool,
     ) -> (wgpu::Buffer, wgpu::Buffer, u32) {

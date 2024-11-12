@@ -1,7 +1,7 @@
 use wgpu::util::DeviceExt;
 
 use super::vertex_generator::{rectangle, RectangleDescriptor};
-use crate::application_context::ApplicationContext;
+use crate::context::SharedContext;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -66,7 +66,7 @@ impl TexturedVertex {
     }
 
     pub fn atomic_rectangle_buffer(
-        context: &ApplicationContext,
+        context: &SharedContext,
         x: f32,
         y: f32,
         width: f32,
@@ -128,7 +128,7 @@ impl TexturedVertex {
     }
 
     pub fn rectangle_buffer(
-        context: &ApplicationContext,
+        context: &SharedContext,
         desc: RectangleDescriptor,
         compute: bool,
     ) -> (wgpu::Buffer, wgpu::Buffer, u32) {

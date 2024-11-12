@@ -1,39 +1,16 @@
-use nalgebra as na;
 use std::any::Any;
 
 use super::{
-    application_context::ApplicationContext,
+    context::SharedContext,
     events::{UiEvent, UiEventResult},
-    renderer::RendererCommandEncoder,
-    types::{
-        color::Color,
-        size::{PxSize, Size},
-    },
+    types::size::{PxSize, Size},
 };
 
-// render item
+// set of texture and stencil
 
-pub enum Object<'a> {
-    Textured {
-        object_affine: na::Matrix4<f32>,
-        vertex_buffer: &'a wgpu::Buffer,
-        index_buffer: &'a wgpu::Buffer,
-        index_len: u32,
-        texture: &'a wgpu::Texture,
-    },
-    Colored {
-        object_affine: na::Matrix4<f32>,
-        vertex_buffer: &'a wgpu::Buffer,
-        index_buffer: &'a wgpu::Buffer,
-        index_len: u32,
-        color: Color,
-    },
-}
-
-pub struct RenderItem<'a> {
-    pub object: Vec<Object<'a>>,
-    // pub px_size: super::types::size::PxSize,
-    // pub property: crate::ui::Property,
+pub struct TextureSet {
+    pub texture: wgpu::Texture,
+    pub stencil: wgpu::Texture,
 }
 
 // dom tree node
@@ -45,26 +22,13 @@ pub trait Dom<Response>: Any + 'static {
 
 // render tree node
 
-pub trait Widget<Response>: WidgetTrait<Response> + RenderingTrait {
-    fn for_rendering(&mut self) -> &mut dyn RenderingTrait;
-}
-
-impl<T, R> Widget<R> for T
-where
-    T: WidgetTrait<R> + RenderingTrait,
-{
-    fn for_rendering(&mut self) -> &mut dyn RenderingTrait {
-        self
-    }
-}
-
-pub trait WidgetTrait<GlobalMessage> {
+pub trait Widget<T> {
     // label
     fn label(&self) -> Option<&str>;
 
     // for dom handling
-    fn update_render_tree(&mut self, dom: &dyn Dom<GlobalMessage>) -> Result<(), ()>;
-    fn compare(&self, dom: &dyn Dom<GlobalMessage>) -> DomComPareResult;
+    fn update_render_tree(&mut self, dom: &dyn Dom<T>) -> Result<(), ()>;
+    fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult;
 
     // raw event
     // todo ?
@@ -75,39 +39,33 @@ pub trait WidgetTrait<GlobalMessage> {
         &mut self,
         event: &UiEvent,
         parent_size: PxSize,
-        context: &ApplicationContext,
-    ) -> UiEventResult<GlobalMessage>;
+        context: &SharedContext,
+    ) -> UiEventResult<T>;
 
     // inside / outside check
     // todo
-    fn is_inside(
-        &self,
-        position: [f32; 2],
-        parent_size: PxSize,
-        context: &ApplicationContext,
-    ) -> bool;
-}
+    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool;
 
-pub enum DomComPareResult {
-    Same,
-    Changed,
-    Different,
-}
-
-pub trait RenderingTrait {
     /// The size configuration of the widget.
     fn size(&self) -> Size;
 
     /// Actual size including its sub widgets with pixel value.
-    fn px_size(&self, parent_size: PxSize, context: &ApplicationContext) -> PxSize;
+    fn px_size(&self, parent_size: PxSize, context: &SharedContext) -> PxSize;
 
     /// Default size of widget with pixel value.
     fn default_size(&self) -> PxSize;
 
     fn render(
         &mut self,
+        texture: Option<&TextureSet>,
         parent_size: PxSize,
-        affine: na::Matrix4<f32>,
-        encoder: RendererCommandEncoder,
+        affine: nalgebra::Matrix4<f32>,
+        context: &SharedContext,
     );
+}
+
+pub enum DomComPareResult {
+    Same,
+    Changed,
+    Different,
 }

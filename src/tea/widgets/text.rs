@@ -1,14 +1,13 @@
 use crate::{
-    application_context::ApplicationContext,
+    context::SharedContext,
     cosmic,
     device::keyboard,
     events::{ElementState, UiEvent},
-    renderer::RendererCommandEncoder,
     types::{
         color::Color,
         size::{PxSize, Size, SizeUnit},
     },
-    ui::{Dom, DomComPareResult, Object, RenderItem, RenderingTrait, Widget, WidgetTrait},
+    ui::{Dom, DomComPareResult, TextureSet, Widget},
     vertex::textured_vertex::TexturedVertex,
 };
 
@@ -103,7 +102,7 @@ pub struct TextNode {
     reset_vertex: bool,
 }
 
-impl<T: Send + 'static> WidgetTrait<T> for TextNode {
+impl<T: Send + 'static> Widget<T> for TextNode {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
@@ -112,7 +111,7 @@ impl<T: Send + 'static> WidgetTrait<T> for TextNode {
         &mut self,
         event: &UiEvent,
         parent_size: PxSize,
-        context: &ApplicationContext,
+        context: &SharedContext,
     ) -> crate::events::UiEventResult<T> {
         match &event.content {
             crate::events::UiEventContent::KeyboardInput { key, element_state } => {
@@ -174,7 +173,7 @@ impl<T: Send + 'static> WidgetTrait<T> for TextNode {
         &self,
         position: [f32; 2],
         parent_size: PxSize,
-        context: &ApplicationContext,
+        context: &SharedContext,
     ) -> bool {
         let current_size = self.size.to_px(parent_size, context);
 
@@ -205,14 +204,12 @@ impl<T: Send + 'static> WidgetTrait<T> for TextNode {
             DomComPareResult::Different
         }
     }
-}
 
-impl RenderingTrait for TextNode {
     fn size(&self) -> Size {
         self.size
     }
 
-    fn px_size(&self, parent_size: PxSize, context: &ApplicationContext) -> PxSize {
+    fn px_size(&self, parent_size: PxSize, context: &SharedContext) -> PxSize {
         self.size.to_px(parent_size, context)
     }
 
@@ -225,13 +222,14 @@ impl RenderingTrait for TextNode {
 
     fn render(
         &mut self,
+        texture: Option<&TextureSet>,
         parent_size: PxSize,
         affine: nalgebra::Matrix4<f32>,
-        encoder: RendererCommandEncoder,
+        context: &SharedContext,
     )
     {
         if self.redraw_texture {
-            let context = encoder.get_context();
+            let context = context;
             let current_size = self.size.to_px(parent_size, context);
 
             // allocate texture
@@ -278,7 +276,7 @@ impl RenderingTrait for TextNode {
         }
 
         if self.reset_vertex {
-            let context = encoder.get_context();
+            let context = context;
             let current_size = self.size.to_px(parent_size, context);
 
             let (vertex_buffer, index_buffer, index_len) = TexturedVertex::atomic_rectangle_buffer(
@@ -299,17 +297,6 @@ impl RenderingTrait for TextNode {
 
         // render texture
 
-        encoder.draw(
-            RenderItem {
-                object: vec![Object::Textured {
-                    object_affine: nalgebra::Matrix4::identity(),
-                    vertex_buffer: self.vertex_buffer.as_ref().unwrap(),
-                    index_buffer: self.index_buffer.as_ref().unwrap(),
-                    index_len: self.index_len,
-                    texture: self.texture.as_ref().unwrap(),
-                }],
-            },
-            affine,
-        );
+        todo!()
     }
 }

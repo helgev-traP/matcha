@@ -2,11 +2,10 @@ use nalgebra as na;
 use std::{any::Any, cell::Cell};
 
 use crate::{
-    application_context::ApplicationContext,
+    context::SharedContext,
     events::{UiEvent, UiEventResult},
-    renderer::RendererCommandEncoder,
     types::size::{PxSize, Size, SizeUnit, StdSize, StdSizeUnit},
-    ui::{Dom, DomComPareResult, RenderingTrait, Widget, WidgetTrait},
+    ui::{Dom, DomComPareResult, TextureSet, Widget},
 };
 
 pub struct ColumnDescriptor<R> {
@@ -67,7 +66,7 @@ pub struct ColumnRenderNode<R: 'static> {
     cache_self_size: Cell<Option<PxSize>>,
 }
 
-impl<R: 'static> WidgetTrait<R> for ColumnRenderNode<R> {
+impl<R: 'static> Widget<R> for ColumnRenderNode<R> {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
@@ -76,7 +75,7 @@ impl<R: 'static> WidgetTrait<R> for ColumnRenderNode<R> {
         &mut self,
         event: &UiEvent,
         parent_size: PxSize,
-        context: &ApplicationContext,
+        context: &SharedContext,
     ) -> UiEventResult<R> {
         // todo: event handling
         UiEventResult::default()
@@ -86,7 +85,7 @@ impl<R: 'static> WidgetTrait<R> for ColumnRenderNode<R> {
         &self,
         position: [f32; 2],
         parent_size: PxSize,
-        context: &ApplicationContext,
+        context: &SharedContext,
     ) -> bool {
         // todo
         true
@@ -115,9 +114,7 @@ impl<R: 'static> WidgetTrait<R> for ColumnRenderNode<R> {
             DomComPareResult::Different
         }
     }
-}
 
-impl<R> RenderingTrait for ColumnRenderNode<R> {
     fn size(&self) -> Size {
         Size {
             width: SizeUnit::Content(1.0),
@@ -125,7 +122,7 @@ impl<R> RenderingTrait for ColumnRenderNode<R> {
         }
     }
 
-    fn px_size(&self, _: PxSize, context: &ApplicationContext) -> PxSize {
+    fn px_size(&self, _: PxSize, context: &SharedContext) -> PxSize {
         let mut width: f32 = 0.0;
         let mut height_px: f32 = 0.0;
         let mut height_percent: f32 = 0.0;
@@ -161,21 +158,21 @@ impl<R> RenderingTrait for ColumnRenderNode<R> {
 
     fn render(
         &mut self,
+        texture: Option<&TextureSet>,
         parent_size: PxSize,
         affine: na::Matrix4<f32>,
-        encoder: RendererCommandEncoder,
+        context: &SharedContext,
     ) {
-        let current_size = self.px_size(parent_size, encoder.get_context());
+        let current_size = self.px_size(parent_size, context);
 
         let mut accumulated_height: f32 = 0.0;
         for child in &mut self.children {
-            let child_px_size = child.px_size(current_size, encoder.get_context());
+            let child_px_size = child.px_size(current_size, context);
             let child_affine =
                 na::Matrix4::new_translation(&na::Vector3::new(0.0, -accumulated_height, 0.0))
                     * affine;
-            let encoder = encoder.clone();
 
-            child.render(child_px_size, child_affine, encoder);
+            child.render(texture, current_size, child_affine, context);
 
             accumulated_height += child_px_size.height;
         }

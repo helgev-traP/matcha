@@ -4,15 +4,14 @@ use nalgebra as na;
 use wgpu::util::DeviceExt;
 
 use super::{
-    application_context::ApplicationContext,
+    context::SharedContext,
     types::{color::Color, size::PxSize},
-    ui::{Object, RenderItem},
     vertex::{colored_vertex::ColoredVertex, textured_vertex::TexturedVertex},
 };
 
 pub struct Renderer {
     // context
-    app_context: ApplicationContext,
+    app_context: SharedContext,
 
     // wgpu state
     // texture
@@ -28,7 +27,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(context: ApplicationContext) -> Self {
+    pub fn new(context: SharedContext) -> Self {
         let device = context.get_wgpu_device();
 
         let surface_format = context.get_surface_format();
@@ -241,7 +240,7 @@ impl Renderer {
 
 pub struct RendererCommandEncoder<'a> {
     // context
-    app_context: &'a ApplicationContext,
+    app_context: &'a SharedContext,
     size: PxSize,
 
     // wgpu state
@@ -288,7 +287,7 @@ impl Clone for RendererCommandEncoder<'_> {
 }
 
 impl<'a> RendererCommandEncoder<'a> {
-    pub fn get_context(&self) -> &ApplicationContext {
+    pub fn get_context(&self) -> &SharedContext {
         self.app_context
     }
 
