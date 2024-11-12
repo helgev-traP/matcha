@@ -1,10 +1,9 @@
 use crate::{
-    application_context::ApplicationContext,
+    context::SharedContext,
     device::mouse::MouseButton,
     events::UiEvent,
-    renderer::RendererCommandEncoder,
     types::size::{PxSize, Size},
-    ui::{Dom, DomComPareResult, RenderingTrait, Widget, WidgetTrait},
+    ui::{Dom, DomComPareResult, TextureSet, Widget},
 };
 
 use nalgebra as na;
@@ -60,7 +59,7 @@ pub struct DragFieldNode<T> {
     item: Box<dyn Widget<T>>,
 }
 
-impl<T: Send + 'static> WidgetTrait<T> for DragFieldNode<T> {
+impl<T: Send + 'static> Widget<T> for DragFieldNode<T> {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
@@ -69,7 +68,7 @@ impl<T: Send + 'static> WidgetTrait<T> for DragFieldNode<T> {
         &mut self,
         event: &UiEvent,
         parent_size: PxSize,
-        context: &ApplicationContext,
+        context: &SharedContext,
     ) -> crate::events::UiEventResult<T> {
         match &event.content {
             crate::events::UiEventContent::MouseClick {
@@ -126,7 +125,7 @@ impl<T: Send + 'static> WidgetTrait<T> for DragFieldNode<T> {
         &self,
         position: [f32; 2],
         parent_size: PxSize,
-        context: &ApplicationContext,
+        context: &SharedContext,
     ) -> bool {
         let current_size = self.size.to_px(parent_size, context);
 
@@ -157,14 +156,12 @@ impl<T: Send + 'static> WidgetTrait<T> for DragFieldNode<T> {
             DomComPareResult::Different
         }
     }
-}
 
-impl<T> RenderingTrait for DragFieldNode<T> {
     fn size(&self) -> Size {
         self.size
     }
 
-    fn px_size(&self, parent_size: PxSize, context: &ApplicationContext) -> PxSize {
+    fn px_size(&self, parent_size: PxSize, context: &SharedContext) -> PxSize {
         self.size.to_px(parent_size, context)
     }
 
@@ -177,11 +174,12 @@ impl<T> RenderingTrait for DragFieldNode<T> {
 
     fn render(
         &mut self,
+        texture: Option<&TextureSet>,
         parent_size: PxSize,
         affine: na::Matrix4<f32>,
-        encoder: RendererCommandEncoder,
+        context: &SharedContext,
     ) {
-        let current_size = self.size.to_px(parent_size, encoder.get_context());
+        let current_size = self.size.to_px(parent_size, context);
 
         let item_position_matrix = if let Some(drag_delta) = self.drag_delta {
             na::Matrix4::new_translation(&na::Vector3::new(
@@ -198,6 +196,6 @@ impl<T> RenderingTrait for DragFieldNode<T> {
         };
 
         self.item
-            .render(current_size, item_position_matrix * affine, encoder);
+            .render(texture, current_size, affine * item_position_matrix, context);
     }
 }

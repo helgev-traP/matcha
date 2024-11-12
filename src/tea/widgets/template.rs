@@ -1,9 +1,8 @@
 use crate::{
-    application_context::ApplicationContext,
+    context::SharedContext,
     events::UiEvent,
-    renderer::RendererCommandEncoder,
     types::size::{PxSize, Size, SizeUnit},
-    ui::{Dom, DomComPareResult, RenderingTrait, Widget, WidgetTrait},
+    ui::{Dom, DomComPareResult, TextureSet, Widget},
 };
 
 pub struct TemplateDescriptor {
@@ -55,7 +54,7 @@ pub struct TemplateNode {
     size: Size,
 }
 
-impl<T: Send + 'static> WidgetTrait<T> for TemplateNode {
+impl<T: Send + 'static> Widget<T> for TemplateNode {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
@@ -64,7 +63,7 @@ impl<T: Send + 'static> WidgetTrait<T> for TemplateNode {
         &mut self,
         event: &UiEvent,
         parent_size: PxSize,
-        context: &ApplicationContext,
+        context: &SharedContext,
     ) -> crate::events::UiEventResult<T> {
         todo!()
     }
@@ -73,7 +72,7 @@ impl<T: Send + 'static> WidgetTrait<T> for TemplateNode {
         &self,
         position: [f32; 2],
         parent_size: PxSize,
-        context: &ApplicationContext,
+        context: &SharedContext,
     ) -> bool {
         todo!()
     }
@@ -94,14 +93,12 @@ impl<T: Send + 'static> WidgetTrait<T> for TemplateNode {
             DomComPareResult::Different
         }
     }
-}
 
-impl RenderingTrait for TemplateNode {
     fn size(&self) -> Size {
         self.size
     }
 
-    fn px_size(&self, parent_size: PxSize, context: &ApplicationContext) -> PxSize {
+    fn px_size(&self, parent_size: PxSize, context: &SharedContext) -> PxSize {
         self.size.to_px(parent_size, context)
     }
 
@@ -114,9 +111,10 @@ impl RenderingTrait for TemplateNode {
 
     fn render(
         &mut self,
+        texture: Option<&TextureSet>,
         parent_size: PxSize,
         affine: nalgebra::Matrix4<f32>,
-        encoder: RendererCommandEncoder,
+        context: &SharedContext,
     )
     {
         todo!()

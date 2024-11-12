@@ -2,12 +2,12 @@ use std::sync::Arc;
 
 use crate::{cosmic::FontContext, types::size::PxSize};
 
-use super::application_context::ApplicationContext;
+use super::context::SharedContext;
 
 pub struct GpuState<'a> {
     instance: wgpu::Instance,
     adapter: wgpu::Adapter,
-    app_context: ApplicationContext,
+    app_context: SharedContext,
     config: wgpu::SurfaceConfiguration,
     surface: wgpu::Surface<'a>,
     multisampled_texture: wgpu::Texture,
@@ -94,9 +94,9 @@ impl GpuState<'_> {
             mip_level_count: 1,
             sample_count: 4,
             dimension: wgpu::TextureDimension::D2,
-            format: surface_format,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            view_formats: &[surface_format],
+            view_formats: &[],
         });
 
         let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -116,7 +116,7 @@ impl GpuState<'_> {
 
         surface.configure(&device, &config);
 
-        let app_context = ApplicationContext::new(
+        let app_context = SharedContext::new(
             winit_window,
             Arc::new(device),
             Arc::new(queue),
@@ -135,7 +135,7 @@ impl GpuState<'_> {
         }
     }
 
-    pub fn get_app_context(&self) -> ApplicationContext {
+    pub fn get_app_context(&self) -> SharedContext {
         self.app_context.clone()
     }
 
