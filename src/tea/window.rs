@@ -141,11 +141,6 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        // multisample texture
-        let multisampled_texture = self.gpu_state.as_ref().unwrap().get_multisampled_texture();
-        let multisampled_texture_view =
-            multisampled_texture.create_view(&wgpu::TextureViewDescriptor::default());
-
         // viewport size
         let viewport_size = self.gpu_state.as_ref().unwrap().get_viewport_size();
 
@@ -161,10 +156,33 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
             .unwrap()
             .render(viewport_size, self.context.as_ref().unwrap());
 
+        let normalize_matrix = na::Matrix4::new(
+            1.0 / viewport_size.width,
+            0.0,
+            0.0,
+            0.0,
+
+            0.0,
+            1.0 / viewport_size.height,
+            0.0,
+            0.0,
+
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+        );
+
         // project to screen
         self.renderer.as_mut().unwrap().render_to_screen(
             &surface_texture_view,
-            render_result
+            &normalize_matrix,
+            render_result,
         );
 
         // benchmark timer stop -----------------------------------
