@@ -3,15 +3,8 @@ use std::{any::Any, sync::Arc};
 use super::{
     context::SharedContext,
     events::{UiEvent, UiEventResult},
-    types::size::{PxSize, Size},
+    types::size::{PxSize, Size}, vertex::textured_vertex::TexturedVertex,
 };
-
-// set of texture and stencil
-
-pub struct TextureSet {
-    pub texture: Arc<wgpu::Texture>,
-    pub stencil: Arc<wgpu::Texture>,
-}
 
 // dom tree node
 
@@ -57,11 +50,16 @@ pub trait Widget<T> {
 
     fn render(
         &mut self,
-        texture: Option<&TextureSet>,
+        // ui environment
         parent_size: PxSize,
-        affine: nalgebra::Matrix4<f32>,
+        // context
         context: &SharedContext,
-    );
+    ) -> Vec<(
+        Arc<wgpu::Texture>,
+        Arc<Vec<TexturedVertex>>,
+        Arc<Vec<u16>>,
+        nalgebra::Matrix4<f32>,
+    )> ;
 }
 
 pub enum DomComPareResult {

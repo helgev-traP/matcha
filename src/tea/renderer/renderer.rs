@@ -1,13 +1,8 @@
 use std::sync::{Arc, Mutex};
 
-use wgpu::{util::DeviceExt, TextureUsages};
+use wgpu::util::DeviceExt;
 
-use crate::{
-    context::SharedContext,
-    types::{color::Color, size::PxSize},
-    vertex::{colored_vertex::ColoredVertex, textured_vertex::TexturedVertex},
-    widgets::text,
-};
+use crate::{context::SharedContext, vertex::textured_vertex::TexturedVertex};
 
 /// Render to Rgba8UnormSrgb texture
 pub struct Renderer {
@@ -16,92 +11,49 @@ pub struct Renderer {
 
     // wgpu state
     // texture must be Rgba8UnormSrgb
-    // texture projection
 
     // texture
-    texture_bind_group_layout: wgpu::BindGroupLayout,
-    textured_render_pipeline: wgpu::RenderPipeline,
-
-    // color
-    color_bind_group_layout: wgpu::BindGroupLayout,
-    colored_render_pipeline: wgpu::RenderPipeline,
-
+    bind_group_layout: wgpu::BindGroupLayout,
+    render_pipeline: wgpu::RenderPipeline,
+    texture_sampler: wgpu::Sampler,
     // stencil
-    stencil_bind_group_layout: wgpu::BindGroupLayout,
+    // todo
+    // stencil_bind_group_layout: wgpu::BindGroupLayout,
 
-    // affine
-    affine_bind_group_layout: wgpu::BindGroupLayout,
+    // projection to surface
+    surface_render_pipeline: wgpu::RenderPipeline,
 }
 
 impl Renderer {
     pub fn new(context: SharedContext) -> Self {
         let device = context.get_wgpu_device();
 
-        let affine_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Panel Affine Bind Group Layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Panel Texture Bind Group Layout"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
                     },
                     count: None,
-                }],
-            });
-
-        let stencil_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Panel Texture Bind Group Layout"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
-            });
-
-        let texture_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Panel Texture Bind Group Layout"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
-            });
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
 
         let textured_render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Panel Render Pipeline Layout"),
-                bind_group_layouts: &[&affine_bind_group_layout, &texture_bind_group_layout],
+                bind_group_layouts: &[&bind_group_layout],
                 push_constant_ranges: &[],
             });
 
@@ -110,7 +62,56 @@ impl Renderer {
             source: wgpu::ShaderSource::Wgsl(include_str!("render_textured.wgsl").into()),
         });
 
-        let textured_render_pipeline =
+        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Panel Render Pipeline"),
+            layout: Some(&textured_render_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &textured_shader,
+                entry_point: "vs_main",
+                buffers: &[TexturedVertex::desc()],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &textured_shader,
+                entry_point: "fs_main",
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState {
+                count: 4,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview: None,
+            cache: None,
+        });
+
+        let texture_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("Renderer TexturedVertex Texture Sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+
+        let surface_render_pipeline =
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("Panel Render Pipeline"),
                 layout: Some(&textured_render_pipeline_layout),
@@ -124,73 +125,7 @@ impl Renderer {
                     module: &textured_shader,
                     entry_point: "fs_main",
                     targets: &[Some(wgpu::ColorTargetState {
-                        format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                        blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
-                }),
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: Some(wgpu::Face::Back),
-                    polygon_mode: wgpu::PolygonMode::Fill,
-                    unclipped_depth: false,
-                    conservative: false,
-                },
-                depth_stencil: None,
-                multisample: wgpu::MultisampleState {
-                    count: 4,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false,
-                },
-                multiview: None,
-                cache: None,
-            });
-
-        let color_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Panel Affine Bind Group Layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-            });
-
-        let colored_render_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Panel Render Pipeline Layout"),
-                bind_group_layouts: &[&affine_bind_group_layout, &color_bind_group_layout],
-                push_constant_ranges: &[],
-            });
-
-        let colored_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Panel Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("render_colored.wgsl").into()),
-        });
-
-        let colored_render_pipeline =
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("Panel Render Pipeline"),
-                layout: Some(&colored_render_pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &colored_shader,
-                    entry_point: "vs_main",
-                    buffers: &[ColoredVertex::desc()],
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &colored_shader,
-                    entry_point: "fs_main",
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                        format: context.get_surface_format(),
                         blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                         write_mask: wgpu::ColorWrites::ALL,
                     })],
@@ -217,150 +152,115 @@ impl Renderer {
 
         Self {
             context,
-            texture_bind_group_layout,
-            textured_render_pipeline,
-            color_bind_group_layout,
-            colored_render_pipeline,
-            stencil_bind_group_layout,
-            affine_bind_group_layout,
+            bind_group_layout,
+            render_pipeline,
+            texture_sampler,
+            surface_render_pipeline,
         }
     }
 
-    pub fn project(
+    pub fn render_to_screen(
         &self,
-        destination: &wgpu::Texture,
-        source: &wgpu::Texture,
-        stencil: &wgpu::Texture,
+        destination_view: &wgpu::TextureView,
+        source: Vec<(
+            Arc<wgpu::Texture>,
+            Arc<Vec<TexturedVertex>>,
+            Arc<Vec<u16>>,
+            nalgebra::Matrix4<f32>,
+        )>,
     ) {
-        // return if STORAGE_BINDING are not set
-        if destination.usage().contains(TextureUsages::STORAGE_BINDING)
-            || source.usage().contains(TextureUsages::STORAGE_BINDING)
-        {
-            return;
-        }
+        self.render_process(destination_view, source, true);
+    }
 
+    pub fn render(
+        &self,
+        destination_view: &wgpu::TextureView,
+        source: Vec<(
+            Arc<wgpu::Texture>,
+            Arc<Vec<TexturedVertex>>,
+            Arc<Vec<u16>>,
+            nalgebra::Matrix4<f32>,
+        )>,
+    ) {
+        self.render_process(destination_view, source, false);
+    }
+
+    fn render_process(
+        &self,
+        destination_view: &wgpu::TextureView,
+        source: Vec<(
+            Arc<wgpu::Texture>,
+            Arc<Vec<TexturedVertex>>,
+            Arc<Vec<u16>>,
+            nalgebra::Matrix4<f32>,
+        )>,
+        render_to_surface: bool,
+    ) {
         let device = self.context.get_wgpu_device();
+        let mut encoder = self.context.get_wgpu_device().create_command_encoder(
+            &wgpu::CommandEncoderDescriptor {
+                label: Some("Renderer Project Command Encoder"),
+            },
+        );
 
-        // texture bind group
-        let texture_source_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Texture Projection Bind Group Layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::StorageTexture {
-                        access: wgpu::StorageTextureAccess::ReadOnly,
-                        format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                        view_dimension: wgpu::TextureViewDimension::D2,
+        for (texture, vertex, index, matrix) in source {
+            let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+            let texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Renderer TexturedVertex Texture Bind Group"),
+                layout: &self.bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&texture_view),
                     },
-                    count: None,
-                }],
-            });
-
-        let texture_destination_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Texture Projection Bind Group Layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::StorageTexture {
-                        access: wgpu::StorageTextureAccess::WriteOnly,
-                        format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                        view_dimension: wgpu::TextureViewDimension::D2,
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&self.texture_sampler),
                     },
-                    count: None,
-                }],
-            });
-
-        let stencil_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Texture Projection Bind Group Layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::StorageTexture {
-                        access: wgpu::StorageTextureAccess::ReadOnly,
-                        format: wgpu::TextureFormat::R8Unorm,
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                    },
-                    count: None,
-                }],
-            });
-
-        let texture_source_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &texture_source_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::TextureView(
-                    &source.create_view(&wgpu::TextureViewDescriptor::default()),
-                ),
-            }],
-            label: Some("Texture Projection Bind Group (Source)"),
-        });
-
-        let texture_destination_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &texture_destination_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::TextureView(
-                    &destination.create_view(&wgpu::TextureViewDescriptor::default()),
-                ),
-            }],
-            label: Some("Texture Projection Bind Group (Destination)"),
-        });
-
-        let stencil_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &stencil_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::TextureView(
-                    &stencil.create_view(&wgpu::TextureViewDescriptor::default()),
-                ),
-            }],
-            label: Some("Texture Projection Bind Group (Stencil)"),
-        });
-
-        let compute_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Texture Projection Pipeline Layout"),
-                bind_group_layouts: &[
-                    &texture_source_bind_group_layout,
-                    &texture_destination_bind_group_layout,
-                    &stencil_bind_group_layout,
                 ],
-                push_constant_ranges: &[],
             });
 
-        let compute_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Texture Projection Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("render_projection.wgsl").into()),
-        });
-
-        let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("Texture Projection Pipeline"),
-            layout: Some(&compute_pipeline_layout),
-            module: &compute_shader,
-            entry_point: "main",
-            compilation_options: wgpu::PipelineCompilationOptions::default(),
-            cache: None,
-        });
-
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Projection Command Encoder"),
-        });
-
-        {
-            let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("Projection Compute Pass"),
-                timestamp_writes: None,
+            let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Renderer TexturedVertex Vertex Buffer"),
+                contents: bytemuck::cast_slice(&vertex),
+                usage: wgpu::BufferUsages::VERTEX,
             });
 
-            cpass.set_pipeline(&compute_pipeline);
-            cpass.set_bind_group(0, &texture_source_bind_group, &[]);
-            cpass.set_bind_group(1, &texture_destination_bind_group, &[]);
-            cpass.set_bind_group(2, &stencil_bind_group, &[]);
+            let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Renderer TexturedVertex Index Buffer"),
+                contents: bytemuck::cast_slice(&index),
+                usage: wgpu::BufferUsages::INDEX,
+            });
 
-            cpass.dispatch_workgroups(32, 32, 1);
+            {
+                let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("Renderer TexturedVertex Render Pass"),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view: &destination_view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Load,
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+
+                if render_to_surface {
+                    render_pass.set_pipeline(&self.surface_render_pipeline);
+                } else {
+                    render_pass.set_pipeline(&self.render_pipeline);
+                }
+                render_pass.set_bind_group(0, &texture_bind_group, &[]);
+                render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+                render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+                render_pass.draw_indexed(0..index.len() as u32, 0, 0..1);
+            }
         }
+
+        self.context.get_wgpu_queue().submit(std::iter::once(encoder.finish()));
     }
 }

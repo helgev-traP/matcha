@@ -1,9 +1,11 @@
+use std::sync::Arc;
+
 use crate::{
     context::SharedContext,
     device::mouse::MouseButton,
     events::UiEvent,
     types::size::{PxSize, Size},
-    ui::{Dom, DomComPareResult, TextureSet, Widget},
+    ui::{Dom, DomComPareResult, Widget},
 };
 
 use nalgebra as na;
@@ -121,12 +123,7 @@ impl<T: Send + 'static> Widget<T> for DragFieldNode<T> {
         crate::events::UiEventResult::default()
     }
 
-    fn is_inside(
-        &self,
-        position: [f32; 2],
-        parent_size: PxSize,
-        context: &SharedContext,
-    ) -> bool {
+    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool {
         let current_size = self.size.to_px(parent_size, context);
 
         if position[0] < 0.0
@@ -174,11 +171,16 @@ impl<T: Send + 'static> Widget<T> for DragFieldNode<T> {
 
     fn render(
         &mut self,
-        texture: Option<&TextureSet>,
+        // ui environment
         parent_size: PxSize,
-        affine: na::Matrix4<f32>,
+        // context
         context: &SharedContext,
-    ) {
+    ) -> Vec<(
+        Arc<wgpu::Texture>,
+        Arc<Vec<crate::vertex::textured_vertex::TexturedVertex>>,
+        Arc<Vec<u16>>,
+        nalgebra::Matrix4<f32>,
+    )> {
         let current_size = self.size.to_px(parent_size, context);
 
         let item_position_matrix = if let Some(drag_delta) = self.drag_delta {
@@ -195,7 +197,13 @@ impl<T: Send + 'static> Widget<T> for DragFieldNode<T> {
             ))
         };
 
-        self.item
-            .render(texture, current_size, affine * item_position_matrix, context);
+        let items = self.item.render(current_size, context);
+
+        items
+            .into_iter()
+            .map(|(texture, vertices, indices, matrix)| {
+                (texture, vertices, indices, item_position_matrix * matrix)
+            })
+            .collect()
     }
 }

@@ -1,14 +1,10 @@
-use std::{
-    cell::RefCell,
-    rc::Rc,
-    sync::{Arc, Mutex, MutexGuard},
-};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use super::{
     context::SharedContext,
     events::UiEventResult,
     types::size::PxSize,
-    ui::{Dom, DomComPareResult, TextureSet, Widget},
+    ui::{Dom, DomComPareResult, Widget}, vertex::textured_vertex::TexturedVertex,
 };
 
 pub struct Component<Model, Message, OuterResponse, InnerResponse> {
@@ -166,7 +162,7 @@ where
     InnerResponse: 'static,
 {
     fn build_render_tree(&self) -> Box<dyn Widget<OuterResponse>> {
-        Box::new(ComponentRenderNode {
+        Box::new(ComponentWidget {
             label: self.label.clone(),
             component_model: self.component_model.clone(),
             local_update_component: self.local_update_component,
@@ -179,7 +175,7 @@ where
     }
 }
 
-pub struct ComponentRenderNode<Model, OuterResponse: 'static, InnerResponse: 'static> {
+pub struct ComponentWidget<Model, OuterResponse: 'static, InnerResponse: 'static> {
     label: Option<String>,
     component_model: ComponentAccess<Model>,
     local_update_component:
@@ -187,7 +183,7 @@ pub struct ComponentRenderNode<Model, OuterResponse: 'static, InnerResponse: 'st
     node: Arc<Mutex<Box<dyn Widget<InnerResponse>>>>,
 }
 
-impl<Model, O, I> Widget<O> for ComponentRenderNode<Model, O, I> {
+impl<Model, O, I> Widget<O> for ComponentWidget<Model, O, I> {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
@@ -236,14 +232,16 @@ impl<Model, O, I> Widget<O> for ComponentRenderNode<Model, O, I> {
 
     fn render(
         &mut self,
-        texture: Option<&TextureSet>,
+        // ui environment
         parent_size: PxSize,
-        affine: nalgebra::Matrix4<f32>,
+        // context
         context: &SharedContext,
-    ) {
-        self.node
-            .lock()
-            .unwrap()
-            .render(texture, parent_size, affine, context)
+    ) -> Vec<(
+        Arc<wgpu::Texture>,
+        Arc<Vec<TexturedVertex>>,
+        Arc<Vec<u16>>,
+        nalgebra::Matrix4<f32>,
+    )> {
+        self.node.lock().unwrap().render(parent_size, context)
     }
 }
