@@ -1,4 +1,4 @@
-use std::any::Any;
+use std::{any::Any, sync::Arc};
 
 use super::{
     context::SharedContext,
@@ -9,14 +9,14 @@ use super::{
 // set of texture and stencil
 
 pub struct TextureSet {
-    pub texture: wgpu::Texture,
-    pub stencil: wgpu::Texture,
+    pub texture: Arc<wgpu::Texture>,
+    pub stencil: Arc<wgpu::Texture>,
 }
 
 // dom tree node
 
-pub trait Dom<Response>: Any + 'static {
-    fn build_render_tree(&self) -> Box<dyn Widget<Response>>;
+pub trait Dom<T>: Any + 'static {
+    fn build_render_tree(&self) -> Box<dyn Widget<T>>;
     fn as_any(&self) -> &dyn Any;
 }
 

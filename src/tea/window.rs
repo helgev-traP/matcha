@@ -55,7 +55,7 @@ pub struct Window<'a, Model: Send + 'static, Message: 'static> {
     benchmark: Option<benchmark::Benchmark>,
 }
 
-// setup
+// build chain
 impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
     pub fn new(component: Component<Model, Message, Message, Message>) -> Self {
         Self {
@@ -131,6 +131,7 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
     }
 }
 
+// winit event handler
 impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
     fn render(&mut self) {
         // --- prepare texture ---
@@ -252,7 +253,7 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
         window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
-        let mut ui_event = match event {
+        let ui_event = match event {
             // window
             winit::event::WindowEvent::CloseRequested => {
                 event_loop.exit();
