@@ -2,49 +2,48 @@ use nalgebra as na;
 use std::{sync::Arc, time::Instant};
 
 use super::{
-    component::{Component, ComponentRenderNode},
+    component::{Component, ComponentWidget},
     context,
     events::{self, UiEventContent},
+    renderer::Renderer,
     types::{color::Color, size::PxSize},
     ui::Widget,
 };
 
+mod benchmark;
 mod gpu_state;
 mod keyboard_state;
 mod mouse_state;
 
-mod benchmark;
-
 pub struct Window<'a, Model: Send + 'static, Message: 'static> {
     // --- rendering context ---
+
     // boot status
     performance: wgpu::PowerPreference,
     title: String,
     init_size: [u32; 2],
     maximized: bool,
     full_screen: bool,
-
     font_context: Option<crate::cosmic::FontContext>,
-
     base_color: Color,
 
     // rendering
     winit_window: Option<Arc<winit::window::Window>>,
     gpu_state: Option<gpu_state::GpuState<'a>>,
     context: Option<context::SharedContext>,
+    renderer: Option<Renderer>,
 
     // root component
     root_component: Component<Model, Message, Message, Message>,
-    root_component_render_node: Option<Box<dyn Widget<Message>>>,
+    root_component_widget: Option<Box<dyn Widget<Message>>>,
 
     // frame
     frame: u64,
 
     // --- input and event handling ---
+
     // mouse
     mouse_state: Option<mouse_state::MouseState>,
-
-    // mouse settings
     mouse_primary_button: winit::event::MouseButton,
     scroll_pixel_per_line: f32,
 
@@ -69,8 +68,9 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
             winit_window: None,
             gpu_state: None,
             context: None,
+            renderer: None,
             root_component: component,
-            root_component_render_node: None,
+            root_component_widget: None,
             frame: 0,
             mouse_state: None,
             mouse_primary_button: winit::event::MouseButton::Left,
@@ -134,7 +134,7 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
 // winit event handler
 impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
     fn render(&mut self) {
-        // --- prepare texture ---
+        // --- get surface texture ---
         // surface
         let surface = self.gpu_state.as_ref().unwrap().get_current_texture();
         let surface_texture_view = surface
@@ -154,7 +154,18 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
         // benchmark timer start ----------------------------------
         self.benchmark.as_mut().unwrap().start();
 
-        todo!();
+        // get root component's render result
+        let render_result = self
+            .root_component_widget
+            .as_mut()
+            .unwrap()
+            .render(viewport_size, self.context.as_ref().unwrap());
+
+        // project to screen
+        self.renderer.as_mut().unwrap().render_to_screen(
+            &surface_texture_view,
+            render_result
+        );
 
         // benchmark timer stop -----------------------------------
         self.benchmark.as_mut().unwrap().stop();
@@ -214,6 +225,7 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
         ));
         self.context = Some(gpu_state.get_app_context());
         self.gpu_state = Some(gpu_state);
+        self.renderer = Some(Renderer::new(self.context.as_ref().unwrap().clone()));
 
         // set winit control flow
 
@@ -242,7 +254,7 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
         }
 
         // --- render ---
-        self.root_component_render_node = Some(self.root_component.view().build_render_tree());
+        self.root_component_widget = Some(self.root_component.view().build_render_tree());
 
         self.render();
     }
@@ -348,14 +360,11 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
             _ => return,
         };
 
-        self.root_component_render_node
-            .as_mut()
-            .unwrap()
-            .widget_event(
-                &ui_event,
-                self.gpu_state.as_ref().unwrap().get_viewport_size(),
-                self.context.as_ref().unwrap(),
-            );
+        self.root_component_widget.as_mut().unwrap().widget_event(
+            &ui_event,
+            self.gpu_state.as_ref().unwrap().get_viewport_size(),
+            self.context.as_ref().unwrap(),
+        );
     }
 
     fn new_events(

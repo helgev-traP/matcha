@@ -6,8 +6,8 @@ use crate::context::SharedContext;
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct TexturedVertex {
-    position: [f32; 3],
-    tex_coords: [f32; 2],
+    pub position: [f32; 3],
+    pub tex_coords: [f32; 2],
 }
 
 impl TexturedVertex {
