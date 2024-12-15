@@ -10,7 +10,7 @@ use tea_ui::{
     ui::Dom,
     widgets::{
         drag_field::{DragField, DragFieldDescriptor},
-        square::{Square, SquareDescriptor},
+        teacup::{Teacup, TeacupDescriptor},
     },
 };
 
@@ -23,7 +23,20 @@ fn view(_: &u32) -> Box<dyn Dom<()>> {
             width: SizeUnit::Percent(100.0),
             height: SizeUnit::Percent(100.0),
         },
-        item: Box::new(Square::new(SquareDescriptor::default())),
+        item: Box::new(Teacup::new(TeacupDescriptor {
+            size: Size {
+                width: SizeUnit::Pixel(100.0),
+                height: SizeUnit::Pixel(100.0),
+            },
+            frame_size: Size {
+                width: SizeUnit::Pixel(100.0),
+                height: SizeUnit::Pixel(100.0),
+            },
+            position: [0.0, 0.0],
+            rotate: 0.0,
+            visible: true,
+            ..Default::default()
+        })),
     }))
 }
 

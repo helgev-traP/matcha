@@ -1,11 +1,11 @@
 use nalgebra as na;
 use std::any::Any;
+use std::sync::Arc;
 use wgpu::util::DeviceExt;
 use wgpu::ImageCopyTextureBase;
 
 use crate::events::UiEvent;
 use crate::types::size::StdSizeUnit;
-use crate::ui::TextureSet;
 use crate::{
     context::SharedContext,
     events::UiEventResult,
@@ -84,9 +84,25 @@ impl<R: 'static> Dom<R> for Teacup {
             frame_size: self.frame_size,
             visible: self.visible,
             texture: None,
-            vertex_buffer: None,
-            index_buffer: None,
-            index_len: 0,
+            vertex: Arc::new(vec![
+                TexturedVertex {
+                    position: [0.0, 0.0, 0.0],
+                    tex_coords: [0.0, 0.0],
+                },
+                TexturedVertex {
+                    position: [0.0, -(height as f32), 0.0],
+                    tex_coords: [0.0, 1.0],
+                },
+                TexturedVertex {
+                    position: [width as f32, -(height as f32), 0.0],
+                    tex_coords: [1.0, 1.0],
+                },
+                TexturedVertex {
+                    position: [width as f32, 0.0, 0.0],
+                    tex_coords: [1.0, 0.0],
+                },
+            ]),
+            index: Arc::new(vec![0, 1, 2, 0, 2, 3]),
         })
     }
 
@@ -109,10 +125,9 @@ pub struct TeacupRenderNode {
     visible: bool,
 
     // previous_size: Option<PxSize>,
-    texture: Option<wgpu::Texture>,
-    vertex_buffer: Option<wgpu::Buffer>,
-    index_buffer: Option<wgpu::Buffer>,
-    index_len: u32,
+    texture: Option<Arc<wgpu::Texture>>,
+    vertex: Arc<Vec<TexturedVertex>>,
+    index: Arc<Vec<u16>>,
 }
 
 impl<R: 'static> Widget<R> for TeacupRenderNode {
@@ -124,12 +139,7 @@ impl<R: 'static> Widget<R> for TeacupRenderNode {
         Default::default()
     }
 
-    fn is_inside(
-        &self,
-        position: [f32; 2],
-        parent_size: PxSize,
-        context: &SharedContext,
-    ) -> bool {
+    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool {
         let size = PxSize::from_size_parent_size(self.size, parent_size, context);
 
         if position[0] < self.position[0]
@@ -154,12 +164,6 @@ impl<R: 'static> Widget<R> for TeacupRenderNode {
         self.position = dom.position;
         self.rotate = dom.rotate_dig;
 
-        // clear cache
-
-        self.vertex_buffer = None;
-        self.index_buffer = None;
-        self.index_len = 0;
-
         Ok(())
     }
 
@@ -180,12 +184,16 @@ impl<R: 'static> Widget<R> for TeacupRenderNode {
 
     fn render(
         &mut self,
-        texture: Option<&TextureSet>,
+        // ui environment
         parent_size: PxSize,
-        affine: na::Matrix4<f32>,
+        // context
         context: &SharedContext,
-    )
-    {
+    ) -> Vec<(
+        Arc<wgpu::Texture>,
+        Arc<Vec<TexturedVertex>>,
+        Arc<Vec<u16>>,
+        nalgebra::Matrix4<f32>,
+    )> {
         let context = context;
         let device = context.get_wgpu_device();
 
@@ -213,12 +221,6 @@ impl<R: 'static> Widget<R> for TeacupRenderNode {
                 view_formats: &[],
             });
 
-            let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Texture Buffer"),
-                contents: &self.teacup_rgba,
-                usage: wgpu::BufferUsages::COPY_SRC,
-            });
-
             context.get_wgpu_queue().write_texture(
                 ImageCopyTextureBase {
                     texture: &texture,
@@ -235,52 +237,22 @@ impl<R: 'static> Widget<R> for TeacupRenderNode {
                 texture_size,
             );
 
-            // let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            //     label: Some("Texture Command Encoder"),
-            // });
-            // encoder.copy_buffer_to_texture(
-            //     wgpu::ImageCopyBuffer {
-            //         buffer: &buffer,
-            //         layout: wgpu::ImageDataLayout {
-            //             offset: 0,
-            //             bytes_per_row: Some(((4 * self.picture_size.width as u32) / 256 + 1) * 256),
-            //             rows_per_image: None,
-            //         },
-            //     },
-            //     wgpu::ImageCopyTexture {
-            //         texture: &texture,
-            //         mip_level: 0,
-            //         origin: wgpu::Origin3d::ZERO,
-            //         aspect: wgpu::TextureAspect::All,
-            //     },
-            //     texture_size,
-            // );
-            // context.get_wgpu_queue().submit(Some(encoder.finish()));
-
-            self.texture = Some(texture);
+            self.texture = Some(Arc::new(texture));
         }
-
-        // create / update vertex buffer
-
-        if self.vertex_buffer.is_none() || self.index_buffer.is_none() || self.index_len == 0 {
-            let (vertex, index, index_len) = TexturedVertex::atomic_rectangle_buffer(
-                context,
-                0.0,
-                0.0,
-                size.width,
-                size.height,
-                false,
-            );
-
-            self.vertex_buffer = Some(vertex);
-            self.index_buffer = Some(index);
-            self.index_len = index_len;
-        }
-
-        // draw
 
         if self.visible {
-            todo!()
+            vec![(
+                self.texture.as_ref().unwrap().clone(),
+                self.vertex.clone(),
+                self.index.clone(),
+                na::Matrix4::new_translation(&na::Vector3::new(
+                    self.position[0],
+                    -self.position[1],
+                    0.0,
+                )),
+            )]
+        } else {
+            vec![]
         }
     }
 

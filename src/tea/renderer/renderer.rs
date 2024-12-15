@@ -14,19 +14,33 @@ pub struct Renderer {
 
     // texture
     bind_group_layout: wgpu::BindGroupLayout,
-    render_pipeline: wgpu::RenderPipeline,
     texture_sampler: wgpu::Sampler,
+    render_pipeline: wgpu::RenderPipeline,
+    surface_render_pipeline: wgpu::RenderPipeline,
     // stencil
     // todo
     // stencil_bind_group_layout: wgpu::BindGroupLayout,
-
-    // projection to surface
-    surface_render_pipeline: wgpu::RenderPipeline,
+    affine_bind_group_layout: wgpu::BindGroupLayout,
 }
 
 impl Renderer {
     pub fn new(context: SharedContext) -> Self {
         let device = context.get_wgpu_device();
+
+        let affine_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("Panel Affine Bind Group Layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            });
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("Panel Texture Bind Group Layout"),
@@ -53,7 +67,7 @@ impl Renderer {
         let textured_render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Panel Render Pipeline Layout"),
-                bind_group_layouts: &[&bind_group_layout],
+                bind_group_layouts: &[&affine_bind_group_layout, &bind_group_layout],
                 push_constant_ranges: &[],
             });
 
@@ -92,7 +106,7 @@ impl Renderer {
             },
             depth_stencil: None,
             multisample: wgpu::MultisampleState {
-                count: 4,
+                count: 1,
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },
@@ -142,7 +156,7 @@ impl Renderer {
                 },
                 depth_stencil: None,
                 multisample: wgpu::MultisampleState {
-                    count: 4,
+                    count: 1,
                     mask: !0,
                     alpha_to_coverage_enabled: false,
                 },
@@ -153,15 +167,17 @@ impl Renderer {
         Self {
             context,
             bind_group_layout,
-            render_pipeline,
             texture_sampler,
+            render_pipeline,
             surface_render_pipeline,
+            affine_bind_group_layout,
         }
     }
 
     pub fn render_to_screen(
         &self,
         destination_view: &wgpu::TextureView,
+        normalize_matrix: &nalgebra::Matrix4<f32>,
         source: Vec<(
             Arc<wgpu::Texture>,
             Arc<Vec<TexturedVertex>>,
@@ -169,12 +185,13 @@ impl Renderer {
             nalgebra::Matrix4<f32>,
         )>,
     ) {
-        self.render_process(destination_view, source, true);
+        self.render_process(destination_view, normalize_matrix, source, true);
     }
 
     pub fn render(
         &self,
         destination_view: &wgpu::TextureView,
+        normalize_matrix: &nalgebra::Matrix4<f32>,
         source: Vec<(
             Arc<wgpu::Texture>,
             Arc<Vec<TexturedVertex>>,
@@ -182,12 +199,13 @@ impl Renderer {
             nalgebra::Matrix4<f32>,
         )>,
     ) {
-        self.render_process(destination_view, source, false);
+        self.render_process(destination_view, normalize_matrix, source, false);
     }
 
     fn render_process(
         &self,
         destination_view: &wgpu::TextureView,
+        normalize_matrix: &nalgebra::Matrix4<f32>,
         source: Vec<(
             Arc<wgpu::Texture>,
             Arc<Vec<TexturedVertex>>,
@@ -202,6 +220,23 @@ impl Renderer {
                 label: Some("Renderer Project Command Encoder"),
             },
         );
+
+        let normalize_affine_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Renderer TexturedVertex Affine Bind Group"),
+            layout: &self.affine_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                    buffer: &device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("Render TexturedVertex Affine Buffer"),
+                        contents: bytemuck::cast_slice(normalize_matrix.as_slice()),
+                        usage: wgpu::BufferUsages::UNIFORM,
+                    }),
+                    offset: 0,
+                    size: None,
+                }),
+            }],
+        });
 
         for (texture, vertex, index, matrix) in source {
             let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -254,13 +289,16 @@ impl Renderer {
                 } else {
                     render_pass.set_pipeline(&self.render_pipeline);
                 }
-                render_pass.set_bind_group(0, &texture_bind_group, &[]);
+                render_pass.set_bind_group(0, &normalize_affine_bind_group, &[]);
+                render_pass.set_bind_group(1, &texture_bind_group, &[]);
                 render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
                 render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
                 render_pass.draw_indexed(0..index.len() as u32, 0, 0..1);
             }
         }
 
-        self.context.get_wgpu_queue().submit(std::iter::once(encoder.finish()));
+        self.context
+            .get_wgpu_queue()
+            .submit(std::iter::once(encoder.finish()));
     }
 }
