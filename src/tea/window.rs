@@ -156,32 +156,10 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
             .unwrap()
             .render(viewport_size, self.context.as_ref().unwrap());
 
-        let normalize_matrix = na::Matrix4::new(
-            1.0 / viewport_size.width,
-            0.0,
-            0.0,
-            0.0,
-
-            0.0,
-            1.0 / viewport_size.height,
-            0.0,
-            0.0,
-
-            0.0,
-            0.0,
-            1.0,
-            0.0,
-            
-            0.0,
-            0.0,
-            0.0,
-            1.0,
-        );
-
         // project to screen
         self.renderer.as_mut().unwrap().render_to_screen(
             &surface_texture_view,
-            &normalize_matrix,
+            [viewport_size.width, viewport_size.height],
             render_result,
         );
 

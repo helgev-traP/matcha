@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use wgpu::util::DeviceExt;
 
@@ -11,8 +11,6 @@ pub struct Renderer {
 
     // wgpu state
     // texture must be Rgba8UnormSrgb
-
-    // texture
     bind_group_layout: wgpu::BindGroupLayout,
     texture_sampler: wgpu::Sampler,
     render_pipeline: wgpu::RenderPipeline,
@@ -177,7 +175,7 @@ impl Renderer {
     pub fn render_to_screen(
         &self,
         destination_view: &wgpu::TextureView,
-        normalize_matrix: &nalgebra::Matrix4<f32>,
+        texture_size: [f32; 2],
         source: Vec<(
             Arc<wgpu::Texture>,
             Arc<Vec<TexturedVertex>>,
@@ -185,13 +183,13 @@ impl Renderer {
             nalgebra::Matrix4<f32>,
         )>,
     ) {
-        self.render_process(destination_view, normalize_matrix, source, true);
+        self.render_process(destination_view, texture_size, source, true);
     }
 
     pub fn render(
         &self,
         destination_view: &wgpu::TextureView,
-        normalize_matrix: &nalgebra::Matrix4<f32>,
+        texture_size: [f32; 2],
         source: Vec<(
             Arc<wgpu::Texture>,
             Arc<Vec<TexturedVertex>>,
@@ -199,13 +197,13 @@ impl Renderer {
             nalgebra::Matrix4<f32>,
         )>,
     ) {
-        self.render_process(destination_view, normalize_matrix, source, false);
+        self.render_process(destination_view, texture_size, source, false);
     }
 
     fn render_process(
         &self,
         destination_view: &wgpu::TextureView,
-        normalize_matrix: &nalgebra::Matrix4<f32>,
+        texture_size: [f32; 2],
         source: Vec<(
             Arc<wgpu::Texture>,
             Arc<Vec<TexturedVertex>>,
@@ -219,6 +217,28 @@ impl Renderer {
             &wgpu::CommandEncoderDescriptor {
                 label: Some("Renderer Project Command Encoder"),
             },
+        );
+
+        let normalize_matrix = nalgebra::Matrix4::new(
+            2.0 / texture_size[0],
+            0.0,
+            0.0,
+            0.0,
+
+            0.0,
+            2.0 / texture_size[1],
+            0.0,
+            0.0,
+
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+
+            -1.0,
+            1.0,
+            0.0,
+            1.0,
         );
 
         let normalize_affine_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {

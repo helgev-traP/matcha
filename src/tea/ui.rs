@@ -3,7 +3,8 @@ use std::{any::Any, sync::Arc};
 use super::{
     context::SharedContext,
     events::{UiEvent, UiEventResult},
-    types::size::{PxSize, Size}, vertex::textured_vertex::TexturedVertex,
+    types::size::{PxSize, Size},
+    vertex::textured_vertex::TexturedVertex,
 };
 
 // dom tree node
@@ -59,7 +60,7 @@ pub trait Widget<T> {
         Arc<Vec<TexturedVertex>>,
         Arc<Vec<u16>>,
         nalgebra::Matrix4<f32>,
-    )> ;
+    )>;
 }
 
 pub enum DomComPareResult {
