@@ -107,14 +107,11 @@ impl<T: Send + 'static> Widget<T> for DragFieldNode<T> {
             crate::events::UiEventContent::CursorMove {
                 position,
                 primary_dragging_from,
-                secondary_dragging_from,
-                middle_dragging_from,
+                ..
             } => {
                 if let Some(drag_from) = primary_dragging_from {
-                    if let Some(drag_delta) = self.drag_delta {
-                        self.drag_delta =
-                            Some([position[0] - drag_from[0], position[1] - drag_from[1]]);
-                    }
+                    self.drag_delta =
+                        Some([position[0] - drag_from[0], position[1] - drag_from[1]]);
                 }
             }
             _ => (),
@@ -197,10 +194,9 @@ impl<T: Send + 'static> Widget<T> for DragFieldNode<T> {
             ))
         };
 
-        let items = self.item.render(current_size, context);
+        let item = self.item.render(current_size, context);
 
-        items
-            .into_iter()
+        item.into_iter()
             .map(|(texture, vertices, indices, matrix)| {
                 (texture, vertices, indices, item_position_matrix * matrix)
             })

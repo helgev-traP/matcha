@@ -220,23 +220,24 @@ impl Renderer {
         );
 
         let normalize_matrix = nalgebra::Matrix4::new(
+            // x
             2.0 / texture_size[0],
             0.0,
             0.0,
-            0.0,
-
+            -1.0,
+            // y
             0.0,
             2.0 / texture_size[1],
             0.0,
-            0.0,
-
+            1.0,
+            // z
             0.0,
             0.0,
             1.0,
             0.0,
-
-            -1.0,
-            1.0,
+            // w
+            0.0,
+            0.0,
             0.0,
             1.0,
         );
@@ -275,6 +276,20 @@ impl Renderer {
                     },
                 ],
             });
+
+            let vertex = vertex
+                .iter()
+                .map(|v| TexturedVertex {
+                    position: matrix
+                        .transform_point(&nalgebra::Point3::new(
+                            v.position[0],
+                            v.position[1],
+                            v.position[2],
+                        ))
+                        .into(),
+                    tex_coords: v.tex_coords,
+                })
+                .collect::<Vec<_>>();
 
             let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Renderer TexturedVertex Vertex Buffer"),

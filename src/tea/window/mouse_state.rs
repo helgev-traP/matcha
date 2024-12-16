@@ -183,7 +183,7 @@ impl MouseState {
         if let Some(last_position) = self.primary_dragging_from {
             primary_dragging_from = Some(last_position);
         } else {
-            if self.primary_click_status == 1 {
+            if self.primary_click_status != 0 {
                 self.primary_dragging_from = Some(self.position);
                 primary_dragging_from = Some(self.position);
             } else {
@@ -194,7 +194,7 @@ impl MouseState {
         if let Some(last_position) = self.secondary_dragging_from {
             secondary_dragging_from = Some(last_position);
         } else {
-            if self.secondary_click_status == 1 {
+            if self.secondary_click_status != 0 {
                 self.secondary_dragging_from = Some(self.position);
                 secondary_dragging_from = Some(self.position);
             } else {
@@ -205,7 +205,7 @@ impl MouseState {
         if let Some(last_position) = self.middle_dragging_from {
             middle_dragging_from = Some(last_position);
         } else {
-            if self.middle_click_status == 1 {
+            if self.middle_click_status != 0 {
                 self.middle_dragging_from = Some(self.position);
                 middle_dragging_from = Some(self.position);
             } else {
