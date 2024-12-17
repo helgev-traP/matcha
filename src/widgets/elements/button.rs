@@ -261,7 +261,6 @@ where
                     if button == &crate::device::mouse::MouseButton::Primary {
                         if let crate::events::ElementState::Pressed(_) = click_state {
                             if let Some(onclick) = self.onclick.clone() {
-                                println!("click");
                                 return crate::events::UiEventResult {
                                     user_event: Some(onclick),
                                 };

@@ -25,9 +25,9 @@ enum Message {
     Decrease,
 }
 
-fn update(mut component: ComponentAccess<i32>, message: Message) {
+fn update(component: &ComponentAccess<i32>, message: Message) {
+    println!("This will not be executed");
     let mut model = component.model_mut();
-    println!("model: {}", *model);
     match message {
         Message::Increase => *model += 1,
         Message::Decrease => *model -= 1,
@@ -38,7 +38,13 @@ fn local_update(
     component: &ComponentAccess<i32>,
     event_result: tea_ui::events::UiEventResult<Message>,
 ) -> tea_ui::events::UiEventResult<Message> {
-    event_result
+    let mut model = component.model_mut();
+    match event_result.user_event {
+        Some(Message::Increase) => *model += 1,
+        Some(Message::Decrease) => *model -= 1,
+        None => {}
+    }
+    Default::default()
 }
 
 fn view(model: &i32) -> Box<dyn Dom<Message>> {
