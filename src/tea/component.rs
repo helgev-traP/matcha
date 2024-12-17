@@ -13,7 +13,7 @@ pub struct Component<Model, Message, OuterResponse, InnerResponse> {
 
     model: Arc<Mutex<Model>>,
     model_updated: Arc<Mutex<bool>>,
-    fn_update: fn(ComponentAccess<Model>, Message),
+    fn_update: fn(&ComponentAccess<Model>, Message),
     fn_inner_update:
         fn(&ComponentAccess<Model>, UiEventResult<InnerResponse>) -> UiEventResult<OuterResponse>,
     fn_view: fn(&Model) -> Box<dyn Dom<InnerResponse>>,
@@ -27,7 +27,7 @@ impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'sta
     pub fn new(
         label: Option<String>,
         model: Model,
-        update: fn(ComponentAccess<Model>, Message),
+        update: fn(&ComponentAccess<Model>, Message),
         view: fn(&Model) -> Box<dyn Dom<InnerResponse>>,
     ) -> Self {
         Self {
@@ -62,13 +62,15 @@ impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'sta
 
     pub fn update(&mut self, message: Message) {
         (self.fn_update)(
-            ComponentAccess {
+            &ComponentAccess {
                 model: self.model.clone(),
                 model_updated: self.model_updated.clone(),
             },
             message,
         );
 
+        // todo: make it update widget tree also after inner update.
+        // todo: this block may be moved to another place.
         if *self.model_updated.lock().unwrap() {
             self.update_widget_tree();
             *self.model_updated.lock().unwrap() = false;
@@ -136,7 +138,7 @@ impl<Model> ComponentAccess<Model> {
         self.model.lock().unwrap()
     }
 
-    pub fn model_mut(&mut self) -> MutexGuard<Model> {
+    pub fn model_mut(&self) -> MutexGuard<Model> {
         *self.model_updated.lock().unwrap() = true;
         self.model.lock().unwrap()
     }
