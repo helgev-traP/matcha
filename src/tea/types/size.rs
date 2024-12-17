@@ -1,6 +1,6 @@
 use nalgebra as na;
 
-use crate::application_context::ApplicationContext;
+use crate::context::SharedContext;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SizeUnit {
@@ -24,7 +24,7 @@ impl SizeUnit {
     pub fn to_px(
         &self,
         parent_px_size: StdSizeUnit,
-        app_context: &ApplicationContext,
+        app_context: &SharedContext,
     ) -> StdSizeUnit {
         match self {
             SizeUnit::Pixel(x) => StdSizeUnit::Pixel(*x),
@@ -68,7 +68,7 @@ pub struct Size {
 }
 
 impl Size {
-    pub fn to_px(&self, parent_size: PxSize, app_context: &ApplicationContext) -> PxSize {
+    pub fn to_px(&self, parent_size: PxSize, app_context: &SharedContext) -> PxSize {
         PxSize {
             width: self
                 .width
@@ -98,7 +98,7 @@ impl PxSize {
     pub fn from_size_parent_size(
         size: Size,
         parent_size: PxSize,
-        context: &ApplicationContext,
+        context: &SharedContext,
     ) -> PxSize {
         PxSize {
             width: size
@@ -205,14 +205,14 @@ pub struct StdSize {
 // todo v---- ここから
 
 impl StdSize {
-    pub fn standardize(&self, parent_size: &Size, context: &ApplicationContext) -> StdSize {
+    pub fn standardize(&self, parent_size: &Size, context: &SharedContext) -> StdSize {
         StdSize {
             width: parent_size.width.to_px(self.width, context),
             height: parent_size.height.to_px(self.height, context),
         }
     }
 
-    pub fn from_size(size: Size, context: &ApplicationContext) -> StdSize {
+    pub fn from_size(size: Size, context: &SharedContext) -> StdSize {
         StdSize {
             width: size.width.to_px(StdSizeUnit::None, context),
             height: size.height.to_px(StdSizeUnit::None, context),
@@ -222,7 +222,7 @@ impl StdSize {
     pub fn from_parent_size(
         size: Size,
         parent_size: PxSize,
-        context: &ApplicationContext,
+        context: &SharedContext,
     ) -> StdSize {
         StdSize {
             width: size
@@ -251,8 +251,8 @@ impl From<PxSize> for StdSize {
     }
 }
 
-impl From<(Size, &ApplicationContext)> for StdSize {
-    fn from(size: (Size, &ApplicationContext)) -> Self {
+impl From<(Size, &SharedContext)> for StdSize {
+    fn from(size: (Size, &SharedContext)) -> Self {
         StdSize {
             width: size.0.width.to_px(StdSizeUnit::None, &size.1),
             height: size.0.height.to_px(StdSizeUnit::None, &size.1),

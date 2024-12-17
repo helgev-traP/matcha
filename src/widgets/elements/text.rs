@@ -1,15 +1,17 @@
+use std::sync::Arc;
+
 use crate::{
-    application_context::ApplicationContext,
+    context::SharedContext,
     cosmic,
     device::keyboard,
     events::{ElementState, UiEvent},
-    renderer::RendererCommandEncoder,
+    renderer::Renderer,
     types::{
         color::Color,
         size::{PxSize, Size, SizeUnit},
     },
-    ui::{Dom, DomComPareResult, Object, RenderItem, RenderingTrait, Widget, WidgetTrait},
-    vertex::textured_vertex::TexturedVertex,
+    ui::{Dom, DomComPareResult, Widget},
+    vertex::uv_vertex::UvVertex,
 };
 
 pub struct TextDescriptor {
@@ -19,6 +21,8 @@ pub struct TextDescriptor {
     pub font_size: f32,
     pub font_color: Color,
     pub text: String,
+
+    pub editable: bool,
 }
 
 impl Default for TextDescriptor {
@@ -36,6 +40,7 @@ impl Default for TextDescriptor {
                 b: 255,
             },
             text: "".to_string(),
+            editable: false,
         }
     }
 }
@@ -47,6 +52,7 @@ pub struct Text {
     font_size: f32,
     font_color: Color,
     text: String,
+    editable: bool,
 }
 
 impl Text {
@@ -57,6 +63,7 @@ impl Text {
             font_size: disc.font_size,
             font_color: disc.font_color,
             text: disc.text,
+            editable: disc.editable,
         }
     }
 }
@@ -69,13 +76,12 @@ impl<T: Send + 'static> Dom<T> for Text {
             font_size: self.font_size,
             font_color: self.font_color,
             text: self.text.clone(),
+            editable: self.editable,
             text_cursor: self.text.len(),
-            texture: None,
             redraw_texture: true,
-            vertex_buffer: None,
-            index_buffer: None,
-            index_len: 0,
-            reset_vertex: true,
+            texture: None,
+            vertex: None,
+            index: None,
         })
     }
 
@@ -92,18 +98,17 @@ pub struct TextNode {
     font_color: Color,
     text: String,
 
+    editable: bool,
+
     text_cursor: usize,
 
-    texture: Option<wgpu::Texture>,
     redraw_texture: bool,
-
-    vertex_buffer: Option<wgpu::Buffer>,
-    index_buffer: Option<wgpu::Buffer>,
-    index_len: u32,
-    reset_vertex: bool,
+    texture: Option<Arc<wgpu::Texture>>,
+    vertex: Option<Arc<Vec<UvVertex>>>,
+    index: Option<Arc<Vec<u16>>>,
 }
 
-impl<T: Send + 'static> WidgetTrait<T> for TextNode {
+impl<T: Send + 'static> Widget<T> for TextNode {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
@@ -112,70 +117,64 @@ impl<T: Send + 'static> WidgetTrait<T> for TextNode {
         &mut self,
         event: &UiEvent,
         parent_size: PxSize,
-        context: &ApplicationContext,
+        context: &SharedContext,
     ) -> crate::events::UiEventResult<T> {
-        match &event.content {
-            crate::events::UiEventContent::KeyboardInput { key, element_state } => {
-                if let ElementState::Pressed(_) = element_state {
-                    match key {
-                        keyboard::Key::Character(c) => {
-                            self.text.insert(self.text_cursor, *c);
-                            self.text_cursor += 1;
-                            self.redraw_texture = true;
-                            self.reset_vertex = true;
-                        }
-                        keyboard::Key::Spacial(keyboard::NamedKey::Space) => {
-                            self.text.insert(self.text_cursor, ' ');
-                            self.text_cursor += 1;
-                            self.redraw_texture = true;
-                            self.reset_vertex = true;
-                        }
-                        keyboard::Key::Spacial(keyboard::NamedKey::Return) => {
-                            self.text.insert(self.text_cursor, '\n');
-                            self.text_cursor += 1;
-                            self.redraw_texture = true;
-                            self.reset_vertex = true;
-                        }
-                        keyboard::Key::Spacial(keyboard::NamedKey::Backspace) => {
-                            if self.text_cursor > 0 {
-                                self.text_cursor -= 1;
-                                self.text.remove(self.text_cursor);
-                                self.redraw_texture = true;
-                                self.reset_vertex = true;
-                            }
-                        }
-                        keyboard::Key::Spacial(keyboard::NamedKey::Delete) => {
-                            if self.text_cursor < self.text.len() {
-                                self.text.remove(self.text_cursor);
-                                self.redraw_texture = true;
-                                self.reset_vertex = true;
-                            }
-                        }
-                        keyboard::Key::Spacial(keyboard::NamedKey::ArrowLeft) => {
-                            if self.text_cursor > 0 {
-                                self.text_cursor -= 1;
-                            }
-                        }
-                        keyboard::Key::Spacial(keyboard::NamedKey::ArrowRight) => {
-                            if self.text_cursor < self.text.len() {
+        if self.editable == true {
+            match &event.content {
+                crate::events::UiEventContent::KeyboardInput { key, element_state } => {
+                    if let ElementState::Pressed(_) = element_state {
+                        match key {
+                            keyboard::Key::Character(c) => {
+                                self.text.insert(self.text_cursor, *c);
                                 self.text_cursor += 1;
+                                self.redraw_texture = true;
                             }
+                            keyboard::Key::Spacial(keyboard::NamedKey::Space) => {
+                                self.text.insert(self.text_cursor, ' ');
+                                self.text_cursor += 1;
+                                self.redraw_texture = true;
+                            }
+                            keyboard::Key::Spacial(keyboard::NamedKey::Return) => {
+                                self.text.insert(self.text_cursor, '\n');
+                                self.text_cursor += 1;
+                                self.redraw_texture = true;
+                            }
+                            keyboard::Key::Spacial(keyboard::NamedKey::Backspace) => {
+                                if self.text_cursor > 0 {
+                                    self.text_cursor -= 1;
+                                    self.text.remove(self.text_cursor);
+                                    self.redraw_texture = true;
+                                }
+                            }
+                            keyboard::Key::Spacial(keyboard::NamedKey::Delete) => {
+                                if self.text_cursor < self.text.len() {
+                                    self.text.remove(self.text_cursor);
+                                    self.redraw_texture = true;
+                                }
+                            }
+                            keyboard::Key::Spacial(keyboard::NamedKey::ArrowLeft) => {
+                                if self.text_cursor > 0 {
+                                    self.text_cursor -= 1;
+                                }
+                            }
+                            keyboard::Key::Spacial(keyboard::NamedKey::ArrowRight) => {
+                                if self.text_cursor < self.text.len() {
+                                    self.text_cursor += 1;
+                                }
+                            }
+                            _ => {}
                         }
-                        _ => {}
                     }
+                    crate::events::UiEventResult::default()
                 }
-                crate::events::UiEventResult::default()
+                _ => crate::events::UiEventResult::default(),
             }
-            _ => crate::events::UiEventResult::default(),
+        } else {
+            crate::events::UiEventResult::default()
         }
     }
 
-    fn is_inside(
-        &self,
-        position: [f32; 2],
-        parent_size: PxSize,
-        context: &ApplicationContext,
-    ) -> bool {
+    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool {
         let current_size = self.size.to_px(parent_size, context);
 
         if position[0] >= 0.0
@@ -205,14 +204,12 @@ impl<T: Send + 'static> WidgetTrait<T> for TextNode {
             DomComPareResult::Different
         }
     }
-}
 
-impl RenderingTrait for TextNode {
     fn size(&self) -> Size {
         self.size
     }
 
-    fn px_size(&self, parent_size: PxSize, context: &ApplicationContext) -> PxSize {
+    fn px_size(&self, parent_size: PxSize, context: &SharedContext) -> PxSize {
         self.size.to_px(parent_size, context)
     }
 
@@ -225,15 +222,21 @@ impl RenderingTrait for TextNode {
 
     fn render(
         &mut self,
+        // ui environment
         parent_size: PxSize,
-        affine: nalgebra::Matrix4<f32>,
-        encoder: RendererCommandEncoder,
-    )
-    {
+        // context
+        context: &SharedContext,
+        renderer: &Renderer,
+        frame: u64,
+    ) -> Vec<(
+        Arc<wgpu::Texture>,
+        Arc<Vec<UvVertex>>,
+        Arc<Vec<u16>>,
+        nalgebra::Matrix4<f32>,
+    )> {
         if self.redraw_texture {
-            let context = encoder.get_context();
+            let context = context;
             let current_size = self.size.to_px(parent_size, context);
-
             // allocate texture
             if self.texture.is_none() {
                 let texture = context
@@ -277,39 +280,36 @@ impl RenderingTrait for TextNode {
             self.redraw_texture = false;
         }
 
-        if self.reset_vertex {
-            let context = encoder.get_context();
-            let current_size = self.size.to_px(parent_size, context);
+        if self.vertex.is_none() || self.index.is_none() {
+            let size = self.size.to_px(parent_size, context);
 
-            let (vertex_buffer, index_buffer, index_len) = TexturedVertex::atomic_rectangle_buffer(
-                &context,
-                0.0,
-                0.0,
-                current_size.width,
-                current_size.height,
-                false,
-            );
+            self.vertex = Some(Arc::new(vec![
+                UvVertex {
+                    position: [0.0, 0.0, 0.0].into(),
+                    tex_coords: [0.0, 0.0].into(),
+                },
+                UvVertex {
+                    position: [0.0, -size.height, 0.0].into(),
+                    tex_coords: [0.0, 1.0].into(),
+                },
+                UvVertex {
+                    position: [size.width, -size.height, 0.0].into(),
+                    tex_coords: [1.0, 1.0].into(),
+                },
+                UvVertex {
+                    position: [size.width, 0.0, 0.0].into(),
+                    tex_coords: [1.0, 0.0].into(),
+                },
+            ]));
 
-            self.vertex_buffer = Some(vertex_buffer);
-            self.index_buffer = Some(index_buffer);
-            self.index_len = index_len;
-
-            self.reset_vertex = false;
+            self.index = Some(Arc::new(vec![0, 1, 2, 0, 2, 3]));
         }
 
-        // render texture
-
-        encoder.draw(
-            RenderItem {
-                object: vec![Object::Textured {
-                    object_affine: nalgebra::Matrix4::identity(),
-                    vertex_buffer: self.vertex_buffer.as_ref().unwrap(),
-                    index_buffer: self.index_buffer.as_ref().unwrap(),
-                    index_len: self.index_len,
-                    texture: self.texture.as_ref().unwrap(),
-                }],
-            },
-            affine,
-        );
+        vec![(
+            self.texture.as_ref().unwrap().clone(),
+            self.vertex.as_ref().unwrap().clone(),
+            self.index.as_ref().unwrap().clone(),
+            nalgebra::Matrix4::identity(),
+        )]
     }
 }
