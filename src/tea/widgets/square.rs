@@ -1,15 +1,20 @@
 use std::sync::Arc;
 
+use vello::kurbo::RoundedRect;
+
 use crate::{
     context::SharedContext,
     events::UiEvent,
+    renderer::Renderer,
     types::{
         color::Color,
         size::{PxSize, Size, SizeUnit},
     },
     ui::{Dom, DomComPareResult, Widget},
     vertex::{
-        colored_vertex::ColoredVertex, textured_vertex::TexturedVertex, vertex_generator::{BorderDescriptor, RectangleDescriptor}
+        colored_vertex::ColoredVertex,
+        uv_vertex::UvVertex,
+        vertex_generator::{BorderDescriptor, RectangleDescriptor},
     },
 };
 
@@ -99,9 +104,10 @@ pub struct SquareWidget {
     border_width: f32,
     border_color: Color,
 
+    // rendering
     scene: vello::Scene,
     texture: Option<Arc<wgpu::Texture>>,
-    vertex: Option<Arc<Vec<TexturedVertex>>>,
+    vertex: Option<Arc<Vec<UvVertex>>>,
     index: Arc<Vec<u16>>,
 }
 
@@ -185,9 +191,11 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
         parent_size: PxSize,
         // context
         context: &SharedContext,
+        renderer: &Renderer,
+        frame: u64,
     ) -> Vec<(
         Arc<wgpu::Texture>,
-        Arc<Vec<crate::vertex::textured_vertex::TexturedVertex>>,
+        Arc<Vec<UvVertex>>,
         Arc<Vec<u16>>,
         nalgebra::Matrix4<f32>,
     )> {
@@ -217,25 +225,68 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
 
             self.texture = Some(Arc::new(texture));
 
-            // draw to texture
+            // draw
 
-            let stroke = vello::kurbo::Stroke::new(6.0);
-            let rect = vello::kurbo::RoundedRect::new(10.0, 10.0, 240.0, 240.0, 20.0);
-            let rect_stroke_color = vello::peniko::Color::rgb(0.9804, 0.702, 0.5294);
-            self.scene.stroke(
-                &stroke,
+            self.scene.reset();
+
+            let c = self.background_color.to_rgba_f64();
+
+            self.scene.fill(
+                vello::peniko::Fill::NonZero,
                 vello::kurbo::Affine::IDENTITY,
-                rect_stroke_color,
+                vello::peniko::Color::rgba(c[0], c[1], c[2], c[3]),
                 None,
-                &rect,
+                &RoundedRect::new(
+                    0.0,
+                    0.0,
+                    size.width as f64,
+                    size.height as f64,
+                    self.radius as f64,
+                ),
             );
+
+            // todo: border
+
+            renderer
+                .vello_renderer()
+                .render_to_texture(
+                    context.get_wgpu_device(),
+                    context.get_wgpu_queue(),
+                    &self.scene,
+                    &self.texture.as_ref().unwrap().create_view(
+                        &wgpu::TextureViewDescriptor::default(),
+                    ),
+                    &vello::RenderParams {
+                        base_color: vello::peniko::Color::BLACK,
+                        height: size.height as u32,
+                        width: size.width as u32,
+                        antialiasing_method: vello::AaConfig::Msaa8,
+                    }
+                );
         }
 
         vec![(
-            self.texture.clone().unwrap(),
-            vec![],
-            vec![],
-            nalgebra::Matrix4::identity(),
+            self.texture.as_ref().unwrap().clone(),
+            Arc::new(vec![
+                UvVertex {
+                    position: [0.0, 0.0, 0.0].into(),
+                    tex_coords: [0.0, 0.0].into(),
+                },
+                UvVertex {
+                    position: [0.0, -size.height, 0.0].into(),
+                    tex_coords: [0.0, 1.0].into(),
+                },
+                UvVertex {
+                    position: [size.width, -size.height, 0.0].into(),
+                    tex_coords: [1.0, 1.0].into(),
+                },
+                UvVertex {
+                    position: [size.width, 0.0, 0.0].into(),
+                    tex_coords: [1.0, 0.0].into(),
+                },
+            ]),
+            self.index.clone(),
+            nalgebra::Matrix4::identity()
         )]
     }
 }

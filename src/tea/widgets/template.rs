@@ -1,8 +1,12 @@
+use std::sync::Arc;
+
 use crate::{
     context::SharedContext,
     events::UiEvent,
+    renderer::Renderer,
     types::size::{PxSize, Size, SizeUnit},
-    ui::{Dom, DomComPareResult, TextureSet, Widget},
+    ui::{Dom, DomComPareResult, Widget},
+    vertex::uv_vertex::UvVertex,
 };
 
 pub struct TemplateDescriptor {
@@ -68,12 +72,7 @@ impl<T: Send + 'static> Widget<T> for TemplateNode {
         todo!()
     }
 
-    fn is_inside(
-        &self,
-        position: [f32; 2],
-        parent_size: PxSize,
-        context: &SharedContext,
-    ) -> bool {
+    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool {
         todo!()
     }
 
@@ -111,12 +110,18 @@ impl<T: Send + 'static> Widget<T> for TemplateNode {
 
     fn render(
         &mut self,
-        texture: Option<&TextureSet>,
+        // ui environment
         parent_size: PxSize,
-        affine: nalgebra::Matrix4<f32>,
+        // context
         context: &SharedContext,
-    )
-    {
+        renderer: &Renderer,
+        frame: u64,
+    ) -> Vec<(
+        Arc<wgpu::Texture>,
+        Arc<Vec<UvVertex>>,
+        Arc<Vec<u16>>,
+        nalgebra::Matrix4<f32>,
+    )> {
         todo!()
     }
 }

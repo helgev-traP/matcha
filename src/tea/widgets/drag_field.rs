@@ -172,9 +172,11 @@ impl<T: Send + 'static> Widget<T> for DragFieldNode<T> {
         parent_size: PxSize,
         // context
         context: &SharedContext,
+        renderer: &crate::renderer::Renderer,
+        frame: u64,
     ) -> Vec<(
         Arc<wgpu::Texture>,
-        Arc<Vec<crate::vertex::textured_vertex::TexturedVertex>>,
+        Arc<Vec<crate::vertex::uv_vertex::UvVertex>>,
         Arc<Vec<u16>>,
         nalgebra::Matrix4<f32>,
     )> {
@@ -194,7 +196,7 @@ impl<T: Send + 'static> Widget<T> for DragFieldNode<T> {
             ))
         };
 
-        let item = self.item.render(current_size, context);
+        let item = self.item.render(current_size, context, renderer, frame);
 
         item.into_iter()
             .map(|(texture, vertices, indices, matrix)| {

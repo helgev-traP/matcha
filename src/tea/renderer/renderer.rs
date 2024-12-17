@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use wgpu::util::DeviceExt;
 
-use crate::{context::SharedContext, vertex::textured_vertex::TexturedVertex};
+use crate::{context::SharedContext, vertex::uv_vertex::UvVertex};
 
 /// Render to Rgba8UnormSrgb texture
 pub struct Renderer {
@@ -19,6 +19,9 @@ pub struct Renderer {
     // todo
     // stencil_bind_group_layout: wgpu::BindGroupLayout,
     affine_bind_group_layout: wgpu::BindGroupLayout,
+
+    // vello renderer
+    vello_renderer: std::sync::Mutex<vello::Renderer>,
 }
 
 impl Renderer {
@@ -80,7 +83,7 @@ impl Renderer {
             vertex: wgpu::VertexState {
                 module: &textured_shader,
                 entry_point: "vs_main",
-                buffers: &[TexturedVertex::desc()],
+                buffers: &[UvVertex::desc()],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -130,7 +133,7 @@ impl Renderer {
                 vertex: wgpu::VertexState {
                     module: &textured_shader,
                     entry_point: "vs_main",
-                    buffers: &[TexturedVertex::desc()],
+                    buffers: &[UvVertex::desc()],
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
                 },
                 fragment: Some(wgpu::FragmentState {
@@ -162,6 +165,16 @@ impl Renderer {
                 cache: None,
             });
 
+        let vello_renderer = vello::Renderer::new(
+            &device,
+            vello::RendererOptions {
+                surface_format: Some(context.get_surface_format()),
+                use_cpu: false,
+                antialiasing_support: vello::AaSupport::all(),
+                num_init_threads: None,
+            },
+        ).unwrap().into();
+
         Self {
             context,
             bind_group_layout,
@@ -169,7 +182,12 @@ impl Renderer {
             render_pipeline,
             surface_render_pipeline,
             affine_bind_group_layout,
+            vello_renderer,
         }
+    }
+
+    pub fn vello_renderer<'a>(&'a self) -> std::sync::MutexGuard<'a, vello::Renderer> {
+        self.vello_renderer.lock().unwrap()
     }
 
     pub fn render_to_screen(
@@ -178,7 +196,7 @@ impl Renderer {
         texture_size: [f32; 2],
         source: Vec<(
             Arc<wgpu::Texture>,
-            Arc<Vec<TexturedVertex>>,
+            Arc<Vec<UvVertex>>,
             Arc<Vec<u16>>,
             nalgebra::Matrix4<f32>,
         )>,
@@ -192,7 +210,7 @@ impl Renderer {
         texture_size: [f32; 2],
         source: Vec<(
             Arc<wgpu::Texture>,
-            Arc<Vec<TexturedVertex>>,
+            Arc<Vec<UvVertex>>,
             Arc<Vec<u16>>,
             nalgebra::Matrix4<f32>,
         )>,
@@ -206,7 +224,7 @@ impl Renderer {
         texture_size: [f32; 2],
         source: Vec<(
             Arc<wgpu::Texture>,
-            Arc<Vec<TexturedVertex>>,
+            Arc<Vec<UvVertex>>,
             Arc<Vec<u16>>,
             nalgebra::Matrix4<f32>,
         )>,
@@ -279,14 +297,8 @@ impl Renderer {
 
             let vertex = vertex
                 .iter()
-                .map(|v| TexturedVertex {
-                    position: matrix
-                        .transform_point(&nalgebra::Point3::new(
-                            v.position[0],
-                            v.position[1],
-                            v.position[2],
-                        ))
-                        .into(),
+                .map(|v| UvVertex {
+                    position: matrix.transform_point(&v.position),
                     tex_coords: v.tex_coords,
                 })
                 .collect::<Vec<_>>();
