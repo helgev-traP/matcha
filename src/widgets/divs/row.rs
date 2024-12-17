@@ -1,12 +1,13 @@
 use nalgebra as na;
-use std::cell::Cell;
+use std::{cell::Cell, sync::Arc};
 
 use crate::{
-    application_context::ApplicationContext,
+    context::SharedContext,
     events::{UiEvent, UiEventResult},
-    renderer::RendererCommandEncoder,
+    renderer::Renderer,
     types::size::{PxSize, Size, SizeUnit, StdSize},
-    ui::{Dom, DomComPareResult, RenderingTrait, Widget, WidgetTrait},
+    ui::{Dom, DomComPareResult, Widget},
+    vertex::uv_vertex::UvVertex,
 };
 
 pub struct RowDescriptor<R> {
@@ -69,7 +70,7 @@ pub struct RowRenderNode<R: 'static> {
     cache_self_size: Cell<Option<PxSize>>,
 }
 
-impl<R> WidgetTrait<R> for RowRenderNode<R> {
+impl<R> Widget<R> for RowRenderNode<R> {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
@@ -78,18 +79,13 @@ impl<R> WidgetTrait<R> for RowRenderNode<R> {
         &mut self,
         event: &UiEvent,
         parent_size: PxSize,
-        context: &ApplicationContext,
+        context: &SharedContext,
     ) -> crate::events::UiEventResult<R> {
         // todo: event handling
         UiEventResult::default()
     }
 
-    fn is_inside(
-        &self,
-        position: [f32; 2],
-        parent_size: PxSize,
-        context: &ApplicationContext,
-    ) -> bool {
+    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool {
         // todo: inside check
         true
     }
@@ -117,9 +113,7 @@ impl<R> WidgetTrait<R> for RowRenderNode<R> {
             DomComPareResult::Different
         }
     }
-}
 
-impl<R: Send + 'static> RenderingTrait for RowRenderNode<R> {
     fn size(&self) -> crate::types::size::Size {
         Size {
             width: SizeUnit::Content(1.0),
@@ -127,7 +121,7 @@ impl<R: Send + 'static> RenderingTrait for RowRenderNode<R> {
         }
     }
 
-    fn px_size(&self, _: PxSize, context: &ApplicationContext) -> PxSize {
+    fn px_size(&self, _: PxSize, context: &SharedContext) -> PxSize {
         let mut width_px: f32 = 0.0;
         let mut width_percent: f32 = 0.0;
         let mut height: f32 = 0.0;
@@ -165,23 +159,40 @@ impl<R: Send + 'static> RenderingTrait for RowRenderNode<R> {
 
     fn render(
         &mut self,
+        // ui environment
         parent_size: PxSize,
-        affine: na::Matrix4<f32>,
-        encoder: RendererCommandEncoder,
-    ) {
-        let current_size = self.px_size(parent_size, encoder.get_context());
+        // context
+        context: &SharedContext,
+        renderer: &Renderer,
+        frame: u64,
+    ) -> Vec<(
+        Arc<wgpu::Texture>,
+        Arc<Vec<UvVertex>>,
+        Arc<Vec<u16>>,
+        nalgebra::Matrix4<f32>,
+    )> {
+        let current_size = self.px_size(parent_size, context);
 
         let mut accumulated_width: f32 = 0.0;
-        for child in &mut self.children {
-            let child_px_size = child.px_size(current_size, encoder.get_context());
-            let child_affine =
-                na::Matrix4::new_translation(&na::Vector3::new(accumulated_width, 0.0, 0.0))
-                    * affine;
-            let encoder = encoder.clone();
 
-            child.render(current_size, child_affine, encoder);
+        self.children
+            .iter_mut()
+            .map(|child| {
+                let child_px_size = child.px_size(current_size, context);
+                let child_affine =
+                    na::Matrix4::new_translation(&na::Vector3::new(accumulated_width, 0.0, 0.0));
 
-            accumulated_width += child_px_size.width;
-        }
+                accumulated_width += child_px_size.width;
+
+                child
+                    .render(current_size, context, renderer, frame)
+                    .into_iter()
+                    .map(|(texture, vertices, indices, affine)| {
+                        (texture, vertices, indices, child_affine * affine)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .flatten()
+            .collect()
     }
 }

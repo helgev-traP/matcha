@@ -1,10 +1,11 @@
+use std::sync::Arc;
+
 use crate::{
-    application_context::ApplicationContext,
+    context::SharedContext,
     device::mouse::MouseButton,
     events::UiEvent,
-    renderer::RendererCommandEncoder,
     types::size::{PxSize, Size},
-    ui::{Dom, DomComPareResult, RenderingTrait, Widget, WidgetTrait},
+    ui::{Dom, DomComPareResult, Widget},
 };
 
 use nalgebra as na;
@@ -60,7 +61,7 @@ pub struct DragFieldNode<T> {
     item: Box<dyn Widget<T>>,
 }
 
-impl<T: Send + 'static> WidgetTrait<T> for DragFieldNode<T> {
+impl<T: Send + 'static> Widget<T> for DragFieldNode<T> {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
@@ -69,7 +70,7 @@ impl<T: Send + 'static> WidgetTrait<T> for DragFieldNode<T> {
         &mut self,
         event: &UiEvent,
         parent_size: PxSize,
-        context: &ApplicationContext,
+        context: &SharedContext,
     ) -> crate::events::UiEventResult<T> {
         match &event.content {
             crate::events::UiEventContent::MouseClick {
@@ -106,14 +107,11 @@ impl<T: Send + 'static> WidgetTrait<T> for DragFieldNode<T> {
             crate::events::UiEventContent::CursorMove {
                 position,
                 primary_dragging_from,
-                secondary_dragging_from,
-                middle_dragging_from,
+                ..
             } => {
                 if let Some(drag_from) = primary_dragging_from {
-                    if let Some(drag_delta) = self.drag_delta {
-                        self.drag_delta =
-                            Some([position[0] - drag_from[0], position[1] - drag_from[1]]);
-                    }
+                    self.drag_delta =
+                        Some([position[0] - drag_from[0], position[1] - drag_from[1]]);
                 }
             }
             _ => (),
@@ -122,12 +120,7 @@ impl<T: Send + 'static> WidgetTrait<T> for DragFieldNode<T> {
         crate::events::UiEventResult::default()
     }
 
-    fn is_inside(
-        &self,
-        position: [f32; 2],
-        parent_size: PxSize,
-        context: &ApplicationContext,
-    ) -> bool {
+    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool {
         let current_size = self.size.to_px(parent_size, context);
 
         if position[0] < 0.0
@@ -157,14 +150,12 @@ impl<T: Send + 'static> WidgetTrait<T> for DragFieldNode<T> {
             DomComPareResult::Different
         }
     }
-}
 
-impl<T> RenderingTrait for DragFieldNode<T> {
     fn size(&self) -> Size {
         self.size
     }
 
-    fn px_size(&self, parent_size: PxSize, context: &ApplicationContext) -> PxSize {
+    fn px_size(&self, parent_size: PxSize, context: &SharedContext) -> PxSize {
         self.size.to_px(parent_size, context)
     }
 
@@ -177,11 +168,19 @@ impl<T> RenderingTrait for DragFieldNode<T> {
 
     fn render(
         &mut self,
+        // ui environment
         parent_size: PxSize,
-        affine: na::Matrix4<f32>,
-        encoder: RendererCommandEncoder,
-    ) {
-        let current_size = self.size.to_px(parent_size, encoder.get_context());
+        // context
+        context: &SharedContext,
+        renderer: &crate::renderer::Renderer,
+        frame: u64,
+    ) -> Vec<(
+        Arc<wgpu::Texture>,
+        Arc<Vec<crate::vertex::uv_vertex::UvVertex>>,
+        Arc<Vec<u16>>,
+        nalgebra::Matrix4<f32>,
+    )> {
+        let current_size = self.size.to_px(parent_size, context);
 
         let item_position_matrix = if let Some(drag_delta) = self.drag_delta {
             na::Matrix4::new_translation(&na::Vector3::new(
@@ -197,7 +196,12 @@ impl<T> RenderingTrait for DragFieldNode<T> {
             ))
         };
 
-        self.item
-            .render(current_size, item_position_matrix * affine, encoder);
+        let item = self.item.render(current_size, context, renderer, frame);
+
+        item.into_iter()
+            .map(|(texture, vertices, indices, matrix)| {
+                (texture, vertices, indices, item_position_matrix * matrix)
+            })
+            .collect()
     }
 }

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::cosmic::{FontContext, RenderAttribute, TextureAttribute, TextureAttributeGpu};
 
-pub struct ApplicationContext {
+pub struct SharedContext {
     winit_window: Arc<winit::window::Window>,
     device: Arc<wgpu::Device>,
     queue: Arc<wgpu::Queue>,
@@ -11,7 +11,7 @@ pub struct ApplicationContext {
     cosmic_text: FontContext,
 }
 
-impl Clone for ApplicationContext {
+impl Clone for SharedContext {
     fn clone(&self) -> Self {
         Self {
             device: self.device.clone(),
@@ -23,7 +23,7 @@ impl Clone for ApplicationContext {
     }
 }
 
-impl ApplicationContext {
+impl SharedContext {
     pub fn new(
         winit_window: Arc<winit::window::Window>,
         device: Arc<wgpu::Device>,

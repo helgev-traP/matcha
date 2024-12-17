@@ -2,11 +2,10 @@ use layout::LayoutNode;
 use nalgebra as na;
 
 use crate::{
-    application_context::ApplicationContext,
+    context::SharedContext,
     events::UiEvent,
-    renderer::RendererCommandEncoder,
     types::size::{PxSize, Size},
-    ui::{Dom, DomComPareResult, Object, RenderItem, RenderingTrait, Widget, WidgetTrait},
+    ui::{Dom, DomComPareResult, TextureSet, Widget},
     vertex::{colored_vertex::ColoredVertex, vertex_generator::RectangleDescriptor},
 };
 
@@ -77,7 +76,7 @@ pub struct ContainerNode<T> {
     box_index_len: u32,
 }
 
-impl<T: Send + 'static> WidgetTrait<T> for ContainerNode<T> {
+impl<T: Send + 'static> Widget<T> for ContainerNode<T> {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
@@ -86,7 +85,7 @@ impl<T: Send + 'static> WidgetTrait<T> for ContainerNode<T> {
         &mut self,
         event: &UiEvent,
         parent_size: PxSize,
-        context: &ApplicationContext,
+        context: &SharedContext,
     ) -> crate::events::UiEventResult<T> {
         todo!()
     }
@@ -95,7 +94,7 @@ impl<T: Send + 'static> WidgetTrait<T> for ContainerNode<T> {
         &self,
         position: [f32; 2],
         parent_size: PxSize,
-        context: &ApplicationContext,
+        context: &SharedContext,
     ) -> bool {
         todo!()
     }
@@ -116,14 +115,12 @@ impl<T: Send + 'static> WidgetTrait<T> for ContainerNode<T> {
             DomComPareResult::Different
         }
     }
-}
 
-impl<T> RenderingTrait for ContainerNode<T> {
     fn size(&self) -> Size {
         self.properties.size
     }
 
-    fn px_size(&self, parent_size: PxSize, context: &ApplicationContext) -> PxSize {
+    fn px_size(&self, parent_size: PxSize, context: &SharedContext) -> PxSize {
         self.properties.size.to_px(parent_size, context)
     }
 
@@ -136,9 +133,10 @@ impl<T> RenderingTrait for ContainerNode<T> {
 
     fn render(
         &mut self,
+        texture: Option<&TextureSet>,
         parent_size: PxSize,
         affine: na::Matrix4<f32>,
-        encoder: RendererCommandEncoder,
+        context: &SharedContext,
     )
     {
         if let Visibility::Visible = self.properties.visibility {
@@ -146,7 +144,7 @@ impl<T> RenderingTrait for ContainerNode<T> {
             if !self.properties.background_color.is_transparent() {
                 if self.box_vertex_buffer.is_none() {
                     let (vertex_buffer, index_buffer, index_len) = ColoredVertex::rectangle_buffer(
-                        encoder.get_context(),
+                        context,
                         RectangleDescriptor {
                             x: 0.0,
                             y: 0.0,
@@ -163,18 +161,7 @@ impl<T> RenderingTrait for ContainerNode<T> {
                 }
             }
 
-            encoder.draw(
-                RenderItem {
-                    object: vec![Object::Colored {
-                        object_affine: affine,
-                        vertex_buffer: self.box_vertex_buffer.as_ref().unwrap(),
-                        index_buffer: self.box_index_buffer.as_ref().unwrap(),
-                        index_len: self.box_index_len,
-                        color: self.properties.background_color,
-                    }],
-                },
-                na::Matrix4::identity(),
-            );
+            todo!()
         }
     }
 }

@@ -19,6 +19,7 @@
     "srgb",
     "unclipped",
     "Unorm",
+    "vello",
     "webgl",
     "wgpu",
     "wgsl",
