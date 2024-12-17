@@ -5,7 +5,6 @@ pub mod events;
 pub mod window;
 
 pub mod component;
-pub mod widgets;
 pub mod ui;
 
 pub mod types;

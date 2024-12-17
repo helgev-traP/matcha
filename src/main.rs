@@ -9,42 +9,53 @@ use tea_ui::{
     },
     ui::Dom,
     widgets::{
-        drag_field::{DragField, DragFieldDescriptor}, square::{Square, SquareDescriptor}, teacup::{Teacup, TeacupDescriptor}
+        column::{Column, ColumnDescriptor}, drag_field::{DragField, DragFieldDescriptor}, row::{Row, RowDescriptor}, square::{Square, SquareDescriptor}, teacup::{Teacup, TeacupDescriptor}, text::{Text, TextDescriptor}
     },
 };
 
 fn update(component: ComponentAccess<u32>, message: ()) {}
 
 fn view(_: &u32) -> Box<dyn Dom<()>> {
-    Box::new(DragField::new(DragFieldDescriptor {
+    Box::new(Column::new(ColumnDescriptor {
         label: None,
-        size: Size {
-            width: SizeUnit::Percent(100.0),
-            height: SizeUnit::Percent(100.0),
-        },
-        item: Box::new(
-            Square::new(
-                SquareDescriptor {
-                    size: Size {
-                        width: SizeUnit::Pixel(300.0),
-                        height: SizeUnit::Pixel(300.0),
-                    },
-                    radius: 100.0,
-                    background_color: Color::Rgb8USrgb {
-                        r: 255,
-                        g: 0,
-                        b: 0,
-                    },
-                    border_width: 50.0,
-                    border_color: Color::Rgb8USrgb {
-                        r: 255,
-                        g: 255,
-                        b: 255,
-                    },
-                    ..Default::default()
-                }
-            )
-        ),
+        vec: vec![
+            Box::new(Square::new(SquareDescriptor {
+                label: None,
+                size: Size {
+                    width: SizeUnit::Pixel(100.0),
+                    height: SizeUnit::Pixel(100.0),
+                },
+                radius: 30.0,
+                background_color: Color::Rgb8USrgb { r: 255, g: 255, b: 255 },
+                border_width: 2.0,
+                border_color: Color::Rgb8USrgb { r: 255, g: 0, b: 0 },
+            })),
+            Box::new(Text::new(TextDescriptor {
+                label: None,
+                size: Size {
+                    width: SizeUnit::Pixel(100.0),
+                    height: SizeUnit::Pixel(100.0),
+                },
+                font_size: 30.0,
+                font_color: Color::Rgb8USrgb { r: 255, g: 255, b: 255 },
+                text: "Hello!".to_string(),
+                editable: false,
+            })),
+            Box::new(Teacup::new(TeacupDescriptor {
+                label: None,
+                size: Size {
+                    width: SizeUnit::Pixel(100.0),
+                    height: SizeUnit::Pixel(100.0),
+                },
+                frame_size: Size {
+                    width: SizeUnit::Pixel(100.0),
+                    height: SizeUnit::Pixel(100.0),
+                },
+                position: [0.0, 0.0],
+                rotate: 0.0,
+                visible: true,
+            })),
+        ],
     }))
 }
 

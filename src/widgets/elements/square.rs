@@ -235,21 +235,23 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
                 ),
             );
 
-            let c = self.border_color.to_rgba_f64();
+            if self.border_width > 0.0 {
+                let c = self.border_color.to_rgba_f64();
 
-            self.scene.stroke(
-                &vello::kurbo::Stroke::new(self.border_width as f64),
-                vello::kurbo::Affine::IDENTITY,
-                vello::peniko::Color::rgba(c[0], c[1], c[2], c[3]),
-                None,
-                &vello::kurbo::RoundedRect::new(
-                    self.border_width as f64 / 2.0,
-                    self.border_width as f64 / 2.0,
-                    size.width as f64 - self.border_width as f64 / 2.0,
-                    size.height as f64 - self.border_width as f64 / 2.0,
-                    self.radius as f64 - self.border_width as f64 / 2.0,
-                ),
-            );
+                self.scene.stroke(
+                    &vello::kurbo::Stroke::new(self.border_width as f64),
+                    vello::kurbo::Affine::IDENTITY,
+                    vello::peniko::Color::rgba(c[0], c[1], c[2], c[3]),
+                    None,
+                    &vello::kurbo::RoundedRect::new(
+                        self.border_width as f64 / 2.0,
+                        self.border_width as f64 / 2.0,
+                        size.width as f64 - self.border_width as f64 / 2.0,
+                        size.height as f64 - self.border_width as f64 / 2.0,
+                        self.radius as f64 - self.border_width as f64 / 2.0,
+                    ),
+                );
+            }
 
             renderer
                 .vello_renderer()
@@ -257,16 +259,19 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
                     context.get_wgpu_device(),
                     context.get_wgpu_queue(),
                     &self.scene,
-                    &self.texture.as_ref().unwrap().create_view(
-                        &wgpu::TextureViewDescriptor::default(),
-                    ),
+                    &self
+                        .texture
+                        .as_ref()
+                        .unwrap()
+                        .create_view(&wgpu::TextureViewDescriptor::default()),
                     &vello::RenderParams {
                         base_color: vello::peniko::Color::TRANSPARENT,
                         height: size.height as u32,
                         width: size.width as u32,
                         antialiasing_method: vello::AaConfig::Area,
-                    }
-                ).unwrap();
+                    },
+                )
+                .unwrap();
         }
 
         vec![(
@@ -290,7 +295,7 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
                 },
             ]),
             self.index.clone(),
-            nalgebra::Matrix4::identity()
+            nalgebra::Matrix4::identity(),
         )]
     }
 }

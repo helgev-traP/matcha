@@ -1,7 +1,6 @@
 use nalgebra as na;
 use std::any::Any;
 use std::sync::Arc;
-use wgpu::util::DeviceExt;
 use wgpu::ImageCopyTextureBase;
 
 use crate::events::UiEvent;
@@ -124,7 +123,6 @@ pub struct TeacupRenderNode {
 
     visible: bool,
 
-    // previous_size: Option<PxSize>,
     texture: Option<Arc<wgpu::Texture>>,
     vertex: Arc<Vec<UvVertex>>,
     index: Arc<Vec<u16>>,
@@ -207,7 +205,7 @@ impl<R: 'static> Widget<R> for TeacupRenderNode {
 
         if self.texture.is_none() {
             let texture_size = wgpu::Extent3d {
-                width: self.picture_size.width as u32,
+                width:  self.picture_size.width as u32,
                 height: self.picture_size.height as u32,
                 depth_or_array_layers: 1,
             };
