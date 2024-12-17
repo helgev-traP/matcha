@@ -26,24 +26,24 @@ pub struct DragField<T> {
 }
 
 impl<T> DragField<T> {
-    pub fn new(disc: DragFieldDescriptor<T>) -> Self {
-        Self {
+    pub fn new(disc: DragFieldDescriptor<T>) -> Box<Self> {
+        Box::new(Self {
             label: disc.label,
             size: disc.size,
             item: disc.item,
-        }
+        })
     }
 }
 
 impl<T: Send + 'static> Dom<T> for DragField<T> {
-    fn build_render_tree(&self) -> Box<dyn Widget<T>> {
+    fn build_widget_tree(&self) -> Box<dyn Widget<T>> {
         Box::new(DragFieldNode {
             label: self.label.clone(),
             size: self.size,
 
             item_position: [0.0, 0.0],
             drag_delta: None,
-            item: self.item.build_render_tree(),
+            item: self.item.build_widget_tree(),
         })
     }
 
@@ -134,7 +134,7 @@ impl<T: Send + 'static> Widget<T> for DragFieldNode<T> {
         }
     }
 
-    fn update_render_tree(&mut self, dom: &dyn Dom<T>) -> Result<(), ()> {
+    fn update_widget_tree(&mut self, dom: &dyn Dom<T>) -> Result<(), ()> {
         if (*dom).type_id() != std::any::TypeId::of::<DragField<T>>() {
             Err(())
         } else {

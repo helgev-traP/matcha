@@ -38,12 +38,12 @@ pub struct Container<T: 'static> {
 }
 
 impl<T> Container<T> {
-    pub fn new(disc: ContainerDescriptor<T>) -> Self {
-        Self {
+    pub fn new(disc: ContainerDescriptor<T>) -> Box<Self> {
+        Box::new(Self {
             label: disc.label,
             properties: disc.properties,
             layout: disc.layout,
-        }
+        })
     }
 }
 

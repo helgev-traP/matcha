@@ -35,7 +35,7 @@ pub struct Window<'a, Model: Send + 'static, Message: 'static> {
 
     // root component
     root_component: Component<Model, Message, Message, Message>,
-    root_component_widget: Option<Box<dyn Widget<Message>>>,
+    root_widget: Option<Box<dyn Widget<Message>>>,
 
     // frame
     frame: u64,
@@ -70,7 +70,7 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
             context: None,
             renderer: None,
             root_component: component,
-            root_component_widget: None,
+            root_widget: None,
             frame: 0,
             mouse_state: None,
             mouse_primary_button: winit::event::MouseButton::Left,
@@ -150,7 +150,7 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
         self.benchmark.as_mut().unwrap().start();
 
         // get root component's render result
-        let render_result = self.root_component_widget.as_mut().unwrap().render(
+        let render_result = self.root_widget.as_mut().unwrap().render(
             viewport_size,
             self.context.as_ref().unwrap(),
             self.renderer.as_ref().unwrap(),
@@ -251,7 +251,7 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
         }
 
         // --- render ---
-        self.root_component_widget = Some(self.root_component.view().build_render_tree());
+        self.root_widget = Some(self.root_component.view().build_widget_tree());
 
         self.render();
     }
@@ -357,11 +357,21 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
             _ => return,
         };
 
-        self.root_component_widget.as_mut().unwrap().widget_event(
+        // event handling
+        let result = self.root_widget.as_mut().unwrap().widget_event(
             &ui_event,
             self.gpu_state.as_ref().unwrap().get_viewport_size(),
             self.context.as_ref().unwrap(),
         );
+
+        // update component
+        if let Some(message) = result.user_event {
+            println!("received message");
+            self.root_component.update(message);
+        }
+
+        // render
+        self.root_component.view();
     }
 
     fn new_events(

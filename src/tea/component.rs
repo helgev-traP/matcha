@@ -4,7 +4,8 @@ use super::{
     context::SharedContext,
     events::UiEventResult,
     types::size::PxSize,
-    ui::{Dom, DomComPareResult, Widget}, vertex::uv_vertex::UvVertex,
+    ui::{Dom, DomComPareResult, Widget},
+    vertex::uv_vertex::UvVertex,
 };
 
 pub struct Component<Model, Message, OuterResponse, InnerResponse> {
@@ -13,11 +14,11 @@ pub struct Component<Model, Message, OuterResponse, InnerResponse> {
     model: Arc<Mutex<Model>>,
     model_updated: Arc<Mutex<bool>>,
     fn_update: fn(ComponentAccess<Model>, Message),
-    fn_local_update:
+    fn_inner_update:
         fn(&ComponentAccess<Model>, UiEventResult<InnerResponse>) -> UiEventResult<OuterResponse>,
     fn_view: fn(&Model) -> Box<dyn Dom<InnerResponse>>,
 
-    render_tree: Option<Arc<Mutex<Box<dyn Widget<InnerResponse>>>>>,
+    widget_tree: Option<Arc<Mutex<Box<dyn Widget<InnerResponse>>>>>,
 }
 
 impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'static>
@@ -34,20 +35,20 @@ impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'sta
             model: Arc::new(Mutex::new(model)),
             model_updated: Arc::new(Mutex::new(true)),
             fn_update: update,
-            fn_local_update: |_, _| Default::default(),
+            fn_inner_update: |_, _| Default::default(),
             fn_view: view,
-            render_tree: None,
+            widget_tree: None,
         }
     }
 
-    pub fn component_update(
+    pub fn inner_update(
         mut self,
-        component_update: fn(
+        inner_update: fn(
             &ComponentAccess<Model>,
             UiEventResult<InnerResponse>,
         ) -> UiEventResult<OuterResponse>,
     ) -> Self {
-        self.fn_local_update = component_update;
+        self.fn_inner_update = inner_update;
         self
     }
 }
@@ -69,7 +70,7 @@ impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'sta
         );
 
         if *self.model_updated.lock().unwrap() {
-            self.update_render_tree();
+            self.update_widget_tree();
             *self.model_updated.lock().unwrap() = false;
         }
     }
@@ -78,7 +79,7 @@ impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'sta
         &mut self,
         event: UiEventResult<InnerResponse>,
     ) -> UiEventResult<OuterResponse> {
-        (self.fn_local_update)(
+        (self.fn_inner_update)(
             &ComponentAccess {
                 model: self.model.clone(),
                 model_updated: self.model_updated.clone(),
@@ -87,22 +88,22 @@ impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'sta
         )
     }
 
-    fn update_render_tree(&mut self) {
+    fn update_widget_tree(&mut self) {
         let dom = (self.fn_view)(&*self.model.lock().unwrap());
 
-        if let Some(ref mut render_tree) = self.render_tree {
-            if let Ok(_) = render_tree.lock().unwrap().update_render_tree(&*dom) {
+        if let Some(ref mut render_tree) = self.widget_tree {
+            if let Ok(_) = render_tree.lock().unwrap().update_widget_tree(&*dom) {
                 return;
             }
-            self.render_tree = Some(Arc::new(Mutex::new(dom.build_render_tree())));
+            self.widget_tree = Some(Arc::new(Mutex::new(dom.build_widget_tree())));
         } else {
-            self.render_tree = Some(Arc::new(Mutex::new(dom.build_render_tree())));
+            self.widget_tree = Some(Arc::new(Mutex::new(dom.build_widget_tree())));
         }
     }
 
     pub fn view(&mut self) -> Arc<dyn Dom<OuterResponse>> {
-        if let None = self.render_tree {
-            self.update_render_tree();
+        if self.widget_tree.is_none() || *self.model_updated.lock().unwrap() {
+            self.update_widget_tree();
         }
         Arc::new(ComponentDom {
             label: self.label.clone(),
@@ -110,8 +111,8 @@ impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'sta
                 model: self.model.clone(),
                 model_updated: self.model_updated.clone(),
             },
-            local_update_component: self.fn_local_update,
-            render_tree: self.render_tree.as_ref().unwrap().clone(),
+            fn_inner_udate: self.fn_inner_update,
+            render_tree: self.widget_tree.as_ref().unwrap().clone(),
         })
     }
 }
@@ -149,7 +150,7 @@ where
 {
     label: Option<String>,
     component_model: ComponentAccess<Model>,
-    local_update_component:
+    fn_inner_udate:
         fn(&ComponentAccess<Model>, UiEventResult<InnerResponse>) -> UiEventResult<OuterResponse>,
     render_tree: Arc<Mutex<Box<dyn Widget<InnerResponse>>>>,
 }
@@ -161,11 +162,11 @@ where
     OuterResponse: 'static,
     InnerResponse: 'static,
 {
-    fn build_render_tree(&self) -> Box<dyn Widget<OuterResponse>> {
+    fn build_widget_tree(&self) -> Box<dyn Widget<OuterResponse>> {
         Box::new(ComponentWidget {
             label: self.label.clone(),
             component_model: self.component_model.clone(),
-            local_update_component: self.local_update_component,
+            local_update_component: self.fn_inner_udate,
             node: self.render_tree.clone(),
         })
     }
@@ -214,7 +215,7 @@ impl<Model, O, I> Widget<O> for ComponentWidget<Model, O, I> {
         DomComPareResult::Different
     }
 
-    fn update_render_tree(&mut self, _: &dyn Dom<O>) -> Result<(), ()> {
+    fn update_widget_tree(&mut self, _: &dyn Dom<O>) -> Result<(), ()> {
         Ok(())
     }
 
@@ -244,6 +245,9 @@ impl<Model, O, I> Widget<O> for ComponentWidget<Model, O, I> {
         Arc<Vec<u16>>,
         nalgebra::Matrix4<f32>,
     )> {
-        self.node.lock().unwrap().render(parent_size, context, renderer, frame)
+        self.node
+            .lock()
+            .unwrap()
+            .render(parent_size, context, renderer, frame)
     }
 }

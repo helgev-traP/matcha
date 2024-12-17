@@ -54,20 +54,20 @@ pub struct Square {
 }
 
 impl Square {
-    pub fn new(disc: SquareDescriptor) -> Self {
-        Self {
+    pub fn new(disc: SquareDescriptor) -> Box<Self> {
+        Box::new(Self {
             label: disc.label,
             size: disc.size,
             radius: disc.radius,
             background_color: disc.background_color,
             border_width: disc.border_width,
             border_color: disc.border_color,
-        }
+        })
     }
 }
 
 impl<R: Copy + Send + 'static> Dom<R> for Square {
-    fn build_render_tree(&self) -> Box<dyn Widget<R>> {
+    fn build_widget_tree(&self) -> Box<dyn Widget<R>> {
         Box::new(SquareWidget {
             label: self.label.clone(),
             size: self.size,
@@ -131,7 +131,7 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
         }
     }
 
-    fn update_render_tree(&mut self, dom: &dyn Dom<R>) -> Result<(), ()> {
+    fn update_widget_tree(&mut self, dom: &dyn Dom<R>) -> Result<(), ()> {
         if (*dom).type_id() != std::any::TypeId::of::<Square>() {
             return Err(());
         }
@@ -191,13 +191,10 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
         Arc<Vec<u16>>,
         nalgebra::Matrix4<f32>,
     )> {
-        let context = context;
-
         let size = self.size.to_px(parent_size, context);
 
         if self.texture.is_none() {
             let device = context.get_wgpu_device();
-            let queue = context.get_wgpu_queue();
 
             // create texture
             self.texture = Some(Arc::new(device.create_texture(&wgpu::TextureDescriptor {
