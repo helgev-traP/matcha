@@ -168,7 +168,7 @@ impl Renderer {
         let vello_renderer = vello::Renderer::new(
             &device,
             vello::RendererOptions {
-                surface_format: Some(context.get_surface_format()),
+                surface_format: Some(wgpu::TextureFormat::Rgba8Unorm),
                 use_cpu: false,
                 antialiasing_support: vello::AaSupport::all(),
                 num_init_threads: None,

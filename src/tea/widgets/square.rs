@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use vello::kurbo::RoundedRect;
-
 use crate::{
     context::SharedContext,
     events::UiEvent,
@@ -26,8 +24,6 @@ pub struct SquareDescriptor {
 
     pub border_width: f32,
     pub border_color: Color,
-
-    pub div: u16,
 }
 
 impl Default for SquareDescriptor {
@@ -42,7 +38,6 @@ impl Default for SquareDescriptor {
             background_color: Color::Rgb8USrgb { r: 0, g: 0, b: 0 },
             border_width: 0.0,
             border_color: Color::Rgb8USrgb { r: 0, g: 0, b: 0 },
-            div: 0,
         }
     }
 }
@@ -56,8 +51,6 @@ pub struct Square {
 
     border_width: f32,
     border_color: Color,
-
-    div: u16,
 }
 
 impl Square {
@@ -69,7 +62,6 @@ impl Square {
             background_color: disc.background_color,
             border_width: disc.border_width,
             border_color: disc.border_color,
-            div: disc.div,
         }
     }
 }
@@ -208,7 +200,7 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
             let queue = context.get_wgpu_queue();
 
             // create texture
-            let texture = device.create_texture(&wgpu::TextureDescriptor {
+            self.texture = Some(Arc::new(device.create_texture(&wgpu::TextureDescriptor {
                 label: None,
                 size: wgpu::Extent3d {
                     width: size.width as u32,
@@ -218,12 +210,10 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::STORAGE_BINDING,
                 view_formats: &[],
-            });
-
-            self.texture = Some(Arc::new(texture));
+            })));
 
             // draw
 
@@ -232,11 +222,11 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
             let c = self.background_color.to_rgba_f64();
 
             self.scene.fill(
-                vello::peniko::Fill::NonZero,
+                vello::peniko::Fill::EvenOdd,
                 vello::kurbo::Affine::IDENTITY,
                 vello::peniko::Color::rgba(c[0], c[1], c[2], c[3]),
                 None,
-                &RoundedRect::new(
+                &vello::kurbo::RoundedRect::new(
                     0.0,
                     0.0,
                     size.width as f64,
@@ -245,7 +235,21 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
                 ),
             );
 
-            // todo: border
+            let c = self.border_color.to_rgba_f64();
+
+            self.scene.stroke(
+                &vello::kurbo::Stroke::new(self.border_width as f64),
+                vello::kurbo::Affine::IDENTITY,
+                vello::peniko::Color::rgba(c[0], c[1], c[2], c[3]),
+                None,
+                &vello::kurbo::RoundedRect::new(
+                    self.border_width as f64 / 2.0,
+                    self.border_width as f64 / 2.0,
+                    size.width as f64 - self.border_width as f64 / 2.0,
+                    size.height as f64 - self.border_width as f64 / 2.0,
+                    self.radius as f64 - self.border_width as f64 / 2.0,
+                ),
+            );
 
             renderer
                 .vello_renderer()
@@ -257,12 +261,12 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
                         &wgpu::TextureViewDescriptor::default(),
                     ),
                     &vello::RenderParams {
-                        base_color: vello::peniko::Color::BLACK,
+                        base_color: vello::peniko::Color::TRANSPARENT,
                         height: size.height as u32,
                         width: size.width as u32,
-                        antialiasing_method: vello::AaConfig::Msaa8,
+                        antialiasing_method: vello::AaConfig::Area,
                     }
-                );
+                ).unwrap();
         }
 
         vec![(
