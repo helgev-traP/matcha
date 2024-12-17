@@ -9,6 +9,5 @@ pub mod widgets;
 pub mod ui;
 
 pub mod types;
-pub mod util;
 pub mod renderer;
 pub mod vertex;

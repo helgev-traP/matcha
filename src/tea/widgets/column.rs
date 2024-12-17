@@ -1,11 +1,13 @@
 use nalgebra as na;
-use std::{any::Any, cell::Cell};
+use std::{any::Any, cell::Cell, sync::Arc};
 
 use crate::{
     context::SharedContext,
     events::{UiEvent, UiEventResult},
+    renderer::Renderer,
     types::size::{PxSize, Size, SizeUnit, StdSize, StdSizeUnit},
-    ui::{Dom, DomComPareResult, TextureSet, Widget},
+    ui::{Dom, DomComPareResult, Widget},
+    vertex::uv_vertex::UvVertex,
 };
 
 pub struct ColumnDescriptor<R> {
@@ -81,12 +83,7 @@ impl<R: 'static> Widget<R> for ColumnRenderNode<R> {
         UiEventResult::default()
     }
 
-    fn is_inside(
-        &self,
-        position: [f32; 2],
-        parent_size: PxSize,
-        context: &SharedContext,
-    ) -> bool {
+    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool {
         // todo
         true
     }
@@ -158,23 +155,40 @@ impl<R: 'static> Widget<R> for ColumnRenderNode<R> {
 
     fn render(
         &mut self,
-        texture: Option<&TextureSet>,
+        // ui environment
         parent_size: PxSize,
-        affine: na::Matrix4<f32>,
+        // context
         context: &SharedContext,
-    ) {
+        renderer: &Renderer,
+        frame: u64,
+    ) -> Vec<(
+        Arc<wgpu::Texture>,
+        Arc<Vec<UvVertex>>,
+        Arc<Vec<u16>>,
+        nalgebra::Matrix4<f32>,
+    )> {
         let current_size = self.px_size(parent_size, context);
 
         let mut accumulated_height: f32 = 0.0;
-        for child in &mut self.children {
-            let child_px_size = child.px_size(current_size, context);
-            let child_affine =
-                na::Matrix4::new_translation(&na::Vector3::new(0.0, -accumulated_height, 0.0))
-                    * affine;
 
-            child.render(texture, current_size, child_affine, context);
+        self.children
+            .iter_mut()
+            .map(|child| {
+                let child_px_size = child.px_size(current_size, context);
+                let child_affine =
+                    na::Matrix4::new_translation(&na::Vector3::new(0.0, -accumulated_height, 0.0));
 
-            accumulated_height += child_px_size.height;
-        }
+                accumulated_height += child_px_size.height;
+
+                child
+                    .render(child_px_size, context, renderer, frame)
+                    .into_iter()
+                    .map(|(texture, vertices, indices, matrix)| {
+                        (texture, vertices, indices, matrix * child_affine)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .flatten()
+            .collect()
     }
 }

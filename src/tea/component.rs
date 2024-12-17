@@ -4,7 +4,7 @@ use super::{
     context::SharedContext,
     events::UiEventResult,
     types::size::PxSize,
-    ui::{Dom, DomComPareResult, Widget}, vertex::textured_vertex::TexturedVertex,
+    ui::{Dom, DomComPareResult, Widget}, vertex::uv_vertex::UvVertex,
 };
 
 pub struct Component<Model, Message, OuterResponse, InnerResponse> {
@@ -236,12 +236,14 @@ impl<Model, O, I> Widget<O> for ComponentWidget<Model, O, I> {
         parent_size: PxSize,
         // context
         context: &SharedContext,
+        renderer: &super::renderer::Renderer,
+        frame: u64,
     ) -> Vec<(
         Arc<wgpu::Texture>,
-        Arc<Vec<TexturedVertex>>,
+        Arc<Vec<UvVertex>>,
         Arc<Vec<u16>>,
         nalgebra::Matrix4<f32>,
     )> {
-        self.node.lock().unwrap().render(parent_size, context)
+        self.node.lock().unwrap().render(parent_size, context, renderer, frame)
     }
 }

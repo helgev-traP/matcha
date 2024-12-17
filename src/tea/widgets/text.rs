@@ -8,7 +8,7 @@ use crate::{
         size::{PxSize, Size, SizeUnit},
     },
     ui::{Dom, DomComPareResult, TextureSet, Widget},
-    vertex::textured_vertex::TexturedVertex,
+    vertex::uv_vertex::UvVertex,
 };
 
 pub struct TextDescriptor {
@@ -169,12 +169,7 @@ impl<T: Send + 'static> Widget<T> for TextNode {
         }
     }
 
-    fn is_inside(
-        &self,
-        position: [f32; 2],
-        parent_size: PxSize,
-        context: &SharedContext,
-    ) -> bool {
+    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool {
         let current_size = self.size.to_px(parent_size, context);
 
         if position[0] >= 0.0
@@ -226,8 +221,7 @@ impl<T: Send + 'static> Widget<T> for TextNode {
         parent_size: PxSize,
         affine: nalgebra::Matrix4<f32>,
         context: &SharedContext,
-    )
-    {
+    ) {
         if self.redraw_texture {
             let context = context;
             let current_size = self.size.to_px(parent_size, context);
@@ -279,7 +273,7 @@ impl<T: Send + 'static> Widget<T> for TextNode {
             let context = context;
             let current_size = self.size.to_px(parent_size, context);
 
-            let (vertex_buffer, index_buffer, index_len) = TexturedVertex::atomic_rectangle_buffer(
+            let (vertex_buffer, index_buffer, index_len) = UvVertex::atomic_rectangle_buffer(
                 &context,
                 0.0,
                 0.0,

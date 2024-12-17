@@ -11,7 +11,7 @@ use crate::{
     events::UiEventResult,
     types::size::{PxSize, StdSize},
     ui::{Dom, DomComPareResult, Widget},
-    vertex::textured_vertex::TexturedVertex,
+    vertex::uv_vertex::UvVertex,
 };
 
 pub struct TeacupDescriptor {
@@ -85,21 +85,21 @@ impl<R: 'static> Dom<R> for Teacup {
             visible: self.visible,
             texture: None,
             vertex: Arc::new(vec![
-                TexturedVertex {
-                    position: [0.0, 0.0, 0.0],
-                    tex_coords: [0.0, 0.0],
+                UvVertex {
+                    position: [0.0, 0.0, 0.0].into(),
+                    tex_coords: [0.0, 0.0].into(),
                 },
-                TexturedVertex {
-                    position: [0.0, -(height as f32), 0.0],
-                    tex_coords: [0.0, 1.0],
+                UvVertex {
+                    position: [0.0, -(height as f32), 0.0].into(),
+                    tex_coords: [0.0, 1.0].into(),
                 },
-                TexturedVertex {
-                    position: [width as f32, -(height as f32), 0.0],
-                    tex_coords: [1.0, 1.0],
+                UvVertex {
+                    position: [width as f32, -(height as f32), 0.0].into(),
+                    tex_coords: [1.0, 1.0].into(),
                 },
-                TexturedVertex {
-                    position: [width as f32, 0.0, 0.0],
-                    tex_coords: [1.0, 0.0],
+                UvVertex {
+                    position: [width as f32, 0.0, 0.0].into(),
+                    tex_coords: [1.0, 0.0].into(),
                 },
             ]),
             index: Arc::new(vec![0, 1, 2, 0, 2, 3]),
@@ -126,7 +126,7 @@ pub struct TeacupRenderNode {
 
     // previous_size: Option<PxSize>,
     texture: Option<Arc<wgpu::Texture>>,
-    vertex: Arc<Vec<TexturedVertex>>,
+    vertex: Arc<Vec<UvVertex>>,
     index: Arc<Vec<u16>>,
 }
 
@@ -188,9 +188,11 @@ impl<R: 'static> Widget<R> for TeacupRenderNode {
         parent_size: PxSize,
         // context
         context: &SharedContext,
+        _: &crate::renderer::Renderer,
+        _: u64,
     ) -> Vec<(
         Arc<wgpu::Texture>,
-        Arc<Vec<TexturedVertex>>,
+        Arc<Vec<UvVertex>>,
         Arc<Vec<u16>>,
         nalgebra::Matrix4<f32>,
     )> {

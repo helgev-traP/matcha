@@ -150,11 +150,12 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
         self.benchmark.as_mut().unwrap().start();
 
         // get root component's render result
-        let render_result = self
-            .root_component_widget
-            .as_mut()
-            .unwrap()
-            .render(viewport_size, self.context.as_ref().unwrap());
+        let render_result = self.root_component_widget.as_mut().unwrap().render(
+            viewport_size,
+            self.context.as_ref().unwrap(),
+            self.renderer.as_ref().unwrap(),
+            self.frame,
+        );
 
         // project to screen
         self.renderer.as_mut().unwrap().render_to_screen(

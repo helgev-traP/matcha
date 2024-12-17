@@ -1,11 +1,13 @@
 use nalgebra as na;
-use std::cell::Cell;
+use std::{cell::Cell, sync::Arc};
 
 use crate::{
     context::SharedContext,
     events::{UiEvent, UiEventResult},
+    renderer::Renderer,
     types::size::{PxSize, Size, SizeUnit, StdSize},
-    ui::{Dom, DomComPareResult, TextureSet, Widget},
+    ui::{Dom, DomComPareResult, Widget},
+    vertex::uv_vertex::UvVertex,
 };
 
 pub struct RowDescriptor<R> {
@@ -83,12 +85,7 @@ impl<R> Widget<R> for RowRenderNode<R> {
         UiEventResult::default()
     }
 
-    fn is_inside(
-        &self,
-        position: [f32; 2],
-        parent_size: PxSize,
-        context: &SharedContext,
-    ) -> bool {
+    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool {
         // todo: inside check
         true
     }
@@ -162,23 +159,40 @@ impl<R> Widget<R> for RowRenderNode<R> {
 
     fn render(
         &mut self,
-        texture: Option<&TextureSet>,
+        // ui environment
         parent_size: PxSize,
-        affine: na::Matrix4<f32>,
+        // context
         context: &SharedContext,
-    ) {
+        renderer: &Renderer,
+        frame: u64,
+    ) -> Vec<(
+        Arc<wgpu::Texture>,
+        Arc<Vec<UvVertex>>,
+        Arc<Vec<u16>>,
+        nalgebra::Matrix4<f32>,
+    )> {
         let current_size = self.px_size(parent_size, context);
 
         let mut accumulated_width: f32 = 0.0;
-        for child in &mut self.children {
-            let child_px_size = child.px_size(current_size, context);
-            let child_affine =
-                na::Matrix4::new_translation(&na::Vector3::new(accumulated_width, 0.0, 0.0))
-                    * affine;
 
-            child.render(texture, current_size, child_affine, context);
+        self.children
+            .iter_mut()
+            .map(|child| {
+                let child_px_size = child.px_size(current_size, context);
+                let child_affine =
+                    na::Matrix4::new_translation(&na::Vector3::new(accumulated_width, 0.0, 0.0));
 
-            accumulated_width += child_px_size.width;
-        }
+                accumulated_width += child_px_size.width;
+
+                child
+                    .render(current_size, context, renderer, frame)
+                    .into_iter()
+                    .map(|(texture, vertices, indices, affine)| {
+                        (texture, vertices, indices, child_affine * affine)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .flatten()
+            .collect()
     }
 }

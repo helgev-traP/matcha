@@ -3,8 +3,9 @@ use std::{any::Any, sync::Arc};
 use super::{
     context::SharedContext,
     events::{UiEvent, UiEventResult},
+    renderer::Renderer,
     types::size::{PxSize, Size},
-    vertex::textured_vertex::TexturedVertex,
+    vertex::uv_vertex::UvVertex,
 };
 
 // dom tree node
@@ -55,9 +56,11 @@ pub trait Widget<T> {
         parent_size: PxSize,
         // context
         context: &SharedContext,
+        renderer: &Renderer,
+        frame: u64,
     ) -> Vec<(
         Arc<wgpu::Texture>,
-        Arc<Vec<TexturedVertex>>,
+        Arc<Vec<UvVertex>>,
         Arc<Vec<u16>>,
         nalgebra::Matrix4<f32>,
     )>;
