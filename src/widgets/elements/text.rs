@@ -56,20 +56,20 @@ pub struct Text {
 }
 
 impl Text {
-    pub fn new(disc: TextDescriptor) -> Self {
-        Self {
+    pub fn new(disc: TextDescriptor) -> Box<Self> {
+        Box::new(Self {
             label: disc.label,
             size: disc.size,
             font_size: disc.font_size,
             font_color: disc.font_color,
             text: disc.text,
             editable: disc.editable,
-        }
+        })
     }
 }
 
 impl<T: Send + 'static> Dom<T> for Text {
-    fn build_render_tree(&self) -> Box<dyn Widget<T>> {
+    fn build_widget_tree(&self) -> Box<dyn Widget<T>> {
         Box::new(TextNode {
             label: self.label.clone(),
             size: self.size,
@@ -188,7 +188,7 @@ impl<T: Send + 'static> Widget<T> for TextNode {
         }
     }
 
-    fn update_render_tree(&mut self, dom: &dyn Dom<T>) -> Result<(), ()> {
+    fn update_widget_tree(&mut self, dom: &dyn Dom<T>) -> Result<(), ()> {
         if (*dom).type_id() != std::any::TypeId::of::<Text>() {
             Err(())
         } else {

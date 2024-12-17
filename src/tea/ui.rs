@@ -11,7 +11,7 @@ use super::{
 // dom tree node
 
 pub trait Dom<T>: Any + 'static {
-    fn build_render_tree(&self) -> Box<dyn Widget<T>>;
+    fn build_widget_tree(&self) -> Box<dyn Widget<T>>;
     fn as_any(&self) -> &dyn Any;
 }
 
@@ -22,7 +22,7 @@ pub trait Widget<T> {
     fn label(&self) -> Option<&str>;
 
     // for dom handling
-    fn update_render_tree(&mut self, dom: &dyn Dom<T>) -> Result<(), ()>;
+    fn update_widget_tree(&mut self, dom: &dyn Dom<T>) -> Result<(), ()>;
     fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult;
 
     // raw event

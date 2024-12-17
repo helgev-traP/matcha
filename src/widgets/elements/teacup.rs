@@ -51,20 +51,20 @@ pub struct Teacup {
 }
 
 impl Teacup {
-    pub fn new(disc: TeacupDescriptor) -> Self {
-        Self {
+    pub fn new(disc: TeacupDescriptor) -> Box<Self> {
+        Box::new(Self {
             label: disc.label,
             size: disc.size,
             frame_size: disc.frame_size,
             position: disc.position,
             rotate_dig: disc.rotate,
             visible: disc.visible,
-        }
+        })
     }
 }
 
 impl<R: 'static> Dom<R> for Teacup {
-    fn build_render_tree(&self) -> Box<dyn Widget<R>> {
+    fn build_widget_tree(&self) -> Box<dyn Widget<R>> {
         let teacup_bytes = include_bytes!("./teacup.png");
         let teacup_image = image::load_from_memory(teacup_bytes).unwrap();
         let teacup_rgba = teacup_image.to_rgba8();
@@ -151,7 +151,7 @@ impl<R: 'static> Widget<R> for TeacupRenderNode {
         }
     }
 
-    fn update_render_tree(&mut self, dom: &dyn Dom<R>) -> Result<(), ()> {
+    fn update_widget_tree(&mut self, dom: &dyn Dom<R>) -> Result<(), ()> {
         if (*dom).type_id() != std::any::TypeId::of::<Teacup>() {
             return Err(());
         }

@@ -32,16 +32,16 @@ pub struct Template {
 }
 
 impl Template {
-    pub fn new(disc: TemplateDescriptor) -> Self {
-        Self {
+    pub fn new(disc: TemplateDescriptor) -> Box<Self> {
+        Box::new(Self {
             label: disc.label,
             size: disc.size,
-        }
+        })
     }
 }
 
 impl<T: Send + 'static> Dom<T> for Template {
-    fn build_render_tree(&self) -> Box<dyn Widget<T>> {
+    fn build_widget_tree(&self) -> Box<dyn Widget<T>> {
         Box::new(TemplateNode {
             label: self.label.clone(),
             size: self.size,
@@ -76,7 +76,7 @@ impl<T: Send + 'static> Widget<T> for TemplateNode {
         todo!()
     }
 
-    fn update_render_tree(&mut self, dom: &dyn Dom<T>) -> Result<(), ()> {
+    fn update_widget_tree(&mut self, dom: &dyn Dom<T>) -> Result<(), ()> {
         if (*dom).type_id() != std::any::TypeId::of::<Template>() {
             Err(())
         } else {

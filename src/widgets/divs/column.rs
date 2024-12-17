@@ -30,11 +30,11 @@ pub struct Column<R: 'static> {
 }
 
 impl<R: 'static> Column<R> {
-    pub fn new(disc: ColumnDescriptor<R>) -> Self {
-        Self {
+    pub fn new(disc: ColumnDescriptor<R>) -> Box<Self> {
+        Box::new(Self {
             label: disc.label,
             children: disc.vec,
-        }
+        })
     }
 
     pub fn push(&mut self, child: Box<dyn Dom<R>>) {
@@ -43,14 +43,14 @@ impl<R: 'static> Column<R> {
 }
 
 impl<R: 'static> Dom<R> for Column<R> {
-    fn build_render_tree(&self) -> Box<dyn Widget<R>> {
+    fn build_widget_tree(&self) -> Box<dyn Widget<R>> {
         Box::new(ColumnRenderNode {
             label: self.label.clone(),
             redraw: true,
             children: self
                 .children
                 .iter()
-                .map(|child| child.build_render_tree())
+                .map(|child| child.build_widget_tree())
                 .collect(),
             cache_self_size: Cell::new(None),
         })
@@ -88,7 +88,7 @@ impl<R: 'static> Widget<R> for ColumnRenderNode<R> {
         true
     }
 
-    fn update_render_tree(&mut self, dom: &dyn Dom<R>) -> Result<(), ()> {
+    fn update_widget_tree(&mut self, dom: &dyn Dom<R>) -> Result<(), ()> {
         if (*dom).type_id() != (*self).type_id() {
             Err(())
         } else {
@@ -96,7 +96,7 @@ impl<R: 'static> Widget<R> for ColumnRenderNode<R> {
             // todo: differential update
             self.children.clear();
             for child in dom.children.iter() {
-                self.children.push(child.build_render_tree());
+                self.children.push(child.build_widget_tree());
             }
             Ok(())
         }

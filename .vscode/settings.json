@@ -13,6 +13,7 @@
     "multiview",
     "nalgebra",
     "Numpad",
+    "onclick",
     "powf",
     "Rasterizer",
     "repr",
