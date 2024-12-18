@@ -3,6 +3,7 @@ use std::{cell::Cell, sync::Arc};
 
 use crate::{
     context::SharedContext,
+    device::mouse,
     events::{UiEvent, UiEventResult},
     renderer::Renderer,
     types::size::{PxSize, Size, SizeUnit, StdSize},
@@ -57,6 +58,7 @@ impl<R: Send + 'static> Dom<R> for Row<R> {
                 })
                 .collect(),
             cache_self_size: Cell::new(None),
+            mouse_hovering_index: None,
         })
     }
 
@@ -70,6 +72,7 @@ pub struct RowRenderNode<T: 'static> {
     redraw: bool,
     children: Vec<Child<T>>,
     cache_self_size: Cell<Option<PxSize>>,
+    mouse_hovering_index: Option<usize>,
 }
 
 struct Child<T> {
@@ -99,9 +102,9 @@ impl<T> Widget<T> for RowRenderNode<T> {
 
                 let mut accumulated_width: f32 = 0.0;
 
-                let mut where_event_will_be_sent = None;
+                let mut mouse_pointer_on = None;
 
-                for child in &mut self.children {
+                for (i, child) in &mut self.children.iter_mut().enumerate() {
                     let child_position = child.position.get_or_insert([accumulated_width, 0.0]);
 
                     let child_px_size = child
@@ -110,21 +113,83 @@ impl<T> Widget<T> for RowRenderNode<T> {
 
                     accumulated_width += child_px_size.width;
 
-                    // event handling
-                    if child.item.is_inside(
+                    let is_inside = child.item.is_inside(
                         [
                             position[0] - child_position[0],
                             position[1] - child_position[1],
                         ],
                         current_size,
                         context,
-                    ) {
-                        where_event_will_be_sent = Some(child);
+                    );
+
+                    if is_inside {
+                        mouse_pointer_on = Some(i);
                     }
                 }
 
-                if let Some(child) = where_event_will_be_sent {
-                    // updata position
+                // handle mouse enter or leave
+                if mouse_pointer_on != self.mouse_hovering_index {
+                    match (self.mouse_hovering_index, mouse_pointer_on) {
+                        (None, Some(hover_into)) => {
+                            // cursor entered
+                            self.mouse_hovering_index = Some(hover_into);
+
+                            self.children[hover_into].item.widget_event(
+                                &crate::events::UiEvent {
+                                    frame: event.frame,
+                                    content: crate::events::UiEventContent::CursorEntered,
+                                    diff: (),
+                                },
+                                current_size,
+                                context,
+                            );
+                        }
+                        (Some(hover_out_from), None) => {
+                            // cursor left
+                            self.mouse_hovering_index = None;
+
+                            self.children[hover_out_from].item.widget_event(
+                                &crate::events::UiEvent {
+                                    frame: event.frame,
+                                    content: crate::events::UiEventContent::CursorLeft,
+                                    diff: (),
+                                },
+                                current_size,
+                                context,
+                            );
+                        }
+                        (Some(hover_out_from), Some(hover_into)) => {
+                            // cursor shifted
+                            self.mouse_hovering_index = Some(hover_into);
+
+                            self.children[hover_out_from].item.widget_event(
+                                &crate::events::UiEvent {
+                                    frame: event.frame,
+                                    content: crate::events::UiEventContent::CursorLeft,
+                                    diff: (),
+                                },
+                                current_size,
+                                context,
+                            );
+
+                            self.children[hover_into].item.widget_event(
+                                &crate::events::UiEvent {
+                                    frame: event.frame,
+                                    content: crate::events::UiEventContent::CursorEntered,
+                                    diff: (),
+                                },
+                                current_size,
+                                context,
+                            );
+                        }
+                        (None, None) => (),
+                    }
+                }
+
+                // send mouse move event
+                if let Some(i) = mouse_pointer_on {
+                    let child = &mut self.children[i];
+                    // update position
                     match &event.content {
                         crate::events::UiEventContent::MouseClick {
                             position,
@@ -208,19 +273,19 @@ impl<T> Widget<T> for RowRenderNode<T> {
             }
             // others:
             // todo
-            // crate::events::UiEventContent::CursorEntered => todo!(),
-            // crate::events::UiEventContent::CursorLeft => todo!(),
+            crate::events::UiEventContent::CursorEntered => Default::default(),
+            crate::events::UiEventContent::CursorLeft => Default::default(),
             // todo
-            _ => crate::events::UiEventResult::default(),
+            _ => Default::default(),
         }
     }
 
     fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool {
         if let Some(size) = self.cache_self_size.get() {
-            position[0] < 0.0
+            !(position[0] < 0.0
                 || position[0] > size.width
                 || position[1] < 0.0
-                || position[1] > size.height
+                || position[1] > size.height)
         } else {
             let current_size = self.px_size(parent_size, context);
 
@@ -239,10 +304,10 @@ impl<T> Widget<T> for RowRenderNode<T> {
                 height: max_height,
             }));
 
-            position[0] < 0.0
+            !(position[0] < 0.0
                 || position[0] > accumulated_width
                 || position[1] < 0.0
-                || position[1] > max_height
+                || position[1] > max_height)
         }
     }
 
@@ -252,12 +317,27 @@ impl<T> Widget<T> for RowRenderNode<T> {
         } else {
             let dom = dom.as_any().downcast_ref::<Row<T>>().unwrap();
             // todo: differential update
-            self.children.clear();
-            self.children.extend(dom.children.iter().map(|child| Child {
-                item: child.build_widget_tree(),
-                position: None,
-                size: None,
-            }));
+            let mut i = 0;
+            loop {
+                match (self.children.get_mut(i), dom.children.get(i)) {
+                    (Some(child), Some(new_child)) => {
+                        child.item.update_widget_tree(&**new_child)?;
+                        i += 1;
+                    }
+                    (Some(_), None) => {
+                        self.children.pop();
+                    }
+                    (None, Some(new_child)) => {
+                        self.children.push(Child {
+                            item: new_child.build_widget_tree(),
+                            position: None,
+                            size: None,
+                        });
+                        i += 1;
+                    }
+                    (None, None) => break,
+                }
+            }
             Ok(())
         }
     }
