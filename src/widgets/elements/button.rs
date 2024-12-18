@@ -279,12 +279,10 @@ where
             }
             crate::events::UiEventContent::CursorEntered => {
                 self.is_hover = true;
-                println!("\nhover {}", self.is_hover);
                 crate::events::UiEventResult::default()
             }
             crate::events::UiEventContent::CursorLeft => {
                 self.is_hover = false;
-                println!("\nhover {}", self.is_hover);
                 crate::events::UiEventResult::default()
             }
             _ => crate::events::UiEventResult::default(),
@@ -394,8 +392,6 @@ where
 
             self.vertex = Some(Arc::new(vertex));
         }
-
-        print!(" | hover: {}", self.is_hover);
 
         if self.is_hover {
             if self.texture_hover.is_none() {

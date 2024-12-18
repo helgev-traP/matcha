@@ -369,8 +369,6 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
             println!("received message");
             self.root_component.update(message);
         }
-
-        // render
         self.root_component.view();
     }
 

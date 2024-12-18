@@ -71,10 +71,10 @@ impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'sta
 
         // todo: make it update widget tree also after inner update.
         // todo: this block may be moved to another place.
-        if *self.model_updated.lock().unwrap() {
-            self.update_widget_tree();
-            *self.model_updated.lock().unwrap() = false;
-        }
+        // if *self.model_updated.lock().unwrap() {
+        //     self.update_widget_tree();
+        //     *self.model_updated.lock().unwrap() = false;
+        // }
     }
 
     fn update_local(
@@ -97,7 +97,7 @@ impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'sta
             if let Ok(_) = render_tree.lock().unwrap().update_widget_tree(&*dom) {
                 return;
             }
-            self.widget_tree = Some(Arc::new(Mutex::new(dom.build_widget_tree())));
+            *self.widget_tree.as_ref().unwrap().lock().unwrap() = dom.build_widget_tree();
         } else {
             self.widget_tree = Some(Arc::new(Mutex::new(dom.build_widget_tree())));
         }
@@ -106,6 +106,8 @@ impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'sta
     pub fn view(&mut self) -> Arc<dyn Dom<OuterResponse>> {
         if self.widget_tree.is_none() || *self.model_updated.lock().unwrap() {
             self.update_widget_tree();
+
+            *self.model_updated.lock().unwrap() = false;
         }
         Arc::new(ComponentDom {
             label: self.label.clone(),

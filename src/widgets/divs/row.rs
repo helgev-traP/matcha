@@ -3,10 +3,9 @@ use std::{cell::Cell, sync::Arc};
 
 use crate::{
     context::SharedContext,
-    device::mouse,
-    events::{UiEvent, UiEventResult},
+    events::UiEvent,
     renderer::Renderer,
-    types::size::{PxSize, Size, SizeUnit, StdSize},
+    types::size::{PxSize, Size, SizeUnit, StdSize, StdSizeUnit},
     ui::{Dom, DomComPareResult, Widget},
     vertex::uv_vertex::UvVertex,
 };
@@ -281,34 +280,12 @@ impl<T> Widget<T> for RowRenderNode<T> {
     }
 
     fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool {
-        if let Some(size) = self.cache_self_size.get() {
-            !(position[0] < 0.0
-                || position[0] > size.width
-                || position[1] < 0.0
-                || position[1] > size.height)
-        } else {
-            let current_size = self.px_size(parent_size, context);
+        let current_size = self.px_size(parent_size, context);
 
-            let mut accumulated_width: f32 = 0.0;
-            let mut max_height: f32 = 0.0;
-
-            for child in &self.children {
-                let child_px_size = child.item.px_size(current_size, context);
-
-                accumulated_width += child_px_size.width;
-                max_height = max_height.max(child_px_size.height);
-            }
-
-            self.cache_self_size.set(Some(PxSize {
-                width: accumulated_width,
-                height: max_height,
-            }));
-
-            !(position[0] < 0.0
-                || position[0] > accumulated_width
-                || position[1] < 0.0
-                || position[1] > max_height)
-        }
+        !(position[0] < 0.0
+            || position[0] > current_size.width
+            || position[1] < 0.0
+            || position[1] > current_size.height)
     }
 
     fn update_widget_tree(&mut self, dom: &dyn Dom<T>) -> Result<(), ()> {
@@ -368,19 +345,15 @@ impl<T> Widget<T> for RowRenderNode<T> {
             let child_std_size = StdSize::from_size(child.item.size(), context);
 
             match child_std_size.width {
-                crate::types::size::StdSizeUnit::None => {
-                    width_px += child.item.default_size().width
-                }
-                crate::types::size::StdSizeUnit::Pixel(px) => width_px += px,
-                crate::types::size::StdSizeUnit::Percent(percent) => width_percent += percent,
+                StdSizeUnit::None => width_px += child.item.default_size().width,
+                StdSizeUnit::Pixel(px) => width_px += px,
+                StdSizeUnit::Percent(percent) => width_percent += percent,
             }
 
             match child_std_size.height {
-                crate::types::size::StdSizeUnit::None => {
-                    height = height.max(child.item.default_size().height)
-                }
-                crate::types::size::StdSizeUnit::Pixel(px) => height = height.max(px),
-                crate::types::size::StdSizeUnit::Percent(_) => (),
+                StdSizeUnit::None => height = height.max(child.item.default_size().height),
+                StdSizeUnit::Pixel(px) => height = height.max(px),
+                StdSizeUnit::Percent(_) => (),
             }
         }
 

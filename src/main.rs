@@ -11,10 +11,6 @@ use tea_ui::{
     widgets::{
         button::{Button, ButtonDescriptor},
         column::{Column, ColumnDescriptor},
-        drag_field::{DragField, DragFieldDescriptor},
-        row::{Row, RowDescriptor},
-        square::{Square, SquareDescriptor},
-        teacup::{Teacup, TeacupDescriptor},
         text::{Text, TextDescriptor},
     },
 };
@@ -48,7 +44,7 @@ fn local_update(
 }
 
 fn view(model: &i32) -> Box<dyn Dom<Message>> {
-    Row::new(RowDescriptor {
+    Column::new(ColumnDescriptor {
         label: None,
         vec: vec![
             Button::new(ButtonDescriptor {

@@ -50,9 +50,14 @@ impl<R: 'static> Dom<R> for Column<R> {
             children: self
                 .children
                 .iter()
-                .map(|child| child.build_widget_tree())
+                .map(|child| Child {
+                    item: child.build_widget_tree(),
+                    position: None,
+                    size: None,
+                })
                 .collect(),
             cache_self_size: Cell::new(None),
+            mouse_hovering_index: None,
         })
     }
 
@@ -61,11 +66,19 @@ impl<R: 'static> Dom<R> for Column<R> {
     }
 }
 
-pub struct ColumnRenderNode<R: 'static> {
+pub struct ColumnRenderNode<T: 'static> {
     label: Option<String>,
     redraw: bool,
-    children: Vec<Box<dyn Widget<R>>>,
+    children: Vec<Child<T>>,
     cache_self_size: Cell<Option<PxSize>>,
+    mouse_hovering_index: Option<usize>,
+}
+
+struct Child<T> {
+    item: Box<dyn Widget<T>>,
+    // cache
+    position: Option<[f32; 2]>,
+    size: Option<PxSize>,
 }
 
 impl<R: 'static> Widget<R> for ColumnRenderNode<R> {
@@ -79,24 +92,228 @@ impl<R: 'static> Widget<R> for ColumnRenderNode<R> {
         parent_size: PxSize,
         context: &SharedContext,
     ) -> UiEventResult<R> {
-        // todo: event handling
-        UiEventResult::default()
+        match &event.content {
+            // mouse event with position
+            crate::events::UiEventContent::MouseClick { position, .. }
+            | crate::events::UiEventContent::CursorMove { position, .. }
+            | crate::events::UiEventContent::MouseScroll { position, .. } => {
+                let current_size = self.px_size(parent_size, context);
+
+                let mut accumulated_height: f32 = 0.0;
+
+                let mut mouse_pointer_on = None;
+
+                for (i, child) in &mut self.children.iter_mut().enumerate() {
+                    let child_position = child.position.get_or_insert([0.0, accumulated_height]);
+
+                    let child_px_size = child
+                        .size
+                        .get_or_insert_with(|| child.item.px_size(current_size, context));
+
+                    accumulated_height += child_px_size.height;
+
+                    let is_inside = child.item.is_inside(
+                        [
+                            position[0] - child_position[0],
+                            position[1] - child_position[1],
+                        ],
+                        current_size,
+                        context,
+                    );
+
+                    if is_inside {
+                        mouse_pointer_on = Some(i);
+                    }
+                }
+
+                // handle mouse enter or leave
+                if mouse_pointer_on != self.mouse_hovering_index {
+                    match (self.mouse_hovering_index, mouse_pointer_on) {
+                        (None, Some(hover_into)) => {
+                            // cursor entered
+                            self.mouse_hovering_index = Some(hover_into);
+
+                            self.children[hover_into].item.widget_event(
+                                &crate::events::UiEvent {
+                                    frame: event.frame,
+                                    content: crate::events::UiEventContent::CursorEntered,
+                                    diff: (),
+                                },
+                                current_size,
+                                context,
+                            );
+                        }
+                        (Some(hover_out_from), None) => {
+                            // cursor left
+                            self.mouse_hovering_index = None;
+
+                            self.children[hover_out_from].item.widget_event(
+                                &crate::events::UiEvent {
+                                    frame: event.frame,
+                                    content: crate::events::UiEventContent::CursorLeft,
+                                    diff: (),
+                                },
+                                current_size,
+                                context,
+                            );
+                        }
+                        (Some(hover_out_from), Some(hover_into)) => {
+                            // cursor shifted
+                            self.mouse_hovering_index = Some(hover_into);
+
+                            self.children[hover_out_from].item.widget_event(
+                                &crate::events::UiEvent {
+                                    frame: event.frame,
+                                    content: crate::events::UiEventContent::CursorLeft,
+                                    diff: (),
+                                },
+                                current_size,
+                                context,
+                            );
+
+                            self.children[hover_into].item.widget_event(
+                                &crate::events::UiEvent {
+                                    frame: event.frame,
+                                    content: crate::events::UiEventContent::CursorEntered,
+                                    diff: (),
+                                },
+                                current_size,
+                                context,
+                            );
+                        }
+                        (None, None) => (),
+                    }
+                }
+
+                // send mouse move event
+                if let Some(i) = mouse_pointer_on {
+                    let child = &mut self.children[i];
+                    // update position
+                    match &event.content {
+                        crate::events::UiEventContent::MouseClick {
+                            position,
+                            click_state,
+                            button,
+                        } => child.item.widget_event(
+                            &crate::events::UiEvent {
+                                frame: event.frame,
+                                content: crate::events::UiEventContent::MouseClick {
+                                    position: [
+                                        position[0] - child.position.unwrap()[0],
+                                        position[1] - child.position.unwrap()[1],
+                                    ],
+                                    click_state: click_state.clone(),
+                                    button: button.clone(),
+                                },
+                                diff: (),
+                            },
+                            current_size,
+                            context,
+                        ),
+                        crate::events::UiEventContent::CursorMove {
+                            position,
+                            primary_dragging_from,
+                            secondary_dragging_from,
+                            middle_dragging_from,
+                        } => child.item.widget_event(
+                            &crate::events::UiEvent {
+                                frame: event.frame,
+                                content: crate::events::UiEventContent::CursorMove {
+                                    position: [
+                                        position[0] - child.position.unwrap()[0],
+                                        position[1] - child.position.unwrap()[1],
+                                    ],
+                                    primary_dragging_from: primary_dragging_from.map(|from| {
+                                        [
+                                            from[0] - child.position.unwrap()[0],
+                                            from[1] - child.position.unwrap()[1],
+                                        ]
+                                    }),
+                                    secondary_dragging_from: secondary_dragging_from.map(|from| {
+                                        [
+                                            from[0] - child.position.unwrap()[0],
+                                            from[1] - child.position.unwrap()[1],
+                                        ]
+                                    }),
+                                    middle_dragging_from: middle_dragging_from.map(|from| {
+                                        [
+                                            from[0] - child.position.unwrap()[0],
+                                            from[1] - child.position.unwrap()[1],
+                                        ]
+                                    }),
+                                },
+                                diff: (),
+                            },
+                            current_size,
+                            context,
+                        ),
+                        crate::events::UiEventContent::MouseScroll { position, delta } => {
+                            child.item.widget_event(
+                                &crate::events::UiEvent {
+                                    frame: event.frame,
+                                    content: crate::events::UiEventContent::MouseScroll {
+                                        position: [
+                                            position[0] - child.position.unwrap()[0],
+                                            position[1] - child.position.unwrap()[1],
+                                        ],
+                                        delta: *delta,
+                                    },
+                                    diff: (),
+                                },
+                                current_size,
+                                context,
+                            )
+                        }
+                        _ => unreachable!(),
+                    }
+                } else {
+                    crate::events::UiEventResult::default()
+                }
+            }
+            // others:
+            // todo
+            crate::events::UiEventContent::CursorEntered => Default::default(),
+            crate::events::UiEventContent::CursorLeft => Default::default(),
+            // todo
+            _ => Default::default(),
+        }
     }
 
     fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool {
-        // todo
-        true
+        let current_size = self.px_size(parent_size, context);
+
+        !(position[0] < 0.0
+            || position[0] > current_size.width
+            || position[1] < 0.0
+            || position[1] > current_size.height)
     }
 
     fn update_widget_tree(&mut self, dom: &dyn Dom<R>) -> Result<(), ()> {
-        if (*dom).type_id() != (*self).type_id() {
+        if (*dom).type_id() != std::any::TypeId::of::<Column<R>>() {
             Err(())
         } else {
             let dom = dom.as_any().downcast_ref::<Column<R>>().unwrap();
             // todo: differential update
-            self.children.clear();
-            for child in dom.children.iter() {
-                self.children.push(child.build_widget_tree());
+            let mut i = 0;
+            loop {
+                match (self.children.get_mut(i), dom.children.get(i)) {
+                    (Some(child), Some(new_child)) => {
+                        child.item.update_widget_tree(&**new_child)?;
+                        i += 1;
+                    }
+                    (Some(_), None) => {
+                        self.children.pop();
+                    }
+                    (None, Some(new_child)) => {
+                        self.children.push(Child {
+                            item: new_child.build_widget_tree(),
+                            position: None,
+                            size: None,
+                        });
+                        i += 1;
+                    }
+                    (None, None) => break,
+                }
             }
             Ok(())
         }
@@ -125,18 +342,18 @@ impl<R: 'static> Widget<R> for ColumnRenderNode<R> {
         let mut height_percent: f32 = 0.0;
 
         for child in &self.children {
-            let child_std_size = StdSize::from_size(child.size(), context);
+            let child_std_size = StdSize::from_size(child.item.size(), context);
 
             match child_std_size.width {
+                StdSizeUnit::None => width = width.max(child.item.default_size().width),
                 StdSizeUnit::Pixel(px) => width = width.max(px),
                 StdSizeUnit::Percent(_) => (),
-                StdSizeUnit::None => width = width.max(child.default_size().width),
             }
 
             match child_std_size.height {
+                StdSizeUnit::None => height_px += child.item.default_size().height,
                 StdSizeUnit::Pixel(px) => height_px += px,
                 StdSizeUnit::Percent(percent) => height_percent += percent,
-                StdSizeUnit::None => height_px += child.default_size().height,
             }
         }
 
@@ -174,13 +391,14 @@ impl<R: 'static> Widget<R> for ColumnRenderNode<R> {
         self.children
             .iter_mut()
             .map(|child| {
-                let child_px_size = child.px_size(current_size, context);
+                let child_px_size = child.item.px_size(current_size, context);
                 let child_affine =
                     na::Matrix4::new_translation(&na::Vector3::new(0.0, -accumulated_height, 0.0));
 
                 accumulated_height += child_px_size.height;
 
                 child
+                    .item
                     .render(child_px_size, context, renderer, frame)
                     .into_iter()
                     .map(|(texture, vertices, indices, matrix)| {
