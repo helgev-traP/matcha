@@ -193,7 +193,25 @@ impl<T: Send + 'static> Widget<T> for TextNode {
             Err(())
         } else {
             let dom = dom.as_any().downcast_ref::<Text>().unwrap();
-            todo!()
+
+            if self.size != dom.size {
+                return Err(());
+            }
+
+            if self.text != dom.text {
+                self.text = dom.text.clone();
+                self.text_cursor = self.text.len();
+                self.redraw_texture = true;
+            }
+
+            self.label = dom.label.clone();
+            self.font_size = dom.font_size;
+            self.font_color = dom.font_color;
+            self.editable = dom.editable;
+
+            self.redraw_texture = true;
+
+            Ok(())
         }
     }
 

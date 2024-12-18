@@ -34,6 +34,7 @@ where
     pub onclick: Option<T>,
 
     // inner content
+    pub content_position: Option<nalgebra::Matrix4<f32>>,
     pub content: Option<Box<dyn Dom<T>>>,
 }
 
@@ -66,6 +67,7 @@ where
             hover_border_width: None,
             hover_border_color: None,
             onclick: None,
+            content_position: None,
             content: None,
         }
     }
@@ -122,6 +124,7 @@ where
             hover_border_width: self.hover_border_width,
             hover_border_color: self.hover_border_color,
             onclick: Some(onclick),
+            content_position: self.content_position,
             content: self.content,
         }
     }
@@ -151,6 +154,7 @@ where
     // logic
     onclick: Option<T>,
     // inner content
+    content_position: Option<nalgebra::Matrix4<f32>>,
     content: Option<Box<dyn Dom<T>>>,
 }
 
@@ -170,6 +174,7 @@ where
             hover_border_width: disc.hover_border_width,
             hover_border_color: disc.hover_border_color,
             onclick: disc.onclick,
+            content_position: disc.content_position,
             content: disc.content,
         })
     }
@@ -191,6 +196,7 @@ where
             hover_border_width: self.hover_border_width,
             hover_border_color: self.hover_border_color,
             onclick: self.onclick.clone(),
+            content_position: self.content_position,
             content: self.content.as_ref().map(|c| c.build_widget_tree()),
             is_hover: false,
             scene: vello::Scene::new(),
@@ -224,6 +230,7 @@ where
     // logic
     onclick: Option<T>,
     // inner content
+    content_position: Option<nalgebra::Matrix4<f32>>,
     content: Option<Box<dyn Widget<T>>>,
 
     // input status
@@ -272,10 +279,12 @@ where
             }
             crate::events::UiEventContent::CursorEntered => {
                 self.is_hover = true;
+                println!("\nhover {}", self.is_hover);
                 crate::events::UiEventResult::default()
             }
             crate::events::UiEventContent::CursorLeft => {
                 self.is_hover = false;
+                println!("\nhover {}", self.is_hover);
                 crate::events::UiEventResult::default()
             }
             _ => crate::events::UiEventResult::default(),
@@ -285,15 +294,10 @@ where
     fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool {
         let current_size = self.size.to_px(parent_size, context);
 
-        if position[0] < 0.0
+        !(position[0] < 0.0
             || position[0] > current_size.width
             || position[1] < 0.0
-            || position[1] > current_size.height
-        {
-            false
-        } else {
-            true
-        }
+            || position[1] > current_size.height)
     }
 
     fn update_widget_tree(&mut self, dom: &dyn Dom<T>) -> Result<(), ()> {
@@ -301,7 +305,34 @@ where
             Err(())
         } else {
             let dom = dom.as_any().downcast_ref::<Button<T>>().unwrap();
-            todo!()
+
+            if let Some(content) = self.content.as_mut() {
+                if let Some(dom_content) = dom.content.as_ref() {
+                    content.update_widget_tree(&**dom_content)?;
+                } else {
+                    return Err(());
+                }
+            }
+
+            // check content change
+            if self.size != dom.size
+                || self.radius != dom.radius
+                || self.background_color != dom.background_color
+                || self.border_width != dom.border_width
+                || self.border_color != dom.border_color
+                || self.hover_background_color != dom.hover_background_color
+                || self.hover_border_width != dom.hover_border_width
+                || self.hover_border_color != dom.hover_border_color
+            {
+                return Err(());
+            }
+
+            // update
+            self.label = dom.label.clone();
+            self.onclick = dom.onclick.clone();
+            self.content_position = dom.content_position;
+
+            Ok(())
         }
     }
 
@@ -364,6 +395,8 @@ where
             self.vertex = Some(Arc::new(vertex));
         }
 
+        print!(" | hover: {}", self.is_hover);
+
         if self.is_hover {
             if self.texture_hover.is_none() {
                 let device = context.get_wgpu_device();
@@ -419,7 +452,8 @@ where
                     self.scene.stroke(
                         &vello::kurbo::Stroke::new(
                             self.hover_border_width.unwrap_or(self.border_width) as f64,
-                        ),
+                        )
+                        .with_join(vello::kurbo::Join::Bevel),
                         vello::kurbo::Affine::IDENTITY,
                         vello::peniko::Color::rgba(c[0], c[1], c[2], c[3]),
                         None,
@@ -457,6 +491,19 @@ where
                     .unwrap();
             }
 
+            let mut content_render_data = self
+                .content
+                .as_mut()
+                .map(|c| c.render(size, context, renderer, frame))
+                .unwrap_or_default();
+
+            for (_, _, _, matrix) in content_render_data.iter_mut() {
+                *matrix = self
+                    .content_position
+                    .unwrap_or(nalgebra::Matrix4::identity())
+                    * *matrix;
+            }
+
             vec![
                 vec![(
                     self.texture_hover.as_ref().unwrap().clone(),
@@ -464,10 +511,7 @@ where
                     self.index.clone(),
                     nalgebra::Matrix4::identity(),
                 )],
-                self.content
-                    .as_mut()
-                    .map(|c| c.render(size, context, renderer, frame))
-                    .unwrap_or_default(),
+                content_render_data,
             ]
             .concat()
         } else {
@@ -515,7 +559,8 @@ where
                     let c = self.border_color.to_rgba_f64();
 
                     self.scene.stroke(
-                        &vello::kurbo::Stroke::new(self.border_width as f64),
+                        &vello::kurbo::Stroke::new(self.border_width as f64)
+                            .with_join(vello::kurbo::Join::Bevel),
                         vello::kurbo::Affine::IDENTITY,
                         vello::peniko::Color::rgba(c[0], c[1], c[2], c[3]),
                         None,
@@ -550,6 +595,19 @@ where
                     .unwrap();
             }
 
+            let mut content_render_data = self
+                .content
+                .as_mut()
+                .map(|c| c.render(size, context, renderer, frame))
+                .unwrap_or_default();
+
+            for (_, _, _, matrix) in content_render_data.iter_mut() {
+                *matrix = self
+                    .content_position
+                    .unwrap_or(nalgebra::Matrix4::identity())
+                    * *matrix;
+            }
+
             vec![
                 vec![(
                     self.texture.as_ref().unwrap().clone(),
@@ -557,10 +615,7 @@ where
                     self.index.clone(),
                     nalgebra::Matrix4::identity(),
                 )],
-                self.content
-                    .as_mut()
-                    .map(|c| c.render(size, context, renderer, frame))
-                    .unwrap_or_default(),
+                content_render_data,
             ]
             .concat()
         }

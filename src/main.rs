@@ -58,14 +58,17 @@ fn view(model: &i32) -> Box<dyn Dom<Message>> {
                     height: SizeUnit::Pixel(100.0),
                 },
                 background_color: Color::Rgb8USrgb { r: 255, g: 0, b: 0 },
-                border_width: 5.0,
-                border_color: Color::Rgb8USrgb {
+                hover_background_color: Some(Color::Rgb8USrgb {
                     r: 255,
-                    g: 255,
-                    b: 255,
-                },
-                hover_border_width: Some(15.0),
+                    g: 80,
+                    b: 80,
+                }),
+                radius: 30.0,
                 onclick: Some(Message::Increase),
+                content_position: Some(
+                    nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(20.0, -20.0, 0.0))
+                        .into(),
+                ),
                 content: Some(Text::new(TextDescriptor {
                     size: Size {
                         width: SizeUnit::Percent(100.0),
@@ -103,14 +106,17 @@ fn view(model: &i32) -> Box<dyn Dom<Message>> {
                     height: SizeUnit::Pixel(100.0),
                 },
                 background_color: Color::Rgb8USrgb { r: 0, g: 0, b: 255 },
-                border_width: 5.0,
-                border_color: Color::Rgb8USrgb {
-                    r: 255,
-                    g: 255,
+                hover_background_color: Some(Color::Rgb8USrgb {
+                    r: 80,
+                    g: 80,
                     b: 255,
-                },
-                hover_border_width: Some(15.0),
+                }),
+                radius: 30.0,
                 onclick: Some(Message::Decrease),
+                content_position: Some(
+                    nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(20.0, -20.0, 0.0))
+                        .into(),
+                ),
                 content: Some(Text::new(TextDescriptor {
                     size: Size {
                         width: SizeUnit::Percent(100.0),
