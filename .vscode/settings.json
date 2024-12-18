@@ -1,11 +1,13 @@
 {
   "cSpell.words": [
+    "antialiasing",
     "bitflags",
     "Borderless",
     "bytemuck",
     "cgmath",
     "consts",
     "fullscreen",
+    "kurbo",
     "matcha",
     "mipmap",
     "multisample",
@@ -14,6 +16,7 @@
     "nalgebra",
     "Numpad",
     "onclick",
+    "peniko",
     "powf",
     "Rasterizer",
     "repr",

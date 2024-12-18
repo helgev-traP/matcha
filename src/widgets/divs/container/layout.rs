@@ -1,5 +1,5 @@
 pub mod display;
-use std::cell::RefCell;
+use std::{cell::RefCell, sync::Arc};
 
 pub use display::*;
 pub mod position;
@@ -8,10 +8,7 @@ pub mod overflow;
 pub use overflow::*;
 
 use crate::{
-    context::SharedContext,
-    events::{UiEvent, UiEventResult},
-    types::size::{PxSize, SizeUnit},
-    ui::{Dom, TextureSet, Widget},
+    context::SharedContext, events::{UiEvent, UiEventResult}, renderer::Renderer, types::size::{PxSize, SizeUnit}, ui::{Dom, Widget}, vertex::uv_vertex::UvVertex
 };
 
 pub enum Layout<T: 'static> {
@@ -98,7 +95,7 @@ impl<T> Layout<T> {
             Self::None { item } => LayoutNode::None {
                 item: item
                     .into_iter()
-                    .map(|item| item.build_render_tree())
+                    .map(|item| item.build_widget_tree())
                     .collect(),
             },
             Self::Flex {
@@ -111,7 +108,7 @@ impl<T> Layout<T> {
                 item: item
                     .into_iter()
                     .map(|item| FlexItemNode {
-                        item: item.item.build_render_tree(),
+                        item: item.item.build_widget_tree(),
                         grow: item.grow.clone(),
                         size: Default::default(),
                         position: Default::default(),
@@ -134,7 +131,7 @@ impl<T> Layout<T> {
                 item: item
                     .into_iter()
                     .map(|item| GridItemNode {
-                        item: item.item.build_render_tree(),
+                        item: item.item.build_widget_tree(),
                         column_start: item.column_start,
                         column_end: item.column_end,
                         row_start: item.row_start,
@@ -237,46 +234,19 @@ impl<T> LayoutNode<T> {
 
     pub fn render(
         &mut self,
-        texture: Option<&TextureSet>,
+        // ui environment
         parent_size: PxSize,
-        affine: nalgebra::Matrix4<f32>,
+        // context
         context: &SharedContext,
-    ) {
-        match &self {
-            LayoutNode::Flex { size, .. } | LayoutNode::Grid { size, .. } => {
-                if size.borrow().is_none() {
-                    self.px_size(parent_size, context);
-                }
-            }
-            _ => (),
-        }
-
-        match self {
-            LayoutNode::None { .. } => (),
-            LayoutNode::Flex {
-                item,
-                direction,
-                wrap,
-                justify_content,
-                align_content,
-                size,
-                item_cache_valid,
-            } => {
-                if *item_cache_valid {
-                    // render as cache
-                    for item in item {}
-                }
-            }
-            LayoutNode::Grid {
-                item,
-                template_columns,
-                template_rows,
-                gap_columns,
-                gap_rows,
-                size,
-                item_cache_valid,
-            } => todo!(),
-        }
+        renderer: &Renderer,
+        frame: u64,
+    ) -> Vec<(
+        Arc<wgpu::Texture>,
+        Arc<Vec<UvVertex>>,
+        Arc<Vec<u16>>,
+        nalgebra::Matrix4<f32>,
+    )> {
+        todo!()
     }
 }
 
