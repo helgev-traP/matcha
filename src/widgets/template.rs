@@ -80,7 +80,7 @@ impl<T: Send + 'static> Widget<T> for TemplateNode {
     fn is_inside(
         &self,
         position: [f32; 2],
-        parent_size: [f32; 2],
+        parent_size: [StdSize; 2],
         context: &SharedContext,
     ) -> bool {
         todo!()
@@ -102,7 +102,7 @@ impl<T: Send + 'static> Widget<T> for TemplateNode {
     fn widget_event(
         &mut self,
         event: &UiEvent,
-        parent_size: [f32; 2],
+        parent_size: [StdSize; 2],
         context: &SharedContext,
     ) -> crate::events::UiEventResult<T> {
         todo!()
@@ -111,7 +111,7 @@ impl<T: Send + 'static> Widget<T> for TemplateNode {
     fn render(
         &mut self,
         // ui environment
-        parent_size: [f32; 2],
+        parent_size: [StdSize; 2],
         // context
         context: &SharedContext,
         renderer: &Renderer,

@@ -31,7 +31,7 @@ impl Size {
             Size::Point(x) => StdSize::Pixel(*x * app_context.get_dpi() as f32 / 72.0),
             Size::Parent(x) => match parent_px_size {
                 StdSize::Pixel(px) => StdSize::Pixel(px * x),
-                _ => StdSize::ContentOrDefault,
+                StdSize::Content(_) => StdSize::Content(1.0), // todo: consider is this correct?
             },
             Size::Em(_) => todo!(),
             Size::Rem(_) => todo!(),
@@ -54,9 +54,17 @@ impl Size {
     }
 }
 
+impl<T> From<T> for Size
+where
+    T: Into<f32>,
+{
+    fn from(x: T) -> Self {
+        Size::Pixel(x.into())
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum StdSize {
-    ContentOrDefault,
     Pixel(f32),
     Content(f32),
 }
@@ -83,17 +91,16 @@ impl StdSize {
         match self {
             StdSize::Pixel(x) => Some(*x),
             StdSize::Content(x) => content_size.map(|content_size| content_size * x),
-            StdSize::ContentOrDefault => content_size,
         }
     }
 }
 
-impl<T> From<T> for Size
+impl<T> From<T> for StdSize
 where
     T: Into<f32>,
 {
     fn from(x: T) -> Self {
-        Size::Pixel(x.into())
+        StdSize::Pixel(x.into())
     }
 }
 
