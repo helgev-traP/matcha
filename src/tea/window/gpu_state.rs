@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{cosmic::FontContext, types::size::PxSize};
+use crate::cosmic::FontContext;
 
 use super::context::SharedContext;
 
@@ -155,11 +155,8 @@ impl GpuState<'_> {
         &self.config
     }
 
-    pub fn get_viewport_size(&self) -> PxSize {
-        PxSize {
-            width: self.config.width as f32,
-            height: self.config.height as f32,
-        }
+    pub fn get_viewport_size(&self) -> [f32; 2] {
+        [self.config.width as f32, self.config.height as f32]
     }
 
     pub fn resize(&mut self, size: winit::dpi::PhysicalSize<u32>) {
@@ -171,37 +168,42 @@ impl GpuState<'_> {
                 .configure(&self.app_context.get_wgpu_device(), &self.config);
 
             // Update the depth texture
-            self.depth_texture = self.app_context.get_wgpu_device().create_texture(&wgpu::TextureDescriptor {
-                label: None,
-                size: wgpu::Extent3d {
-                    width: size.width,
-                    height: size.height,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 4,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Depth32Float,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            });
+            self.depth_texture =
+                self.app_context
+                    .get_wgpu_device()
+                    .create_texture(&wgpu::TextureDescriptor {
+                        label: None,
+                        size: wgpu::Extent3d {
+                            width: size.width,
+                            height: size.height,
+                            depth_or_array_layers: 1,
+                        },
+                        mip_level_count: 1,
+                        sample_count: 4,
+                        dimension: wgpu::TextureDimension::D2,
+                        format: wgpu::TextureFormat::Depth32Float,
+                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                        view_formats: &[],
+                    });
 
             // Update the multisampled texture
             self.multisampled_texture =
-                self.app_context.get_wgpu_device().create_texture(&wgpu::TextureDescriptor {
-                    label: None,
-                    size: wgpu::Extent3d {
-                        width: size.width,
-                        height: size.height,
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 4,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: self.config.format,
-                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                    view_formats: &[self.config.format],
-                });
+                self.app_context
+                    .get_wgpu_device()
+                    .create_texture(&wgpu::TextureDescriptor {
+                        label: None,
+                        size: wgpu::Extent3d {
+                            width: size.width,
+                            height: size.height,
+                            depth_or_array_layers: 1,
+                        },
+                        mip_level_count: 1,
+                        sample_count: 4,
+                        dimension: wgpu::TextureDimension::D2,
+                        format: self.config.format,
+                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                        view_formats: &[self.config.format],
+                    });
         }
     }
 }

@@ -8,7 +8,7 @@ pub mod overflow;
 pub use overflow::*;
 
 use crate::{
-    context::SharedContext, events::{UiEvent, UiEventResult}, renderer::Renderer, types::size::{PxSize, SizeUnit}, ui::{Dom, Widget}, vertex::uv_vertex::UvVertex
+    context::SharedContext, events::{UiEvent, UiEventResult}, renderer::Renderer, types::size::{PxSize, Size}, ui::{Dom, Widget}, vertex::uv_vertex::UvVertex
 };
 
 pub enum Layout<T: 'static> {
@@ -24,10 +24,10 @@ pub enum Layout<T: 'static> {
     },
     Grid {
         item: Vec<GridItem<T>>,
-        template_columns: Vec<SizeUnit>,
-        template_rows: Vec<SizeUnit>,
-        gap_columns: SizeUnit,
-        gap_rows: SizeUnit,
+        template_columns: Vec<Size>,
+        template_rows: Vec<Size>,
+        gap_columns: Size,
+        gap_rows: Size,
     },
 }
 
@@ -66,10 +66,10 @@ impl<T> Layout<T> {
 
     pub fn grid(
         item: Vec<GridItem<T>>,
-        template_columns: Vec<SizeUnit>,
-        template_rows: Vec<SizeUnit>,
-        gap_columns: SizeUnit,
-        gap_rows: SizeUnit,
+        template_columns: Vec<Size>,
+        template_rows: Vec<Size>,
+        gap_columns: Size,
+        gap_rows: Size,
     ) -> Self {
         Self::Grid {
             item,
@@ -183,10 +183,10 @@ pub(super) enum LayoutNode<T> {
     },
     Grid {
         item: Vec<GridItemNode<T>>,
-        template_columns: Vec<SizeUnit>,
-        template_rows: Vec<SizeUnit>,
-        gap_columns: SizeUnit,
-        gap_rows: SizeUnit,
+        template_columns: Vec<Size>,
+        template_rows: Vec<Size>,
+        gap_columns: Size,
+        gap_rows: Size,
 
         // cache
         size: RefCell<Option<PxSize>>,

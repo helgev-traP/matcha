@@ -4,31 +4,28 @@ use crate::{
     context::SharedContext,
     events::UiEvent,
     renderer::Renderer,
-    types::size::{PxSize, Size, SizeUnit},
+    types::size::{Size, StdSize},
     ui::{Dom, DomComPareResult, Widget},
     vertex::uv_vertex::UvVertex,
 };
 
 pub struct TemplateDescriptor {
     pub label: Option<String>,
-    pub size: Size,
+    pub size: [Size; 2],
 }
 
 impl Default for TemplateDescriptor {
     fn default() -> Self {
         Self {
             label: None,
-            size: Size {
-                width: SizeUnit::Pixel(100.0),
-                height: SizeUnit::Pixel(100.0),
-            },
+            size: [Size::Pixel(100.0), Size::Pixel(100.0)],
         }
     }
 }
 
 pub struct Template {
     label: Option<String>,
-    size: Size,
+    size: [Size; 2],
 }
 
 impl Template {
@@ -55,7 +52,7 @@ impl<T: Send + 'static> Dom<T> for Template {
 
 pub struct TemplateNode {
     label: Option<String>,
-    size: Size,
+    size: [Size; 2],
 }
 
 impl<T: Send + 'static> Widget<T> for TemplateNode {
@@ -80,29 +77,32 @@ impl<T: Send + 'static> Widget<T> for TemplateNode {
         }
     }
 
-    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool {
+    fn is_inside(
+        &self,
+        position: [f32; 2],
+        parent_size: [f32; 2],
+        context: &SharedContext,
+    ) -> bool {
         todo!()
     }
 
-    fn size(&self) -> Size {
+    fn size(&self) -> [Size; 2] {
         self.size
     }
 
-    fn px_size(&self, parent_size: PxSize, context: &SharedContext) -> PxSize {
-        self.size.unwrap_to_px(parent_size, context)
+    fn px_size(&self, parent_size: [StdSize; 2], context: &SharedContext) -> [f32; 2] {
+        // todo !
+        todo!()
     }
 
-    fn default_size(&self) -> PxSize {
-        PxSize {
-            width: 0.0,
-            height: 0.0,
-        }
+    fn default_size(&self) -> [f32; 2] {
+        [0.0, 0.0]
     }
 
     fn widget_event(
         &mut self,
         event: &UiEvent,
-        parent_size: PxSize,
+        parent_size: [f32; 2],
         context: &SharedContext,
     ) -> crate::events::UiEventResult<T> {
         todo!()
@@ -111,7 +111,7 @@ impl<T: Send + 'static> Widget<T> for TemplateNode {
     fn render(
         &mut self,
         // ui environment
-        parent_size: PxSize,
+        parent_size: [f32; 2],
         // context
         context: &SharedContext,
         renderer: &Renderer,

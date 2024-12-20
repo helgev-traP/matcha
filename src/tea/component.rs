@@ -1,11 +1,7 @@
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use super::{
-    context::SharedContext,
-    events::UiEventResult,
-    types::size::PxSize,
-    ui::{Dom, DomComPareResult, Widget},
-    vertex::uv_vertex::UvVertex,
+    context::SharedContext, events::UiEventResult, types::size::{Size, StdSize}, ui::{Dom, DomComPareResult, Widget}, vertex::uv_vertex::UvVertex
 };
 
 pub struct Component<Model, Message, OuterResponse, InnerResponse> {
@@ -197,7 +193,7 @@ impl<Model, O, I> Widget<O> for ComponentWidget<Model, O, I> {
     fn widget_event(
         &mut self,
         event: &super::events::UiEvent,
-        parent_size: PxSize,
+        parent_size: [f32; 2],
         context: &SharedContext,
     ) -> UiEventResult<O> {
         (self.local_update_component)(
@@ -209,7 +205,12 @@ impl<Model, O, I> Widget<O> for ComponentWidget<Model, O, I> {
         )
     }
 
-    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool {
+    fn is_inside(
+        &self,
+        position: [f32; 2],
+        parent_size: [f32; 2],
+        context: &SharedContext,
+    ) -> bool {
         self.node
             .lock()
             .unwrap()
@@ -224,22 +225,22 @@ impl<Model, O, I> Widget<O> for ComponentWidget<Model, O, I> {
         Ok(())
     }
 
-    fn size(&self) -> super::types::size::Size {
+    fn size(&self) -> [Size; 2] {
         self.node.lock().unwrap().size()
     }
 
-    fn px_size(&self, parent_size: PxSize, context: &SharedContext) -> PxSize {
+    fn px_size(&self, parent_size: [StdSize; 2], context: &SharedContext) -> [f32; 2] {
         self.node.lock().unwrap().px_size(parent_size, context)
     }
 
-    fn default_size(&self) -> super::types::size::PxSize {
+    fn default_size(&self) -> [f32; 2] {
         self.node.lock().unwrap().default_size()
     }
 
     fn render(
         &mut self,
         // ui environment
-        parent_size: PxSize,
+        parent_size: [f32; 2],
         // context
         context: &SharedContext,
         renderer: &super::renderer::Renderer,
