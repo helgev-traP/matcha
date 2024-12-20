@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-pub struct DualSetCache<K, V>
+pub struct DoubleSetCache<K, V>
 where
     K: Eq + std::hash::Hash + Clone,
 {
@@ -12,7 +12,7 @@ where
     current_frame: u64,
 }
 
-impl<K, V> DualSetCache<K, V>
+impl<K, V> DoubleSetCache<K, V>
 where
     K: Eq + std::hash::Hash + Clone,
 {
@@ -64,14 +64,13 @@ where
             Self::B_VALID => (&mut self.b, &mut self.a),
         };
 
-        // get or insert cache.
+        // get or insert value.
         cache
             .entry(k.clone())
             .or_insert_with(|| back_cache.remove(&k).unwrap_or_else(|| Box::new(f())))
     }
 
-    #[allow(dead_code)]
-    #[cfg(debug_assertions)]
+    #[cfg(test)]
     fn get_from_valid(&self, k: &K) -> Option<&V> {
         match self.current_valid_cache {
             Self::A_VALID => self.a.get(k).map(|v| &**v),
@@ -86,7 +85,7 @@ mod tests {
 
     #[test]
     fn test() {
-        let mut cache = DualSetCache::new();
+        let mut cache = DoubleSetCache::new();
 
         cache.get_or_insert_with(0, 0, || "a");
         cache.get_or_insert_with(1, 0, || "b");
@@ -96,15 +95,15 @@ mod tests {
         assert_eq!(cache.get_from_valid(&2), Some(&"c"));
         assert_eq!(cache.get_from_valid(&3), None);
 
-        cache.get_or_insert_with(0, 1, || "d");
+        cache.get_or_insert_with(0, 1, || "d"); // will not be inserted.
         assert_eq!(cache.get_from_valid(&0), Some(&"a"));
         assert_eq!(cache.get_from_valid(&1), None);
         assert_eq!(cache.get_from_valid(&2), None);
-        cache.get_or_insert_with(1, 1, || "e");
+        cache.get_or_insert_with(1, 1, || "e"); // will not be inserted.
         assert_eq!(cache.get_from_valid(&0), Some(&"a"));
         assert_eq!(cache.get_from_valid(&1), Some(&"b"));
         assert_eq!(cache.get_from_valid(&2), None);
-        cache.get_or_insert_with(2, 1, || "f");
+        cache.get_or_insert_with(2, 1, || "f"); // will not be inserted.
         assert_eq!(cache.get_from_valid(&0), Some(&"a"));
         assert_eq!(cache.get_from_valid(&1), Some(&"b"));
         assert_eq!(cache.get_from_valid(&2), Some(&"c"));
