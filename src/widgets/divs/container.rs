@@ -1,37 +1,37 @@
-use std::sync::Arc;
-
-use layout::LayoutNode;
-use nalgebra as na;
+use std::{default, sync::Arc};
 
 use crate::{
-    context::SharedContext, events::UiEvent, renderer::Renderer, types::size::{PxSize, Size}, ui::{Dom, DomComPareResult, Widget}, vertex::{colored_vertex::ColoredVertex, uv_vertex::UvVertex, vertex_generator::RectangleDescriptor}
+    context::SharedContext,
+    events::UiEvent,
+    renderer::Renderer,
+    types::size::{PxSize, Size},
+    ui::{Dom, DomComPareResult, Widget},
+    vertex::{
+        colored_vertex::ColoredVertex, uv_vertex::UvVertex, vertex_generator::RectangleDescriptor,
+    },
 };
 
+// todo: organize modules and public uses.
+
+// style
 pub mod style;
-pub use style::{Style, Visibility};
+use style::{Style, Visibility};
 
+// layout
 pub mod layout;
-pub use layout::Layout;
+use layout::{Layout, LayoutNode};
 
+#[derive(Default)]
 pub struct ContainerDescriptor<T: 'static> {
     pub label: Option<String>,
-    pub properties: Style,
+    // style of the container itself
+    pub style: Style,
+    // layout of the child elements
     pub layout: Layout<T>,
 }
-
-impl<T> Default for ContainerDescriptor<T> {
-    fn default() -> Self {
-        Self {
-            label: None,
-            properties: Style::default(),
-            layout: Layout::default(),
-        }
-    }
-}
-
 pub struct Container<T: 'static> {
     label: Option<String>,
-    properties: Style,
+    style: Style,
     layout: Layout<T>,
 }
 
@@ -39,7 +39,7 @@ impl<T> Container<T> {
     pub fn new(disc: ContainerDescriptor<T>) -> Box<Self> {
         Box::new(Self {
             label: disc.label,
-            properties: disc.properties,
+            style: disc.style,
             layout: disc.layout,
         })
     }
@@ -49,11 +49,8 @@ impl<T: Send + 'static> Dom<T> for Container<T> {
     fn build_widget_tree(&self) -> Box<dyn Widget<T>> {
         Box::new(ContainerNode {
             label: self.label.clone(),
-            properties: self.properties.clone(),
+            style: self.style.clone(),
             layout: self.layout.build(),
-            box_vertex_buffer: None,
-            box_index_buffer: None,
-            box_index_len: 0,
         })
     }
 
@@ -65,31 +62,13 @@ impl<T: Send + 'static> Dom<T> for Container<T> {
 pub struct ContainerNode<T> {
     // entity info
     label: Option<String>,
-    properties: Style,
+    style: Style,
     layout: LayoutNode<T>,
-
-    // rendering
-    box_vertex_buffer: Option<wgpu::Buffer>,
-    box_index_buffer: Option<wgpu::Buffer>,
-    box_index_len: u32,
 }
 
 impl<T: Send + 'static> Widget<T> for ContainerNode<T> {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
-    }
-
-    fn widget_event(
-        &mut self,
-        event: &UiEvent,
-        parent_size: PxSize,
-        context: &SharedContext,
-    ) -> crate::events::UiEventResult<T> {
-        todo!()
-    }
-
-    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool {
-        todo!()
     }
 
     fn update_widget_tree(&mut self, dom: &dyn Dom<T>) -> Result<(), ()> {
@@ -109,12 +88,29 @@ impl<T: Send + 'static> Widget<T> for ContainerNode<T> {
         }
     }
 
+    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool {
+        let px_size = self.px_size(parent_size, context);
+
+        !(position[0] < 0.0
+            || position[0] > px_size.width
+            || position[1] < 0.0
+            || position[1] > px_size.height)
+    }
+
     fn size(&self) -> Size {
-        self.properties.size
+        self.style.size
     }
 
     fn px_size(&self, parent_size: PxSize, context: &SharedContext) -> PxSize {
-        self.properties.size.to_px(parent_size, context)
+        match self.style.visibility {
+            Visibility::None => PxSize {
+                width: 0.0,
+                height: 0.0,
+            },
+            Visibility::Visible | Visibility::Hidden => {
+                todo!()
+            },
+        }
     }
 
     fn default_size(&self) -> PxSize {
@@ -122,6 +118,15 @@ impl<T: Send + 'static> Widget<T> for ContainerNode<T> {
             width: 0.0,
             height: 0.0,
         }
+    }
+
+    fn widget_event(
+        &mut self,
+        event: &UiEvent,
+        parent_size: PxSize,
+        context: &SharedContext,
+    ) -> crate::events::UiEventResult<T> {
+        todo!()
     }
 
     fn render(
@@ -138,31 +143,6 @@ impl<T: Send + 'static> Widget<T> for ContainerNode<T> {
         Arc<Vec<u16>>,
         nalgebra::Matrix4<f32>,
     )> {
-        if let Visibility::Visible = self.properties.visibility {
-            // render box
-            if !self.properties.background_color.is_transparent() {
-                if self.box_vertex_buffer.is_none() {
-                    let (vertex_buffer, index_buffer, index_len) = ColoredVertex::rectangle_buffer(
-                        context,
-                        RectangleDescriptor {
-                            x: 0.0,
-                            y: 0.0,
-                            width: parent_size.width,
-                            height: parent_size.height,
-                            radius: self.properties.border.top_left_radius,
-                            div: (self.properties.border.top_left_radius as u16).min(16),
-                        },
-                        false,
-                    );
-                    self.box_vertex_buffer = Some(vertex_buffer);
-                    self.box_index_buffer = Some(index_buffer);
-                    self.box_index_len = index_len;
-                }
-            }
-
-            todo!()
-        }
-
         todo!()
     }
 }

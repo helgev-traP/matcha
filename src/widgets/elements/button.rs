@@ -290,7 +290,7 @@ where
     }
 
     fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool {
-        let current_size = self.size.to_px(parent_size, context);
+        let current_size = self.size.unwrap_to_px(parent_size, context);
 
         !(position[0] < 0.0
             || position[0] > current_size.width
@@ -347,7 +347,7 @@ where
     }
 
     fn px_size(&self, parent_size: PxSize, context: &SharedContext) -> PxSize {
-        self.size.to_px(parent_size, context)
+        self.size.unwrap_to_px(parent_size, context)
     }
 
     fn default_size(&self) -> PxSize {
@@ -368,7 +368,7 @@ where
         Arc<Vec<u16>>,
         nalgebra::Matrix4<f32>,
     )> {
-        let size = self.size.to_px(parent_size, context);
+        let size = self.size.unwrap_to_px(parent_size, context);
 
         if self.vertex.is_none() {
             let vertex = vec![

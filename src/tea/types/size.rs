@@ -21,11 +21,7 @@ pub enum SizeUnit {
 }
 
 impl SizeUnit {
-    pub fn to_px(
-        &self,
-        parent_px_size: StdSizeUnit,
-        app_context: &SharedContext,
-    ) -> StdSizeUnit {
+    pub fn to_px(&self, parent_px_size: StdSizeUnit, app_context: &SharedContext) -> StdSizeUnit {
         match self {
             SizeUnit::Pixel(x) => StdSizeUnit::Pixel(*x),
             SizeUnit::Inch(x) => StdSizeUnit::Pixel(*x * app_context.get_dpi() as f32),
@@ -68,7 +64,7 @@ pub struct Size {
 }
 
 impl Size {
-    pub fn to_px(&self, parent_size: PxSize, app_context: &SharedContext) -> PxSize {
+    pub fn unwrap_to_px(&self, parent_size: PxSize, app_context: &SharedContext) -> PxSize {
         PxSize {
             width: self
                 .width
@@ -90,7 +86,10 @@ pub struct PxSize {
 
 impl Default for PxSize {
     fn default() -> Self {
-        PxSize { width: 0.0, height: 0.0 }
+        PxSize {
+            width: 0.0,
+            height: 0.0,
+        }
     }
 }
 
@@ -219,11 +218,7 @@ impl StdSize {
         }
     }
 
-    pub fn from_parent_size(
-        size: Size,
-        parent_size: PxSize,
-        context: &SharedContext,
-    ) -> StdSize {
+    pub fn from_parent_size(size: Size, parent_size: PxSize, context: &SharedContext) -> StdSize {
         StdSize {
             width: size
                 .width

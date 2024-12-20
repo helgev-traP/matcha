@@ -2,6 +2,7 @@
 pub enum Visibility {
     Visible,
     Hidden,
+    None,
 }
 
 impl Default for Visibility {
