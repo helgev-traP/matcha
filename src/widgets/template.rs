@@ -63,19 +63,6 @@ impl<T: Send + 'static> Widget<T> for TemplateNode {
         self.label.as_deref()
     }
 
-    fn widget_event(
-        &mut self,
-        event: &UiEvent,
-        parent_size: PxSize,
-        context: &SharedContext,
-    ) -> crate::events::UiEventResult<T> {
-        todo!()
-    }
-
-    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool {
-        todo!()
-    }
-
     fn update_widget_tree(&mut self, dom: &dyn Dom<T>) -> Result<(), ()> {
         if (*dom).type_id() != std::any::TypeId::of::<Template>() {
             Err(())
@@ -93,12 +80,16 @@ impl<T: Send + 'static> Widget<T> for TemplateNode {
         }
     }
 
+    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool {
+        todo!()
+    }
+
     fn size(&self) -> Size {
         self.size
     }
 
     fn px_size(&self, parent_size: PxSize, context: &SharedContext) -> PxSize {
-        self.size.to_px(parent_size, context)
+        self.size.unwrap_to_px(parent_size, context)
     }
 
     fn default_size(&self) -> PxSize {
@@ -106,6 +97,15 @@ impl<T: Send + 'static> Widget<T> for TemplateNode {
             width: 0.0,
             height: 0.0,
         }
+    }
+
+    fn widget_event(
+        &mut self,
+        event: &UiEvent,
+        parent_size: PxSize,
+        context: &SharedContext,
+    ) -> crate::events::UiEventResult<T> {
+        todo!()
     }
 
     fn render(

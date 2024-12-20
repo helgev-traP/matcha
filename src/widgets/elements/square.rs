@@ -118,7 +118,7 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
     }
 
     fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool {
-        let current_size = self.size.to_px(parent_size, context);
+        let current_size = self.size.unwrap_to_px(parent_size, context);
 
         if position[0] < 0.0
             || position[0] > current_size.width
@@ -167,7 +167,7 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
         parent_size: crate::types::size::PxSize,
         context: &crate::context::SharedContext,
     ) -> crate::types::size::PxSize {
-        self.size.to_px(parent_size, context)
+        self.size.unwrap_to_px(parent_size, context)
     }
 
     fn default_size(&self) -> crate::types::size::PxSize {
@@ -191,7 +191,7 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
         Arc<Vec<u16>>,
         nalgebra::Matrix4<f32>,
     )> {
-        let size = self.size.to_px(parent_size, context);
+        let size = self.size.unwrap_to_px(parent_size, context);
 
         if self.texture.is_none() {
             let device = context.get_wgpu_device();

@@ -175,7 +175,7 @@ impl<T: Send + 'static> Widget<T> for TextNode {
     }
 
     fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool {
-        let current_size = self.size.to_px(parent_size, context);
+        let current_size = self.size.unwrap_to_px(parent_size, context);
 
         if position[0] >= 0.0
             && position[0] <= current_size.width
@@ -228,7 +228,7 @@ impl<T: Send + 'static> Widget<T> for TextNode {
     }
 
     fn px_size(&self, parent_size: PxSize, context: &SharedContext) -> PxSize {
-        self.size.to_px(parent_size, context)
+        self.size.unwrap_to_px(parent_size, context)
     }
 
     fn default_size(&self) -> PxSize {
@@ -254,7 +254,7 @@ impl<T: Send + 'static> Widget<T> for TextNode {
     )> {
         if self.redraw_texture {
             let context = context;
-            let current_size = self.size.to_px(parent_size, context);
+            let current_size = self.size.unwrap_to_px(parent_size, context);
             // allocate texture
             if self.texture.is_none() {
                 let texture = context
@@ -299,7 +299,7 @@ impl<T: Send + 'static> Widget<T> for TextNode {
         }
 
         if self.vertex.is_none() || self.index.is_none() {
-            let size = self.size.to_px(parent_size, context);
+            let size = self.size.unwrap_to_px(parent_size, context);
 
             self.vertex = Some(Arc::new(vec![
                 UvVertex {

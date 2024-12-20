@@ -142,7 +142,7 @@ impl<T: Send + 'static> Widget<T> for DragFieldNode<T> {
     }
 
     fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool {
-        let current_size = self.size.to_px(parent_size, context);
+        let current_size = self.size.unwrap_to_px(parent_size, context);
 
         if position[0] < 0.0
             || position[0] > current_size.width
@@ -178,7 +178,7 @@ impl<T: Send + 'static> Widget<T> for DragFieldNode<T> {
     }
 
     fn px_size(&self, parent_size: PxSize, context: &SharedContext) -> PxSize {
-        self.size.to_px(parent_size, context)
+        self.size.unwrap_to_px(parent_size, context)
     }
 
     fn default_size(&self) -> PxSize {
@@ -202,7 +202,7 @@ impl<T: Send + 'static> Widget<T> for DragFieldNode<T> {
         Arc<Vec<u16>>,
         nalgebra::Matrix4<f32>,
     )> {
-        let current_size = self.size.to_px(parent_size, context);
+        let current_size = self.size.unwrap_to_px(parent_size, context);
 
         let item_position_matrix = if let Some(drag_delta) = self.drag_delta {
             na::Matrix4::new_translation(&na::Vector3::new(
