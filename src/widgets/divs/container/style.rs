@@ -15,15 +15,12 @@ pub use visibility::*;
 pub mod cursor;
 pub use cursor::*;
 
-use crate::types::{
-    color::Color,
-    size::{Size, Size},
-};
+use crate::types::{color::Color, size::Size};
 
 #[derive(Debug, Clone)]
 pub struct Style {
     // size
-    pub size: Size,
+    pub size: [Size; 2],
 
     // box model
     pub margin: Margin,
@@ -56,10 +53,7 @@ impl Default for Style {
     fn default() -> Self {
         Self {
             // size
-            size: Size {
-                width: Size::Content(1.0),
-                height: Size::Content(1.0),
-            },
+            size: [Size::Content(1.0), Size::Content(1.0)],
 
             // box model
             margin: Margin::default(),

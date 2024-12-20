@@ -193,7 +193,7 @@ impl<Model, O, I> Widget<O> for ComponentWidget<Model, O, I> {
     fn widget_event(
         &mut self,
         event: &super::events::UiEvent,
-        parent_size: [f32; 2],
+        parent_size: [StdSize; 2],
         context: &SharedContext,
     ) -> UiEventResult<O> {
         (self.local_update_component)(
@@ -208,7 +208,7 @@ impl<Model, O, I> Widget<O> for ComponentWidget<Model, O, I> {
     fn is_inside(
         &self,
         position: [f32; 2],
-        parent_size: [f32; 2],
+        parent_size: [StdSize; 2],
         context: &SharedContext,
     ) -> bool {
         self.node
@@ -240,7 +240,7 @@ impl<Model, O, I> Widget<O> for ComponentWidget<Model, O, I> {
     fn render(
         &mut self,
         // ui environment
-        parent_size: [f32; 2],
+        parent_size: [StdSize; 2],
         // context
         context: &SharedContext,
         renderer: &super::renderer::Renderer,

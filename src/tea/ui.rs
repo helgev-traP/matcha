@@ -33,14 +33,24 @@ pub trait Widget<T> {
     fn widget_event(
         &mut self,
         event: &UiEvent,
-        parent_size: [f32; 2],
+        parent_size: [StdSize; 2],
         context: &SharedContext,
     ) -> UiEventResult<T>;
 
     // inside / outside check
-    // todo
-    fn is_inside(&self, position: [f32; 2], parent_size: [f32; 2], context: &SharedContext)
-        -> bool;
+    fn is_inside(
+        &self,
+        position: [f32; 2],
+        parent_size: [StdSize; 2],
+        context: &SharedContext,
+    ) -> bool {
+        let px_size = self.px_size(parent_size, context);
+
+        !(position[0] < 0.0
+            || position[0] > px_size[0]
+            || position[1] < 0.0
+            || position[1] > px_size[1])
+    }
 
     /// The size configuration of the widget.
     fn size(&self) -> [Size; 2];
@@ -55,7 +65,7 @@ pub trait Widget<T> {
     fn render(
         &mut self,
         // ui environment
-        parent_size: [f32; 2],
+        parent_size: [StdSize; 2],
         // context
         context: &SharedContext,
         renderer: &Renderer,
