@@ -109,6 +109,7 @@ impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'sta
 
             *self.model_updated.lock().unwrap() = false;
         }
+
         Arc::new(ComponentDom {
             label: self.label.clone(),
             component_model: ComponentAccess {

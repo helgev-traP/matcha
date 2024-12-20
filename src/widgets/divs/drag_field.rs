@@ -4,7 +4,7 @@ use crate::{
     context::SharedContext,
     device::mouse::MouseButton,
     events::UiEvent,
-    types::size::{PxSize, Size},
+    types::size::{self, PxSize, Size},
     ui::{Dom, DomComPareResult, Widget},
 };
 
@@ -95,9 +95,30 @@ impl<T: Send + 'static> Widget<T> for DragFieldNode<T> {
                         }
                         crate::events::ElementState::Released(_) => {
                             if let Some(drag_delta) = self.drag_delta {
+                                // drag release
                                 self.item_position[0] += drag_delta[0];
                                 self.item_position[1] += drag_delta[1];
                                 self.drag_delta = None;
+                            } else {
+                                // click event
+                                let size = self.px_size(parent_size, context);
+
+                                return self.item.widget_event(
+                                    &UiEvent {
+                                        frame: event.frame,
+                                        content: crate::events::UiEventContent::MouseClick {
+                                            position: [
+                                                position[0] - self.item_position[0],
+                                                position[1] - self.item_position[1],
+                                            ],
+                                            click_state: click_state.clone(),
+                                            button: button.clone(),
+                                        },
+                                        diff: event.diff,
+                                    },
+                                    size,
+                                    context,
+                                );
                             }
                         }
                         _ => (),
@@ -138,6 +159,7 @@ impl<T: Send + 'static> Widget<T> for DragFieldNode<T> {
         if (*dom).type_id() != std::any::TypeId::of::<DragField<T>>() {
             Err(())
         } else {
+            println!("update_widget_tree");
             let dom = dom.as_any().downcast_ref::<DragField<T>>().unwrap();
             todo!()
         }

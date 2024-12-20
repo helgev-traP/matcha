@@ -1,12 +1,10 @@
+use std::sync::Arc;
+
 use layout::LayoutNode;
 use nalgebra as na;
 
 use crate::{
-    context::SharedContext,
-    events::UiEvent,
-    types::size::{PxSize, Size},
-    ui::{Dom, DomComPareResult, TextureSet, Widget},
-    vertex::{colored_vertex::ColoredVertex, vertex_generator::RectangleDescriptor},
+    context::SharedContext, events::UiEvent, renderer::Renderer, types::size::{PxSize, Size}, ui::{Dom, DomComPareResult, Widget}, vertex::{colored_vertex::ColoredVertex, uv_vertex::UvVertex, vertex_generator::RectangleDescriptor}
 };
 
 pub mod style;
@@ -48,7 +46,7 @@ impl<T> Container<T> {
 }
 
 impl<T: Send + 'static> Dom<T> for Container<T> {
-    fn build_render_tree(&self) -> Box<dyn Widget<T>> {
+    fn build_widget_tree(&self) -> Box<dyn Widget<T>> {
         Box::new(ContainerNode {
             label: self.label.clone(),
             properties: self.properties.clone(),
@@ -90,16 +88,11 @@ impl<T: Send + 'static> Widget<T> for ContainerNode<T> {
         todo!()
     }
 
-    fn is_inside(
-        &self,
-        position: [f32; 2],
-        parent_size: PxSize,
-        context: &SharedContext,
-    ) -> bool {
+    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool {
         todo!()
     }
 
-    fn update_render_tree(&mut self, dom: &dyn Dom<T>) -> Result<(), ()> {
+    fn update_widget_tree(&mut self, dom: &dyn Dom<T>) -> Result<(), ()> {
         if (*dom).type_id() != std::any::TypeId::of::<Container<T>>() {
             Err(())
         } else {
@@ -133,12 +126,18 @@ impl<T: Send + 'static> Widget<T> for ContainerNode<T> {
 
     fn render(
         &mut self,
-        texture: Option<&TextureSet>,
+        // ui environment
         parent_size: PxSize,
-        affine: na::Matrix4<f32>,
+        // context
         context: &SharedContext,
-    )
-    {
+        renderer: &Renderer,
+        frame: u64,
+    ) -> Vec<(
+        Arc<wgpu::Texture>,
+        Arc<Vec<UvVertex>>,
+        Arc<Vec<u16>>,
+        nalgebra::Matrix4<f32>,
+    )> {
         if let Visibility::Visible = self.properties.visibility {
             // render box
             if !self.properties.background_color.is_transparent() {
@@ -163,5 +162,7 @@ impl<T: Send + 'static> Widget<T> for ContainerNode<T> {
 
             todo!()
         }
+
+        todo!()
     }
 }
