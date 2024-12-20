@@ -20,6 +20,7 @@ use style::{border, BoxSizing, Style, Visibility};
 // layout
 pub mod layout;
 use layout::{Layout, LayoutNode};
+use vello::skrifa::color;
 use wgpu::naga::back;
 
 #[derive(Default)]
@@ -52,6 +53,10 @@ impl<T: Send + 'static> Dom<T> for Container<T> {
             label: self.label.clone(),
             style: self.style.clone(),
             layout: self.layout.build(),
+            scene: vello::Scene::new(),
+            texture: None,
+            vertices: None,
+            indices: None,
         })
     }
 
@@ -65,6 +70,14 @@ pub struct ContainerNode<T> {
     label: Option<String>,
     style: Style,
     layout: LayoutNode<T>,
+
+    // vello scene
+    scene: vello::Scene,
+
+    // texture, vertices, indices
+    texture: Option<Arc<wgpu::Texture>>,
+    vertices: Option<Arc<Vec<UvVertex>>>,
+    indices: Option<Arc<Vec<u16>>>,
 }
 
 impl<T: Send + 'static> Widget<T> for ContainerNode<T> {
@@ -211,6 +224,7 @@ impl<T: Send + 'static> Widget<T> for ContainerNode<T> {
         let mut render_items = vec![];
         let px_size = self.px_size(parent_size, context);
 
+        // todo: use cache.
         {
             // make the container itself.
             let border_affine_translation =
@@ -226,12 +240,72 @@ impl<T: Send + 'static> Widget<T> for ContainerNode<T> {
                     0.0,
                 ));
 
+            let texture_size = [
+                px_size[0]
+                    + match self.style.box_sizing {
+                        BoxSizing::BorderBox => 0.0,
+                        BoxSizing::ContentBox => self.style.border.px * 2.0,
+                    },
+                px_size[1]
+                    + match self.style.box_sizing {
+                        BoxSizing::BorderBox => 0.0,
+                        BoxSizing::ContentBox => self.style.border.px * 2.0,
+                    },
+            ];
+
             // prepare texture and vertices
-            // todo
+            if self.texture.is_none() {
+                let device = context.get_wgpu_device();
+                let queue = context.get_wgpu_queue();
+
+                // create texture
+                self.texture = Some(Arc::new(device.create_texture(&wgpu::TextureDescriptor {
+                    label: None,
+                    size: wgpu::Extent3d {
+                        width: texture_size[0] as u32,
+                        height: texture_size[1] as u32,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                    view_formats: &[],
+                })));
+            }
+
+            if self.vertices.is_none() {
+                // create vertices
+                let vertices = Arc::new(vec![
+                    UvVertex {
+                        position: [0.0, 0.0, 0.0].into(),
+                        tex_coords: [0.0, 0.0].into(),
+                    },
+                    UvVertex {
+                        position: [0.0, -texture_size[1], 0.0].into(),
+                        tex_coords: [0.0, 1.0].into(),
+                    },
+                    UvVertex {
+                        position: [texture_size[0], -texture_size[1], 0.0].into(),
+                        tex_coords: [1.0, 1.0].into(),
+                    },
+                    UvVertex {
+                        position: [texture_size[0], 0.0, 0.0].into(),
+                        tex_coords: [1.0, 0.0].into(),
+                    },
+                ]);
+
+                self.vertices = Some(vertices);
+                self.indices = Some(Arc::new(vec![0, 1, 2, 0, 2, 3]));
+            }
+
+            // draw
+            self.scene.reset();
 
             // fill box
-            let background_color = self.style.background_color.to_rgba_f32();
-            if background_color[3] == 0.0 {
+            let background_color = self.style.background_color.to_rgba_f64();
+            if background_color[3] > 0.0 {
                 todo!()
             }
 
