@@ -240,6 +240,7 @@ impl<T: Send + 'static> Widget<T> for ContainerNode<T> {
                     0.0,
                 ));
 
+            // same to the size of the border.
             let texture_size = [
                 px_size[0]
                     + match self.style.box_sizing {
@@ -250,6 +251,19 @@ impl<T: Send + 'static> Widget<T> for ContainerNode<T> {
                     + match self.style.box_sizing {
                         BoxSizing::BorderBox => 0.0,
                         BoxSizing::ContentBox => self.style.border.px * 2.0,
+                    },
+            ];
+
+            let fill_box_size = [
+                px_size[0]
+                    + match self.style.box_sizing {
+                        BoxSizing::BorderBox => -self.style.border.px * 2.0,
+                        BoxSizing::ContentBox => 0.0,
+                    },
+                px_size[1]
+                    + match self.style.box_sizing {
+                        BoxSizing::BorderBox => -self.style.border.px * 2.0,
+                        BoxSizing::ContentBox => 0.0,
                     },
             ];
 
@@ -270,7 +284,8 @@ impl<T: Send + 'static> Widget<T> for ContainerNode<T> {
                     sample_count: 1,
                     dimension: wgpu::TextureDimension::D2,
                     format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                        | wgpu::TextureUsages::TEXTURE_BINDING,
                     view_formats: &[],
                 })));
             }
@@ -306,15 +321,83 @@ impl<T: Send + 'static> Widget<T> for ContainerNode<T> {
             // fill box
             let background_color = self.style.background_color.to_rgba_f64();
             if background_color[3] > 0.0 {
-                todo!()
+                self.scene.fill(
+                    vello::peniko::Fill::EvenOdd,
+                    vello::kurbo::Affine::IDENTITY,
+                    vello::peniko::Color::rgba(
+                        background_color[0],
+                        background_color[1],
+                        background_color[2],
+                        background_color[3],
+                    ),
+                    None,
+                    &vello::kurbo::RoundedRect::new(
+                        self.style.border.px as f64,
+                        self.style.border.px as f64,
+                        (self.style.border.px + fill_box_size[0]) as f64,
+                        (self.style.border.px + fill_box_size[1]) as f64,
+                        vello::kurbo::RoundedRectRadii::new(
+                            (self.style.border.top_left_radius - self.style.border.px / 2.0) as f64,
+                            (self.style.border.top_right_radius - self.style.border.px / 2.0)
+                                as f64,
+                            (self.style.border.bottom_right_radius - self.style.border.px / 2.0)
+                                as f64,
+                            (self.style.border.bottom_left_radius - self.style.border.px / 2.0)
+                                as f64,
+                        ),
+                    ),
+                );
             }
 
             // border
-            let border_color = self.style.border.color.to_rgba_f32();
+            let border_color = self.style.border.color.to_rgba_f64();
             let border_width = self.style.border.px;
             if border_width > 0.0 && border_color[3] > 0.0 {
-                todo!()
+                self.scene.stroke(
+                    &vello::kurbo::Stroke::new(border_width as f64),
+                    vello::kurbo::Affine::IDENTITY,
+                    vello::peniko::Color::rgba(
+                        border_color[0],
+                        border_color[1],
+                        border_color[2],
+                        border_color[3],
+                    ),
+                    None,
+                    &vello::kurbo::RoundedRect::new(
+                        0.0,
+                        0.0,
+                        texture_size[0] as f64,
+                        texture_size[1] as f64,
+                        vello::kurbo::RoundedRectRadii::new(
+                            self.style.border.top_left_radius as f64,
+                            self.style.border.top_right_radius as f64,
+                            self.style.border.bottom_right_radius as f64,
+                            self.style.border.bottom_left_radius as f64,
+                        ),
+                    ),
+                );
             }
+
+            // render to texture
+            renderer
+                .vello_renderer()
+                .render_to_texture(
+                    context.get_wgpu_device(),
+                    context.get_wgpu_queue(),
+                    &self.scene,
+                    &self.texture.as_ref().unwrap().create_view(
+                        &wgpu::TextureViewDescriptor::default(),
+                    ),
+                    &vello::RenderParams {
+                        base_color: vello::peniko::Color::TRANSPARENT,
+                        height: texture_size[1] as u32,
+                        width: texture_size[0] as u32,
+                        antialiasing_method: vello::AaConfig::Area,
+                    },
+                )
+                .unwrap();
+
+            // todo: ここから
         }
 
         {
