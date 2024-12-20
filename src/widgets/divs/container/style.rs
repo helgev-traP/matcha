@@ -15,7 +15,10 @@ pub use visibility::*;
 pub mod cursor;
 pub use cursor::*;
 
-use crate::types::{color::Color, size::{Size, SizeUnit}};
+use crate::types::{
+    color::Color,
+    size::{Size, Size},
+};
 
 #[derive(Debug, Clone)]
 pub struct Style {
@@ -54,8 +57,8 @@ impl Default for Style {
         Self {
             // size
             size: Size {
-                width: SizeUnit::Content(1.0),
-                height: SizeUnit::Content(1.0),
+                width: Size::Content(1.0),
+                height: Size::Content(1.0),
             },
 
             // box model
@@ -66,7 +69,12 @@ impl Default for Style {
 
             // colors
             text_color: Color::Rgb8USrgb { r: 0, g: 0, b: 0 },
-            background_color: Color::Rgba8USrgb { r: 255, g: 255, b: 255, a: 0 },
+            background_color: Color::Rgba8USrgb {
+                r: 255,
+                g: 255,
+                b: 255,
+                a: 0,
+            },
 
             // font
             font_family: "Arial".to_string(),

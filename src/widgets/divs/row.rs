@@ -5,7 +5,7 @@ use crate::{
     context::SharedContext,
     events::UiEvent,
     renderer::Renderer,
-    types::size::{PxSize, Size, SizeUnit, StdSize, StdSizeUnit},
+    types::size::{PxSize, Size, Size, StdSize, StdSize},
     ui::{Dom, DomComPareResult, Widget},
     vertex::uv_vertex::UvVertex,
 };
@@ -331,8 +331,8 @@ impl<T> Widget<T> for RowRenderNode<T> {
 
     fn size(&self) -> crate::types::size::Size {
         Size {
-            width: SizeUnit::Content(1.0),
-            height: SizeUnit::Content(1.0),
+            width: Size::Content(1.0),
+            height: Size::Content(1.0),
         }
     }
 
@@ -345,15 +345,15 @@ impl<T> Widget<T> for RowRenderNode<T> {
             let child_std_size = StdSize::from_size(child.item.size(), context);
 
             match child_std_size.width {
-                StdSizeUnit::None => width_px += child.item.default_size().width,
-                StdSizeUnit::Pixel(px) => width_px += px,
-                StdSizeUnit::Percent(percent) => width_percent += percent,
+                StdSize::ContentOrDefault => width_px += child.item.default_size().width,
+                StdSize::Pixel(px) => width_px += px,
+                StdSize::Content(percent) => width_percent += percent,
             }
 
             match child_std_size.height {
-                StdSizeUnit::None => height = height.max(child.item.default_size().height),
-                StdSizeUnit::Pixel(px) => height = height.max(px),
-                StdSizeUnit::Percent(_) => (),
+                StdSize::ContentOrDefault => height = height.max(child.item.default_size().height),
+                StdSize::Pixel(px) => height = height.max(px),
+                StdSize::Content(_) => (),
             }
         }
 

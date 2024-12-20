@@ -5,7 +5,7 @@ use tea_ui::{
     component::{Component, ComponentAccess},
     types::{
         color::Color,
-        size::{Size, SizeUnit},
+        size::{Size, Size},
     },
     ui::Dom,
     widgets::{
@@ -49,8 +49,8 @@ fn local_update(
 fn view(model: &i32) -> Box<dyn Dom<Message>> {
     Square::new(SquareDescriptor {
         size: Size {
-            width:  SizeUnit::Percent(100.0),
-            height: SizeUnit::Percent(100.0),
+            width: Size::Parent(100.0),
+            height: Size::Parent(100.0),
         },
         radius: 200.0,
         background_color: Color::Rgb8USrgb {

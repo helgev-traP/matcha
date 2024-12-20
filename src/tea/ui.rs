@@ -4,7 +4,7 @@ use super::{
     context::SharedContext,
     events::{UiEvent, UiEventResult},
     renderer::Renderer,
-    types::size::{PxSize, Size},
+    types::size::{Size, StdSize},
     vertex::uv_vertex::UvVertex,
 };
 
@@ -33,27 +33,29 @@ pub trait Widget<T> {
     fn widget_event(
         &mut self,
         event: &UiEvent,
-        parent_size: PxSize,
+        parent_size: [f32; 2],
         context: &SharedContext,
     ) -> UiEventResult<T>;
 
     // inside / outside check
     // todo
-    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool;
+    fn is_inside(&self, position: [f32; 2], parent_size: [f32; 2], context: &SharedContext)
+        -> bool;
 
     /// The size configuration of the widget.
-    fn size(&self) -> Size;
+    fn size(&self) -> [Size; 2];
 
     /// Actual size including its sub widgets with pixel value.
-    fn px_size(&self, parent_size: PxSize, context: &SharedContext) -> PxSize;
+    fn px_size(&self, parent_size: [StdSize; 2], context: &SharedContext) -> [f32; 2];
 
     /// Default size of widget with pixel value.
-    fn default_size(&self) -> PxSize;
+    // todo: this may should be removed. keep it for now.
+    fn default_size(&self) -> [f32; 2];
 
     fn render(
         &mut self,
         // ui environment
-        parent_size: PxSize,
+        parent_size: [f32; 2],
         // context
         context: &SharedContext,
         renderer: &Renderer,

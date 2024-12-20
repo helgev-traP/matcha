@@ -6,7 +6,7 @@ use crate::{
     renderer::Renderer,
     types::{
         color::Color,
-        size::{PxSize, Size, SizeUnit},
+        size::{PxSize, Size, Size},
     },
     ui::{Dom, DomComPareResult, Widget},
     vertex::{
@@ -31,8 +31,8 @@ impl Default for SquareDescriptor {
         Self {
             label: None,
             size: Size {
-                width: SizeUnit::Pixel(100.0),
-                height: SizeUnit::Pixel(100.0),
+                width: Size::Pixel(100.0),
+                height: Size::Pixel(100.0),
             },
             radius: 0.0,
             background_color: Color::Rgb8USrgb { r: 0, g: 0, b: 0 },

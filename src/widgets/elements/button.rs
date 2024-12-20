@@ -6,7 +6,7 @@ use crate::{
     renderer::Renderer,
     types::{
         color::Color,
-        size::{PxSize, Size, SizeUnit},
+        size::{PxSize, Size, Size},
     },
     ui::{Dom, DomComPareResult, Widget},
     vertex::uv_vertex::UvVertex,
@@ -46,8 +46,8 @@ where
         Self {
             label: None,
             size: Size {
-                width: SizeUnit::Percent(100.0),
-                height: SizeUnit::Percent(100.0),
+                width: Size::Parent(100.0),
+                height: Size::Parent(100.0),
             },
             radius: 0.0,
             background_color: Color::Rgba8USrgb {

@@ -8,7 +8,7 @@ use crate::{
     renderer::Renderer,
     types::{
         color::Color,
-        size::{PxSize, Size, SizeUnit},
+        size::{PxSize, Size, Size},
     },
     ui::{Dom, DomComPareResult, Widget},
     vertex::uv_vertex::UvVertex,
@@ -30,8 +30,8 @@ impl Default for TextDescriptor {
         Self {
             label: None,
             size: Size {
-                width: SizeUnit::Pixel(100.0),
-                height: SizeUnit::Pixel(100.0),
+                width: Size::Pixel(100.0),
+                height: Size::Pixel(100.0),
             },
             font_size: 16.0,
             font_color: Color::Rgb8USrgb {

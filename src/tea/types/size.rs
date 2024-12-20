@@ -3,254 +3,125 @@ use nalgebra as na;
 use crate::context::SharedContext;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum SizeUnit {
+pub enum Size {
     // Absolute units
     Pixel(f32),
     Inch(f32),
     Point(f32),
 
-    // Relative units
-    Percent(f32),
+    // Relative units that can calculate to pixel from shared context or parent size
+    Parent(f32),
     Em(f32),
     Rem(f32),
     Vw(f32),
     Vh(f32),
     VMin(f32),
     VMax(f32),
+
+    // Relative units that can not calculate to pixel from shared context or parent size
     Content(f32),
 }
 
-impl SizeUnit {
-    pub fn to_px(&self, parent_px_size: StdSizeUnit, app_context: &SharedContext) -> StdSizeUnit {
-        match self {
-            SizeUnit::Pixel(x) => StdSizeUnit::Pixel(*x),
-            SizeUnit::Inch(x) => StdSizeUnit::Pixel(*x * app_context.get_dpi() as f32),
-            SizeUnit::Point(x) => StdSizeUnit::Pixel(*x * app_context.get_dpi() as f32 / 72.0),
-            SizeUnit::Percent(x) => match parent_px_size {
-                StdSizeUnit::Pixel(px) => StdSizeUnit::Pixel(px * x / 100.0),
-                _ => StdSizeUnit::None,
-            },
-            SizeUnit::Em(_) => todo!(),
-            SizeUnit::Rem(_) => todo!(),
-            SizeUnit::Vw(x) => {
-                StdSizeUnit::Pixel(*x * app_context.get_viewport_size().0 as f32 / 100.0)
-            }
-            SizeUnit::Vh(x) => {
-                StdSizeUnit::Pixel(*x * app_context.get_viewport_size().1 as f32 / 100.0)
-            }
-            SizeUnit::VMin(x) => StdSizeUnit::Pixel(
-                *x * app_context
-                    .get_viewport_size()
-                    .0
-                    .min(app_context.get_viewport_size().1) as f32
-                    / 100.0,
-            ),
-            SizeUnit::VMax(x) => StdSizeUnit::Pixel(
-                *x * app_context
-                    .get_viewport_size()
-                    .0
-                    .max(app_context.get_viewport_size().1) as f32
-                    / 100.0,
-            ),
-            SizeUnit::Content(_) => StdSizeUnit::None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Size {
-    pub width: SizeUnit,
-    pub height: SizeUnit,
-}
-
 impl Size {
-    pub fn unwrap_to_px(&self, parent_size: PxSize, app_context: &SharedContext) -> PxSize {
-        PxSize {
-            width: self
-                .width
-                .to_px(StdSizeUnit::Pixel(parent_size.width), app_context)
-                .unwrap_as_pixel(),
-            height: self
-                .height
-                .to_px(StdSizeUnit::Pixel(parent_size.height), app_context)
-                .unwrap_as_pixel(),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct PxSize {
-    pub width: f32,
-    pub height: f32,
-}
-
-impl Default for PxSize {
-    fn default() -> Self {
-        PxSize {
-            width: 0.0,
-            height: 0.0,
-        }
-    }
-}
-
-impl PxSize {
-    pub fn from_size_parent_size(
-        size: Size,
-        parent_size: PxSize,
-        context: &SharedContext,
-    ) -> PxSize {
-        PxSize {
-            width: size
-                .width
-                .to_px(StdSizeUnit::Pixel(parent_size.width), context)
-                .unwrap_as_pixel(),
-            height: size
-                .height
-                .to_px(StdSizeUnit::Pixel(parent_size.height), context)
-                .unwrap_as_pixel(),
-        }
-    }
-
-    pub fn make_normalizer(&self) -> na::Matrix4<f32> {
-        na::Matrix4::new(
-            // -
-            2.0 / self.width,
-            0.0,
-            0.0,
-            -1.0,
-            // -
-            0.0,
-            2.0 / self.height,
-            0.0,
-            1.0,
-            // -
-            0.0,
-            0.0,
-            1.0,
-            0.0,
-            // -
-            0.0,
-            0.0,
-            0.0,
-            1.0,
-        )
-    }
-}
-
-impl<T> From<[T; 2]> for PxSize
-where
-    T: Into<f32>,
-{
-    fn from([width, height]: [T; 2]) -> Self {
-        PxSize {
-            width: width.into(),
-            height: height.into(),
+    /// standardize `Size` to `StdSize` with dependent on parent `StdSize`.
+    pub fn to_std_size(&self, parent_px_size: StdSize, app_context: &SharedContext) -> StdSize {
+        match self {
+            Size::Pixel(x) => StdSize::Pixel(*x),
+            Size::Inch(x) => StdSize::Pixel(*x * app_context.get_dpi() as f32),
+            Size::Point(x) => StdSize::Pixel(*x * app_context.get_dpi() as f32 / 72.0),
+            Size::Parent(x) => match parent_px_size {
+                StdSize::Pixel(px) => StdSize::Pixel(px * x),
+                _ => StdSize::ContentOrDefault,
+            },
+            Size::Em(_) => todo!(),
+            Size::Rem(_) => todo!(),
+            Size::Vw(x) => StdSize::Pixel(*x * app_context.get_viewport_size().0 as f32),
+            Size::Vh(x) => StdSize::Pixel(*x * app_context.get_viewport_size().1 as f32),
+            Size::VMin(x) => StdSize::Pixel(
+                *x * app_context
+                    .get_viewport_size()
+                    .0
+                    .min(app_context.get_viewport_size().1) as f32,
+            ),
+            Size::VMax(x) => StdSize::Pixel(
+                *x * app_context
+                    .get_viewport_size()
+                    .0
+                    .max(app_context.get_viewport_size().1) as f32,
+            ),
+            Size::Content(x) => StdSize::Content(*x),
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum StdSizeUnit {
-    None,
+pub enum StdSize {
+    ContentOrDefault,
     Pixel(f32),
-    Percent(f32),
+    Content(f32),
 }
 
-impl StdSizeUnit {
-    pub fn is_none(&self) -> bool {
-        match self {
-            StdSizeUnit::None => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_pixel(&self) -> bool {
-        match self {
-            StdSizeUnit::Pixel(_) => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_percent(&self) -> bool {
-        match self {
-            StdSizeUnit::Percent(_) => true,
-            _ => false,
-        }
-    }
-}
-
-impl StdSizeUnit {
+impl StdSize {
     pub fn unwrap_as_pixel(self) -> f32 {
         match self {
-            StdSizeUnit::Pixel(x) => x,
+            StdSize::Pixel(x) => x,
             _ => panic!("unwrap failed: not pixel"),
         }
     }
 
     pub fn unwrap_as_percent(self) -> f32 {
         match self {
-            StdSizeUnit::Percent(x) => x,
+            StdSize::Content(x) => x,
             _ => panic!("unwrap failed: not percent"),
         }
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct StdSize {
-    pub width: StdSizeUnit,
-    pub height: StdSizeUnit,
-}
-
-// todo v---- ここから
-
 impl StdSize {
-    pub fn standardize(&self, parent_size: &Size, context: &SharedContext) -> StdSize {
-        StdSize {
-            width: parent_size.width.to_px(self.width, context),
-            height: parent_size.height.to_px(self.height, context),
-        }
-    }
-
-    pub fn from_size(size: Size, context: &SharedContext) -> StdSize {
-        StdSize {
-            width: size.width.to_px(StdSizeUnit::None, context),
-            height: size.height.to_px(StdSizeUnit::None, context),
-        }
-    }
-
-    pub fn from_parent_size(size: Size, parent_size: PxSize, context: &SharedContext) -> StdSize {
-        StdSize {
-            width: size
-                .width
-                .to_px(StdSizeUnit::Pixel(parent_size.width), context),
-            height: size
-                .height
-                .to_px(StdSizeUnit::Pixel(parent_size.height), context),
-        }
-    }
-
-    pub fn unwrap(self) -> PxSize {
-        PxSize {
-            width: self.width.unwrap_as_pixel(),
-            height: self.height.unwrap_as_pixel(),
+    /// Convert `StdSize` to pixel size with content size(Option<f32>).
+    pub fn from_content_size_to_px(&self, content_size: Option<f32>) -> Option<f32> {
+        match self {
+            StdSize::Pixel(x) => Some(*x),
+            StdSize::Content(x) => content_size.map(|content_size| content_size * x),
+            StdSize::ContentOrDefault => content_size,
         }
     }
 }
 
-impl From<PxSize> for StdSize {
-    fn from(size: PxSize) -> Self {
-        StdSize {
-            width: StdSizeUnit::Pixel(size.width),
-            height: StdSizeUnit::Pixel(size.height),
-        }
+impl<T> From<T> for Size
+where
+    T: Into<f32>,
+{
+    fn from(x: T) -> Self {
+        Size::Pixel(x.into())
     }
 }
 
-impl From<(Size, &SharedContext)> for StdSize {
-    fn from(size: (Size, &SharedContext)) -> Self {
-        StdSize {
-            width: size.0.width.to_px(StdSizeUnit::None, &size.1),
-            height: size.0.height.to_px(StdSizeUnit::None, &size.1),
-        }
-    }
+pub fn make_normalize_matrix<T>(size: T) -> na::Matrix4<f32>
+where
+    T: Into<[f32; 2]>,
+{
+    let size = size.into();
+    na::Matrix4::new(
+        // -
+        2.0 / size[0],
+        0.0,
+        0.0,
+        -1.0,
+        // -
+        0.0,
+        2.0 / size[1],
+        0.0,
+        1.0,
+        // -
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        // -
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+    )
 }

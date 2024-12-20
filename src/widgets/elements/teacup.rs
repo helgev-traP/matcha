@@ -4,11 +4,11 @@ use std::sync::Arc;
 use wgpu::ImageCopyTextureBase;
 
 use crate::events::UiEvent;
-use crate::types::size::StdSizeUnit;
+use crate::types::size::StdSize;
 use crate::{
     context::SharedContext,
     events::UiEventResult,
-    types::size::{PxSize, StdSize},
+    types::size::StdSize,
     ui::{Dom, DomComPareResult, Widget},
     vertex::uv_vertex::UvVertex,
 };
@@ -27,12 +27,12 @@ impl Default for TeacupDescriptor {
         Self {
             label: None,
             size: crate::types::size::Size {
-                width: crate::types::size::SizeUnit::Pixel(100.0),
-                height: crate::types::size::SizeUnit::Pixel(100.0),
+                width: crate::types::size::Size::Pixel(100.0),
+                height: crate::types::size::Size::Pixel(100.0),
             },
             frame_size: crate::types::size::Size {
-                width: crate::types::size::SizeUnit::Pixel(100.0),
-                height: crate::types::size::SizeUnit::Pixel(100.0),
+                width: crate::types::size::Size::Pixel(100.0),
+                height: crate::types::size::Size::Pixel(100.0),
             },
             position: [0.0, 0.0],
             rotate: 0.0,
@@ -205,7 +205,7 @@ impl<R: 'static> Widget<R> for TeacupRenderNode {
 
         if self.texture.is_none() {
             let texture_size = wgpu::Extent3d {
-                width:  self.picture_size.width as u32,
+                width: self.picture_size.width as u32,
                 height: self.picture_size.height as u32,
                 depth_or_array_layers: 1,
             };
@@ -262,9 +262,9 @@ impl<R: 'static> Widget<R> for TeacupRenderNode {
 
     fn px_size(&self, parent_size: PxSize, context: &SharedContext) -> PxSize {
         let mut size = StdSize::from_parent_size(self.frame_size, parent_size, context);
-        if size.width.is_none() {
-            size.width = StdSizeUnit::Pixel(self.picture_size.width);
-            size.height = StdSizeUnit::Pixel(self.picture_size.height);
+        if size.width.is_default() {
+            size.width = StdSize::Pixel(self.picture_size.width);
+            size.height = StdSize::Pixel(self.picture_size.height);
         }
         size.unwrap()
     }

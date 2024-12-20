@@ -1,4 +1,4 @@
-use crate::types::size::SizeUnit;
+use crate::types::size::Size;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FlexDirection {
@@ -40,5 +40,5 @@ pub enum AlignContent {
 pub enum FlexGrow {
     Auto,
     Number(u32),
-    Size(SizeUnit),
+    Size(Size),
 }

@@ -1,12 +1,10 @@
-use nalgebra as na;
-use std::{sync::Arc, time::Instant};
+use std::sync::Arc;
 
 use super::{
-    component::{Component, ComponentWidget},
+    component::Component,
     context,
-    events::{self, UiEventContent},
     renderer::Renderer,
-    types::{color::Color, size::PxSize},
+    types::color::Color,
     ui::Widget,
 };
 
@@ -160,7 +158,7 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
         // project to screen
         self.renderer.as_mut().unwrap().render_to_screen(
             &surface_texture_view,
-            [viewport_size.width, viewport_size.height],
+            viewport_size,
             render_result,
         );
 
