@@ -6,7 +6,7 @@ use crate::{
     renderer::Renderer,
     types::{
         color::Color,
-        size::{PxSize, Size, Size},
+        size::{Size, StdSize},
     },
     ui::{Dom, DomComPareResult, Widget},
     vertex::uv_vertex::UvVertex,
@@ -45,10 +45,7 @@ where
     fn default() -> Self {
         Self {
             label: None,
-            size: Size {
-                width: Size::Parent(100.0),
-                height: Size::Parent(100.0),
-            },
+            size: [Size::Parent(100.0), Size::Parent(100.0)],
             radius: 0.0,
             background_color: Color::Rgba8USrgb {
                 r: 0,
@@ -255,7 +252,7 @@ where
     fn widget_event(
         &mut self,
         event: &UiEvent,
-        parent_size: PxSize,
+        parent_size: [StdSize; 2],
         context: &SharedContext,
     ) -> crate::events::UiEventResult<T> {
         match &event.content {
@@ -289,7 +286,12 @@ where
         }
     }
 
-    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool {
+    fn is_inside(
+        &self,
+        position: [f32; 2],
+        parent_size: [StdSize; 2],
+        context: &SharedContext,
+    ) -> bool {
         let current_size = self.size.unwrap_to_px(parent_size, context);
 
         !(position[0] < 0.0
@@ -342,7 +344,7 @@ where
         }
     }
 
-    fn size(&self) -> Size {
+    fn size(&self) -> [Size; 2] {
         self.size
     }
 

@@ -233,10 +233,6 @@ impl<Model, O, I> Widget<O> for ComponentWidget<Model, O, I> {
         self.node.lock().unwrap().px_size(parent_size, context)
     }
 
-    fn default_size(&self) -> [f32; 2] {
-        self.node.lock().unwrap().default_size()
-    }
-
     fn render(
         &mut self,
         // ui environment

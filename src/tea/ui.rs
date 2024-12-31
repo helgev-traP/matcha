@@ -58,10 +58,6 @@ pub trait Widget<T> {
     /// Actual size including its sub widgets with pixel value.
     fn px_size(&self, parent_size: [StdSize; 2], context: &SharedContext) -> [f32; 2];
 
-    /// Default size of widget with pixel value.
-    // todo: this may should be removed. keep it for now.
-    fn default_size(&self) -> [f32; 2];
-
     fn render(
         &mut self,
         // ui environment

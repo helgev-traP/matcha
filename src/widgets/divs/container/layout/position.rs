@@ -6,6 +6,7 @@ pub enum Position {
     Relative(na::Matrix3<f32>),
     Absolute(na::Matrix3<f32>),
     Fixed(na::Matrix3<f32>),
+    // todo
     // Sticky,
 }
 

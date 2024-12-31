@@ -1,27 +1,28 @@
-use std::{default, sync::Arc};
+use std::sync::Arc;
 
 use crate::{
     context::SharedContext,
     events::UiEvent,
     renderer::Renderer,
-    types::size::{Size, StdSize},
-    ui::{Dom, DomComPareResult, Widget},
-    vertex::{
-        colored_vertex::ColoredVertex, uv_vertex::UvVertex, vertex_generator::RectangleDescriptor,
+    types::{
+        double_cache_set::DoubleSetCache,
+        size::{Size, StdSize},
     },
+    ui::{Dom, DomComPareResult, Widget},
+    vertex::uv_vertex::UvVertex,
 };
 
 // todo: organize modules and public uses.
 
 // style
 pub mod style;
-use style::{border, BoxSizing, Style, Visibility};
+use style::{BoxSizing, Style, Visibility};
 
 // layout
 pub mod layout;
 use layout::{Layout, LayoutNode};
-use vello::skrifa::color;
-use wgpu::naga::back;
+
+const CACHE_ACCURACY: f32 = 10.0;
 
 #[derive(Default)]
 pub struct ContainerDescriptor<T: 'static> {
@@ -54,9 +55,8 @@ impl<T: Send + 'static> Dom<T> for Container<T> {
             style: self.style.clone(),
             layout: self.layout.build(),
             scene: vello::Scene::new(),
-            texture: None,
-            vertices: None,
-            indices: None,
+            indices: Arc::new(vec![0, 1, 2, 2, 3, 0]),
+            cache: DoubleSetCache::new(),
         })
     }
 
@@ -74,10 +74,74 @@ pub struct ContainerNode<T> {
     // vello scene
     scene: vello::Scene,
 
-    // texture, vertices, indices
-    texture: Option<Arc<wgpu::Texture>>,
-    vertices: Option<Arc<Vec<UvVertex>>>,
-    indices: Option<Arc<Vec<u16>>>,
+    // texture, vertices, iF32SizeHashKey
+    indices: Arc<Vec<u16>>,
+    // pixel accuracy is `CACHE_ACCURACY`
+    cache: DoubleSetCache<[u32; 2], (Arc<wgpu::Texture>, Arc<Vec<UvVertex>>)>,
+}
+
+/// methods used internally
+impl<T> ContainerNode<T> {
+    // calculate the size of the box except margin.
+    // This will be the size of the texture.
+    fn box_size(&self, parent_size: [StdSize; 2], context: &SharedContext) -> [f32; 2] {
+        let std_size = [
+            self.style.size[0].to_std_size(parent_size[0], context),
+            self.style.size[1].to_std_size(parent_size[1], context),
+        ];
+
+        match std_size {
+            [StdSize::Pixel(width), StdSize::Pixel(height)] => match self.style.box_sizing {
+                BoxSizing::BorderBox => [width, height],
+                BoxSizing::ContentBox => [
+                    width
+                        + self.style.border.px * 2.0
+                        + self.style.padding.left
+                        + self.style.padding.right,
+                    height
+                        + self.style.border.px * 2.0
+                        + self.style.padding.top
+                        + self.style.padding.bottom,
+                ],
+            },
+            _ => {
+                // need to query children size
+                let content_size = self.layout.px_size(std_size, context);
+
+                let width = match std_size[0] {
+                    StdSize::Pixel(x) => x,
+                    StdSize::Content(p) => content_size[0] * p,
+                };
+
+                let width = match self.style.box_sizing {
+                    BoxSizing::BorderBox => width,
+                    BoxSizing::ContentBox => {
+                        width
+                            + self.style.border.px * 2.0
+                            + self.style.padding.left
+                            + self.style.padding.right
+                    }
+                };
+
+                let height = match std_size[1] {
+                    StdSize::Pixel(x) => x,
+                    StdSize::Content(p) => content_size[1] * p,
+                };
+
+                let height = match self.style.box_sizing {
+                    BoxSizing::BorderBox => height,
+                    BoxSizing::ContentBox => {
+                        height
+                            + self.style.border.px * 2.0
+                            + self.style.padding.top
+                            + self.style.padding.bottom
+                    }
+                };
+
+                [width, height]
+            }
+        }
+    }
 }
 
 impl<T: Send + 'static> Widget<T> for ContainerNode<T> {
@@ -120,12 +184,17 @@ impl<T: Send + 'static> Widget<T> for ContainerNode<T> {
         parent_size: [StdSize; 2],
         context: &SharedContext,
     ) -> bool {
-        let px_size = self.px_size(parent_size, context);
+        let box_size = self.box_size(parent_size, context);
+
+        let position = [
+            position[0] - self.style.margin.left,
+            position[1] + self.style.margin.top,
+        ];
 
         !(position[0] < 0.0
-            || position[0] > px_size[0]
+            || position[0] > box_size[0]
             || position[1] < 0.0
-            || position[1] > px_size[1])
+            || position[1] > box_size[1])
     }
 
     fn size(&self) -> [Size; 2] {
@@ -136,69 +205,17 @@ impl<T: Send + 'static> Widget<T> for ContainerNode<T> {
         match self.style.visibility {
             Visibility::None => [0.0, 0.0],
             Visibility::Visible | Visibility::Hidden => {
-                // calculate children size
-                let std_size = [
-                    self.style.size[0].to_std_size(parent_size[0], context),
-                    self.style.size[1].to_std_size(parent_size[1], context),
-                ];
+                let box_size = self.box_size(parent_size, context);
 
-                let px = match std_size {
-                    [StdSize::Pixel(width), StdSize::Pixel(height)] => [width, height],
-                    _ => {
-                        // need to query children size
-                        self.layout.px_size(std_size, context)
-                    }
-                };
-
-                // add padding, margin, border.
                 [
-                    // width
-                    px[0]
-                        + self.style.padding.left
-                        + self.style.padding.right
-                        + self.style.margin.left
-                        + self.style.margin.right
-                        + match self.style.box_sizing {
-                            BoxSizing::ContentBox => 0.0,
-                            BoxSizing::BorderBox => self.style.border.px * 2.0,
-                        },
-                    // height
-                    px[1]
-                        + self.style.padding.top
-                        + self.style.padding.bottom
-                        + self.style.margin.top
-                        + self.style.margin.bottom
-                        + match self.style.box_sizing {
-                            BoxSizing::ContentBox => 0.0,
-                            BoxSizing::BorderBox => self.style.border.px * 2.0,
-                        },
+                    box_size[0] + self.style.margin.left + self.style.margin.right,
+                    box_size[1] + self.style.margin.top + self.style.margin.bottom,
                 ]
             }
         }
     }
 
-    fn default_size(&self) -> [f32; 2] {
-        [
-            self.style.padding.left
-                + self.style.padding.right
-                + self.style.margin.left
-                + self.style.margin.right
-                + match self.style.box_sizing {
-                    BoxSizing::ContentBox => 0.0,
-                    BoxSizing::BorderBox => self.style.border.px * 2.0,
-                },
-            self.style.padding.top
-                + self.style.padding.bottom
-                + self.style.margin.top
-                + self.style.margin.bottom
-                + match self.style.box_sizing {
-                    BoxSizing::ContentBox => 0.0,
-                    BoxSizing::BorderBox => self.style.border.px * 2.0,
-                },
-        ]
-    }
-
-    // todo
+    // todo: cache the children
     fn render(
         &mut self,
         // ui environment
@@ -219,103 +236,66 @@ impl<T: Send + 'static> Widget<T> for ContainerNode<T> {
             return vec![];
         }
 
-        // generally, leave the process to the layout system.
+        // children that will overflow is visible
 
-        let mut render_items = vec![];
-        let px_size = self.px_size(parent_size, context);
+        let box_size = self.box_size(parent_size, context);
 
-        // todo: use cache.
-        {
-            // make the container itself.
-            let border_affine_translation =
-                nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(
-                    match self.style.box_sizing {
-                        BoxSizing::BorderBox => 0.0,
-                        BoxSizing::ContentBox => -self.style.border.px,
-                    },
-                    match self.style.box_sizing {
-                        BoxSizing::BorderBox => 0.0,
-                        BoxSizing::ContentBox => self.style.border.px,
-                    },
-                    0.0,
-                ));
+        let mut render_items: Vec<(
+            Arc<wgpu::Texture>,
+            Arc<Vec<UvVertex>>,
+            Arc<Vec<u16>>,
+            nalgebra::Matrix4<f32>,
+        )> = vec![];
 
-            // same to the size of the border.
-            let texture_size = [
-                px_size[0]
-                    + match self.style.box_sizing {
-                        BoxSizing::BorderBox => 0.0,
-                        BoxSizing::ContentBox => self.style.border.px * 2.0,
-                    },
-                px_size[1]
-                    + match self.style.box_sizing {
-                        BoxSizing::BorderBox => 0.0,
-                        BoxSizing::ContentBox => self.style.border.px * 2.0,
-                    },
-            ];
+        let content_affine = nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(
+            self.style.margin.left + self.style.padding.left + self.style.border.px,
+            -self.style.margin.top - self.style.padding.top - self.style.border.px,
+            0.0,
+        ));
 
-            let fill_box_size = [
-                px_size[0]
-                    + match self.style.box_sizing {
-                        BoxSizing::BorderBox => -self.style.border.px * 2.0,
-                        BoxSizing::ContentBox => 0.0,
-                    },
-                px_size[1]
-                    + match self.style.box_sizing {
-                        BoxSizing::BorderBox => -self.style.border.px * 2.0,
-                        BoxSizing::ContentBox => 0.0,
-                    },
-            ];
+        // hash
+        let hash_key = [(box_size[0] * CACHE_ACCURACY) as u32, (box_size[1] * CACHE_ACCURACY) as u32];
 
-            // prepare texture and vertices
-            if self.texture.is_none() {
-                let device = context.get_wgpu_device();
-                let queue = context.get_wgpu_queue();
+        let (texture, vertex) = self.cache.get_or_insert_with(hash_key, frame, || {
+            let device = context.get_wgpu_device();
+            let queue = context.get_wgpu_queue();
 
-                // create texture
-                self.texture = Some(Arc::new(device.create_texture(&wgpu::TextureDescriptor {
-                    label: None,
-                    size: wgpu::Extent3d {
-                        width: texture_size[0] as u32,
-                        height: texture_size[1] as u32,
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                        | wgpu::TextureUsages::TEXTURE_BINDING,
-                    view_formats: &[],
-                })));
-            }
+            // create texture
+            let texture = Arc::new(device.create_texture(&wgpu::TextureDescriptor {
+                size: wgpu::Extent3d {
+                    width: box_size[0] as u32,
+                    height: box_size[1] as u32,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
+                label: None,
+                view_formats: &[],
+            }));
 
-            if self.vertices.is_none() {
-                // create vertices
-                let vertices = Arc::new(vec![
-                    UvVertex {
-                        position: [0.0, 0.0, 0.0].into(),
-                        tex_coords: [0.0, 0.0].into(),
-                    },
-                    UvVertex {
-                        position: [0.0, -texture_size[1], 0.0].into(),
-                        tex_coords: [0.0, 1.0].into(),
-                    },
-                    UvVertex {
-                        position: [texture_size[0], -texture_size[1], 0.0].into(),
-                        tex_coords: [1.0, 1.0].into(),
-                    },
-                    UvVertex {
-                        position: [texture_size[0], 0.0, 0.0].into(),
-                        tex_coords: [1.0, 0.0].into(),
-                    },
-                ]);
+            // create vertex
+            let vertex = Arc::new(vec![
+                UvVertex {
+                    position: [0.0, 0.0, 0.0].into(),
+                    tex_coords: [0.0, 0.0].into(),
+                },
+                UvVertex {
+                    position: [0.0, -box_size[1], 0.0].into(),
+                    tex_coords: [0.0, 1.0].into(),
+                },
+                UvVertex {
+                    position: [box_size[0], -box_size[1], 0.0].into(),
+                    tex_coords: [1.0, 1.0].into(),
+                },
+                UvVertex {
+                    position: [box_size[0], 0.0, 0.0].into(),
+                    tex_coords: [1.0, 0.0].into(),
+                },
+            ]);
 
-                self.vertices = Some(vertices);
-                self.indices = Some(Arc::new(vec![0, 1, 2, 0, 2, 3]));
-            }
-
-            // draw
             self.scene.reset();
 
             // fill box
@@ -334,16 +314,13 @@ impl<T: Send + 'static> Widget<T> for ContainerNode<T> {
                     &vello::kurbo::RoundedRect::new(
                         self.style.border.px as f64,
                         self.style.border.px as f64,
-                        (self.style.border.px + fill_box_size[0]) as f64,
-                        (self.style.border.px + fill_box_size[1]) as f64,
+                        (box_size[0] - self.style.border.px) as f64,
+                        (box_size[1] - self.style.border.px) as f64,
                         vello::kurbo::RoundedRectRadii::new(
-                            (self.style.border.top_left_radius - self.style.border.px / 2.0) as f64,
-                            (self.style.border.top_right_radius - self.style.border.px / 2.0)
-                                as f64,
-                            (self.style.border.bottom_right_radius - self.style.border.px / 2.0)
-                                as f64,
-                            (self.style.border.bottom_left_radius - self.style.border.px / 2.0)
-                                as f64,
+                            (self.style.border.top_left_radius - self.style.border.px) as f64,
+                            (self.style.border.top_right_radius - self.style.border.px) as f64,
+                            (self.style.border.bottom_right_radius - self.style.border.px) as f64,
+                            (self.style.border.bottom_left_radius - self.style.border.px) as f64,
                         ),
                     ),
                 );
@@ -352,6 +329,7 @@ impl<T: Send + 'static> Widget<T> for ContainerNode<T> {
             // border
             let border_color = self.style.border.color.to_rgba_f64();
             let border_width = self.style.border.px;
+            let half_border_width = border_width / 2.0;
             if border_width > 0.0 && border_color[3] > 0.0 {
                 self.scene.stroke(
                     &vello::kurbo::Stroke::new(border_width as f64),
@@ -364,15 +342,15 @@ impl<T: Send + 'static> Widget<T> for ContainerNode<T> {
                     ),
                     None,
                     &vello::kurbo::RoundedRect::new(
-                        0.0,
-                        0.0,
-                        texture_size[0] as f64,
-                        texture_size[1] as f64,
+                        (0.0 + half_border_width) as f64,
+                        (0.0 + half_border_width) as f64,
+                        (box_size[0] - half_border_width) as f64,
+                        (box_size[1] - half_border_width) as f64,
                         vello::kurbo::RoundedRectRadii::new(
-                            self.style.border.top_left_radius as f64,
-                            self.style.border.top_right_radius as f64,
-                            self.style.border.bottom_right_radius as f64,
-                            self.style.border.bottom_left_radius as f64,
+                            (self.style.border.top_left_radius - half_border_width) as f64,
+                            (self.style.border.top_right_radius - half_border_width) as f64,
+                            (self.style.border.bottom_right_radius - half_border_width) as f64,
+                            (self.style.border.bottom_left_radius - half_border_width) as f64,
                         ),
                     ),
                 );
@@ -385,54 +363,49 @@ impl<T: Send + 'static> Widget<T> for ContainerNode<T> {
                     context.get_wgpu_device(),
                     context.get_wgpu_queue(),
                     &self.scene,
-                    &self.texture.as_ref().unwrap().create_view(
-                        &wgpu::TextureViewDescriptor::default(),
-                    ),
+                    &texture.create_view(&wgpu::TextureViewDescriptor::default()),
                     &vello::RenderParams {
                         base_color: vello::peniko::Color::TRANSPARENT,
-                        height: texture_size[1] as u32,
-                        width: texture_size[0] as u32,
+                        height: box_size[1] as u32,
+                        width: box_size[0] as u32,
                         antialiasing_method: vello::AaConfig::Area,
                     },
                 )
                 .unwrap();
 
-            // todo: ここから
-        }
+            // todo: render children to current texture
 
-        {
-            // render children
-            let margin_affine_translation =
-                nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(
-                    self.style.margin.left
-                        + self.style.padding.left
-                        + match self.style.box_sizing {
-                            BoxSizing::ContentBox => 0.0,
-                            BoxSizing::BorderBox => self.style.border.px,
-                        },
-                    -self.style.margin.top
-                        - self.style.padding.top
-                        - match self.style.box_sizing {
-                            BoxSizing::ContentBox => 0.0,
-                            BoxSizing::BorderBox => self.style.border.px,
-                        },
-                    0.0,
-                ));
-
-            render_items.append(
-                &mut self
-                    .layout
-                    .render(px_size, context, renderer, frame)
+            render_items.extend(
+                self.layout
+                    .render(
+                        [box_size[0].into(), box_size[1].into()],
+                        context,
+                        renderer,
+                        frame,
+                    )
                     .into_iter()
-                    .map(|(texture, vertices, indices, affine)| {
-                        // apply margin translation
-                        let affine = margin_affine_translation * affine;
-                        (texture, vertices, indices, affine)
-                    })
-                    .collect::<Vec<_>>(),
+                    .map(|(texture, vertex, index, affine)| {
+                        (texture, vertex, index, content_affine * affine)
+                    }),
             );
-        }
 
-        render_items
+            // return
+            (texture, vertex)
+        });
+
+        let mut v = vec![(
+            texture.clone(),
+            vertex.clone(),
+            self.indices.clone(),
+            nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(
+                self.style.margin.left,
+                -self.style.margin.top,
+                0.0,
+            )),
+        )];
+
+        v.append(&mut render_items);
+
+        v
     }
 }
