@@ -70,6 +70,13 @@ pub enum StdSize {
 }
 
 impl StdSize {
+    pub fn unwrap_or(self, default: f32) -> f32 {
+        match self {
+            StdSize::Pixel(x) => x,
+            StdSize::Content(_) => default,
+        }
+    }
+
     pub fn unwrap_as_pixel(self) -> f32 {
         match self {
             StdSize::Pixel(x) => x,

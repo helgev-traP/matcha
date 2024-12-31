@@ -5,27 +5,68 @@ use crate::{
     context::SharedContext,
     events::UiEvent,
     renderer::Renderer,
-    types::size::{PxSize, Size, Size, StdSize, StdSize},
+    types::size::{Size, StdSize},
     ui::{Dom, DomComPareResult, Widget},
     vertex::uv_vertex::UvVertex,
 };
 
 pub struct RowDescriptor<R> {
+    // label
     pub label: Option<String>,
-    pub vec: Vec<Box<dyn Dom<R>>>,
+    // style
+    pub size: [Size; 2],
+    pub margin: Margin,
+    pub padding: Padding,
+    pub border: Border,
+    pub box_sizing: BoxSizing,
+    pub visibility: Visibility,
+    // todo: layout
+    // items
+    pub items: Vec<Box<dyn Dom<R>>>,
 }
 
 impl<R> Default for RowDescriptor<R> {
     fn default() -> Self {
         Self {
             label: None,
-            vec: Vec::new(),
+            size: [Size::Content(1.0), Size::Content(1.0)],
+            margin: Margin {
+                top: 0.0,
+                right: 0.0,
+                bottom: 0.0,
+                left: 0.0,
+            },
+            padding: Padding {
+                top: 0.0,
+                right: 0.0,
+                bottom: 0.0,
+                left: 0.0,
+            },
+            border: Border {
+                px: 0.0,
+                color: [0, 0, 0, 0],
+                top_left_radius: 0.0,
+                top_right_radius: 0.0,
+                bottom_left_radius: 0.0,
+                bottom_right_radius: 0.0,
+            },
+            box_sizing: BoxSizing::BorderBox,
+            visibility: Visibility::Visible,
+            items: vec![],
         }
     }
 }
 
 pub struct Row<R: 'static> {
     label: Option<String>,
+
+    size: [Size; 2],
+    margin: Margin,
+    padding: Padding,
+    border: Border,
+    box_sizing: BoxSizing,
+    visibility: Visibility,
+
     children: Vec<Box<dyn Dom<R>>>,
 }
 
@@ -33,7 +74,13 @@ impl<R> Row<R> {
     pub fn new(disc: RowDescriptor<R>) -> Box<Self> {
         Box::new(Self {
             label: disc.label,
-            children: disc.vec,
+            size: disc.size,
+            margin: disc.margin,
+            padding: disc.padding,
+            border: disc.border,
+            box_sizing: disc.box_sizing,
+            visibility: disc.visibility,
+            children: disc.items,
         })
     }
 
@@ -46,6 +93,12 @@ impl<R: Send + 'static> Dom<R> for Row<R> {
     fn build_widget_tree(&self) -> Box<dyn Widget<R>> {
         Box::new(RowRenderNode {
             label: self.label.clone(),
+            size: self.size,
+            margin: self.margin,
+            padding: self.padding,
+            border: self.border,
+            box_sizing: self.box_sizing,
+            visibility: self.visibility,
             redraw: true,
             children: self
                 .children
@@ -68,9 +121,17 @@ impl<R: Send + 'static> Dom<R> for Row<R> {
 
 pub struct RowRenderNode<T: 'static> {
     label: Option<String>,
+
+    size: [Size; 2],
+    margin: Margin,
+    padding: Padding,
+    border: Border,
+    box_sizing: BoxSizing,
+    visibility: Visibility,
+
     redraw: bool,
     children: Vec<Child<T>>,
-    cache_self_size: Cell<Option<PxSize>>,
+    cache_self_size: Cell<Option<[f32; 2]>>,
     mouse_hovering_index: Option<usize>,
 }
 
@@ -78,7 +139,7 @@ struct Child<T> {
     item: Box<dyn Widget<T>>,
     // cache
     position: Option<[f32; 2]>,
-    size: Option<PxSize>,
+    size: Option<[f32; 2]>,
 }
 
 impl<T> Widget<T> for RowRenderNode<T> {
@@ -89,203 +150,14 @@ impl<T> Widget<T> for RowRenderNode<T> {
     fn widget_event(
         &mut self,
         event: &UiEvent,
-        parent_size: PxSize,
+        parent_size: [StdSize; 2],
         context: &SharedContext,
     ) -> crate::events::UiEventResult<T> {
-        match &event.content {
-            // mouse event with position
-            crate::events::UiEventContent::MouseClick { position, .. }
-            | crate::events::UiEventContent::CursorMove { position, .. }
-            | crate::events::UiEventContent::MouseScroll { position, .. } => {
-                let current_size = self.px_size(parent_size, context);
-
-                let mut accumulated_width: f32 = 0.0;
-
-                let mut mouse_pointer_on = None;
-
-                for (i, child) in &mut self.children.iter_mut().enumerate() {
-                    let child_position = child.position.get_or_insert([accumulated_width, 0.0]);
-
-                    let child_px_size = child
-                        .size
-                        .get_or_insert_with(|| child.item.px_size(current_size, context));
-
-                    accumulated_width += child_px_size.width;
-
-                    let is_inside = child.item.is_inside(
-                        [
-                            position[0] - child_position[0],
-                            position[1] - child_position[1],
-                        ],
-                        current_size,
-                        context,
-                    );
-
-                    if is_inside {
-                        mouse_pointer_on = Some(i);
-                    }
-                }
-
-                // handle mouse enter or leave
-                if mouse_pointer_on != self.mouse_hovering_index {
-                    match (self.mouse_hovering_index, mouse_pointer_on) {
-                        (None, Some(hover_into)) => {
-                            // cursor entered
-                            self.mouse_hovering_index = Some(hover_into);
-
-                            self.children[hover_into].item.widget_event(
-                                &crate::events::UiEvent {
-                                    frame: event.frame,
-                                    content: crate::events::UiEventContent::CursorEntered,
-                                    diff: (),
-                                },
-                                current_size,
-                                context,
-                            );
-                        }
-                        (Some(hover_out_from), None) => {
-                            // cursor left
-                            self.mouse_hovering_index = None;
-
-                            self.children[hover_out_from].item.widget_event(
-                                &crate::events::UiEvent {
-                                    frame: event.frame,
-                                    content: crate::events::UiEventContent::CursorLeft,
-                                    diff: (),
-                                },
-                                current_size,
-                                context,
-                            );
-                        }
-                        (Some(hover_out_from), Some(hover_into)) => {
-                            // cursor shifted
-                            self.mouse_hovering_index = Some(hover_into);
-
-                            self.children[hover_out_from].item.widget_event(
-                                &crate::events::UiEvent {
-                                    frame: event.frame,
-                                    content: crate::events::UiEventContent::CursorLeft,
-                                    diff: (),
-                                },
-                                current_size,
-                                context,
-                            );
-
-                            self.children[hover_into].item.widget_event(
-                                &crate::events::UiEvent {
-                                    frame: event.frame,
-                                    content: crate::events::UiEventContent::CursorEntered,
-                                    diff: (),
-                                },
-                                current_size,
-                                context,
-                            );
-                        }
-                        (None, None) => (),
-                    }
-                }
-
-                // send mouse move event
-                if let Some(i) = mouse_pointer_on {
-                    let child = &mut self.children[i];
-                    // update position
-                    match &event.content {
-                        crate::events::UiEventContent::MouseClick {
-                            position,
-                            click_state,
-                            button,
-                        } => child.item.widget_event(
-                            &crate::events::UiEvent {
-                                frame: event.frame,
-                                content: crate::events::UiEventContent::MouseClick {
-                                    position: [
-                                        position[0] - child.position.unwrap()[0],
-                                        position[1] - child.position.unwrap()[1],
-                                    ],
-                                    click_state: click_state.clone(),
-                                    button: button.clone(),
-                                },
-                                diff: (),
-                            },
-                            current_size,
-                            context,
-                        ),
-                        crate::events::UiEventContent::CursorMove {
-                            position,
-                            primary_dragging_from,
-                            secondary_dragging_from,
-                            middle_dragging_from,
-                        } => child.item.widget_event(
-                            &crate::events::UiEvent {
-                                frame: event.frame,
-                                content: crate::events::UiEventContent::CursorMove {
-                                    position: [
-                                        position[0] - child.position.unwrap()[0],
-                                        position[1] - child.position.unwrap()[1],
-                                    ],
-                                    primary_dragging_from: primary_dragging_from.map(|from| {
-                                        [
-                                            from[0] - child.position.unwrap()[0],
-                                            from[1] - child.position.unwrap()[1],
-                                        ]
-                                    }),
-                                    secondary_dragging_from: secondary_dragging_from.map(|from| {
-                                        [
-                                            from[0] - child.position.unwrap()[0],
-                                            from[1] - child.position.unwrap()[1],
-                                        ]
-                                    }),
-                                    middle_dragging_from: middle_dragging_from.map(|from| {
-                                        [
-                                            from[0] - child.position.unwrap()[0],
-                                            from[1] - child.position.unwrap()[1],
-                                        ]
-                                    }),
-                                },
-                                diff: (),
-                            },
-                            current_size,
-                            context,
-                        ),
-                        crate::events::UiEventContent::MouseScroll { position, delta } => {
-                            child.item.widget_event(
-                                &crate::events::UiEvent {
-                                    frame: event.frame,
-                                    content: crate::events::UiEventContent::MouseScroll {
-                                        position: [
-                                            position[0] - child.position.unwrap()[0],
-                                            position[1] - child.position.unwrap()[1],
-                                        ],
-                                        delta: *delta,
-                                    },
-                                    diff: (),
-                                },
-                                current_size,
-                                context,
-                            )
-                        }
-                        _ => unreachable!(),
-                    }
-                } else {
-                    crate::events::UiEventResult::default()
-                }
-            }
-            // others:
-            // todo
-            crate::events::UiEventContent::CursorEntered => Default::default(),
-            crate::events::UiEventContent::CursorLeft => Default::default(),
-            // todo
-            _ => Default::default(),
-        }
+        todo!()
     }
 
-    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool {
-        let current_size = self.px_size(parent_size, context);
-
-        !(position[0] < 0.0
-            || position[0] > current_size.width
-            || position[1] < 0.0
-            || position[1] > current_size.height)
+    fn is_inside(&self, position: [f32; 2], parent_size: [StdSize; 2], context: &SharedContext) -> bool {
+        todo!()
     }
 
     fn update_widget_tree(&mut self, dom: &dyn Dom<T>) -> Result<(), ()> {
@@ -329,51 +201,18 @@ impl<T> Widget<T> for RowRenderNode<T> {
         }
     }
 
-    fn size(&self) -> crate::types::size::Size {
-        Size {
-            width: Size::Content(1.0),
-            height: Size::Content(1.0),
-        }
+    fn size(&self) -> [Size; 2] {
+        self.size
     }
 
-    fn px_size(&self, _: PxSize, context: &SharedContext) -> PxSize {
-        let mut width_px: f32 = 0.0;
-        let mut width_percent: f32 = 0.0;
-        let mut height: f32 = 0.0;
-
-        for child in &self.children {
-            let child_std_size = StdSize::from_size(child.item.size(), context);
-
-            match child_std_size.width {
-                StdSize::ContentOrDefault => width_px += child.item.default_size().width,
-                StdSize::Pixel(px) => width_px += px,
-                StdSize::Content(percent) => width_percent += percent,
-            }
-
-            match child_std_size.height {
-                StdSize::ContentOrDefault => height = height.max(child.item.default_size().height),
-                StdSize::Pixel(px) => height = height.max(px),
-                StdSize::Content(_) => (),
-            }
-        }
-
-        let width = width_px / (1.0 - width_percent);
-
-        self.cache_self_size.set(Some(PxSize { width, height }));
-        PxSize { width, height }
-    }
-
-    fn default_size(&self) -> PxSize {
-        PxSize {
-            width: 0.0,
-            height: 0.0,
-        }
+    fn px_size(&self, parent_size: [StdSize; 2], context: &SharedContext) -> [f32; 2] {
+        todo!()
     }
 
     fn render(
         &mut self,
         // ui environment
-        parent_size: PxSize,
+        parent_size: [StdSize; 2],
         // context
         context: &SharedContext,
         renderer: &Renderer,
@@ -384,29 +223,47 @@ impl<T> Widget<T> for RowRenderNode<T> {
         Arc<Vec<u16>>,
         nalgebra::Matrix4<f32>,
     )> {
-        let current_size = self.px_size(parent_size, context);
-
-        let mut accumulated_width: f32 = 0.0;
-
-        self.children
-            .iter_mut()
-            .map(|child| {
-                let child_px_size = child.item.px_size(current_size, context);
-                let child_affine =
-                    na::Matrix4::new_translation(&na::Vector3::new(accumulated_width, 0.0, 0.0));
-
-                accumulated_width += child_px_size.width;
-
-                child
-                    .item
-                    .render(current_size, context, renderer, frame)
-                    .into_iter()
-                    .map(|(texture, vertices, indices, affine)| {
-                        (texture, vertices, indices, child_affine * affine)
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .flatten()
-            .collect()
+        todo!()
     }
+}
+
+// style
+
+#[derive(Debug, Clone, Copy)]
+pub struct Margin {
+    pub top: f32,
+    pub right: f32,
+    pub bottom: f32,
+    pub left: f32,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Padding {
+    pub top: f32,
+    pub right: f32,
+    pub bottom: f32,
+    pub left: f32,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Border {
+    pub px: f32,
+    pub color: [u8; 4],
+    pub top_left_radius: f32,
+    pub top_right_radius: f32,
+    pub bottom_left_radius: f32,
+    pub bottom_right_radius: f32,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum BoxSizing {
+    ContentBox,
+    BorderBox,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Visibility {
+    Visible,
+    Hidden,
+    None,
 }

@@ -93,4 +93,28 @@ impl SharedContext {
             },
         )
     }
+
+    /// Create a new Rgba8UnormSrgb texture
+    pub fn create_texture(
+        &self,
+        width: u32,
+        height: u32,
+        format: wgpu::TextureFormat,
+        usage: wgpu::TextureUsages,
+    ) -> wgpu::Texture {
+        self.device.create_texture(&wgpu::TextureDescriptor {
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage,
+            label: None,
+            view_formats: &[],
+        })
+    }
 }

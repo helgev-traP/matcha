@@ -4,7 +4,7 @@ use super::{
     component::Component,
     context,
     renderer::Renderer,
-    types::color::Color,
+    types::{color::Color, size::StdSize},
     ui::Widget,
 };
 
@@ -149,7 +149,7 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
 
         // get root component's render result
         let render_result = self.root_widget.as_mut().unwrap().render(
-            viewport_size,
+            [viewport_size[0].into(), viewport_size[1].into()],
             self.context.as_ref().unwrap(),
             self.renderer.as_ref().unwrap(),
             self.frame,
@@ -356,9 +356,11 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
         };
 
         // event handling
+        let viewport_size = self.gpu_state.as_ref().unwrap().get_viewport_size();
+
         let result = self.root_widget.as_mut().unwrap().widget_event(
             &ui_event,
-            self.gpu_state.as_ref().unwrap().get_viewport_size(),
+            [viewport_size[0].into(), viewport_size[1].into()],
             self.context.as_ref().unwrap(),
         );
 

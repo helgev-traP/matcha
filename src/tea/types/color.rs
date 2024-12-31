@@ -130,3 +130,39 @@ impl Color {
         }
     }
 }
+
+impl From<[u8; 3]> for Color {
+    fn from(x: [u8; 3]) -> Self {
+        Color::Rgb8USrgb { r: x[0], g: x[1], b: x[2] }
+    }
+}
+
+impl From<[u8; 4]> for Color {
+    fn from(x: [u8; 4]) -> Self {
+        Color::Rgba8USrgb { r: x[0], g: x[1], b: x[2], a: x[3] }
+    }
+}
+
+impl From<[f32; 3]> for Color {
+    fn from(x: [f32; 3]) -> Self {
+        Color::RgbF32 { r: x[0], g: x[1], b: x[2] }
+    }
+}
+
+impl From<[f32; 4]> for Color {
+    fn from(x: [f32; 4]) -> Self {
+        Color::RgbaF32 { r: x[0], g: x[1], b: x[2], a: x[3] }
+    }
+}
+
+impl From<[f64; 3]> for Color {
+    fn from(x: [f64; 3]) -> Self {
+        Color::RgbF64 { r: x[0], g: x[1], b: x[2] }
+    }
+}
+
+impl From<[f64; 4]> for Color {
+    fn from(x: [f64; 4]) -> Self {
+        Color::RgbaF64 { r: x[0], g: x[1], b: x[2], a: x[3] }
+    }
+}

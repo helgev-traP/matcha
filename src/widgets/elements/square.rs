@@ -6,7 +6,7 @@ use crate::{
     renderer::Renderer,
     types::{
         color::Color,
-        size::{PxSize, Size, Size},
+        size::{Size, StdSize},
     },
     ui::{Dom, DomComPareResult, Widget},
     vertex::{
@@ -18,7 +18,7 @@ use crate::{
 
 pub struct SquareDescriptor {
     pub label: Option<String>,
-    pub size: Size,
+    pub size: [Size; 2],
     pub radius: f32,
     pub background_color: Color,
 
@@ -30,10 +30,7 @@ impl Default for SquareDescriptor {
     fn default() -> Self {
         Self {
             label: None,
-            size: Size {
-                width: Size::Pixel(100.0),
-                height: Size::Pixel(100.0),
-            },
+            size: [Size::Pixel(100.0), Size::Pixel(100.0)],
             radius: 0.0,
             background_color: Color::Rgb8USrgb { r: 0, g: 0, b: 0 },
             border_width: 0.0,
@@ -44,7 +41,7 @@ impl Default for SquareDescriptor {
 
 pub struct Square {
     label: Option<String>,
-    size: Size,
+    size: [Size; 2],
     radius: f32,
 
     background_color: Color,
@@ -90,7 +87,7 @@ impl<R: Copy + Send + 'static> Dom<R> for Square {
 pub struct SquareWidget {
     label: Option<String>,
 
-    size: Size,
+    size: [Size; 2],
     radius: f32,
     background_color: Color,
     border_width: f32,
@@ -111,19 +108,31 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
     fn widget_event(
         &mut self,
         event: &UiEvent,
-        parent_size: PxSize,
+        parent_size: [StdSize; 2],
         context: &SharedContext,
     ) -> crate::events::UiEventResult<R> {
         crate::events::UiEventResult::default()
     }
 
-    fn is_inside(&self, position: [f32; 2], parent_size: PxSize, context: &SharedContext) -> bool {
-        let current_size = self.size.unwrap_to_px(parent_size, context);
+    fn is_inside(
+        &self,
+        position: [f32; 2],
+        parent_size: [StdSize; 2],
+        context: &SharedContext,
+    ) -> bool {
+        let current_size = [
+            self.size[0]
+                .to_std_size(parent_size[0], context)
+                .unwrap_or(0.0),
+            self.size[1]
+                .to_std_size(parent_size[1], context)
+                .unwrap_or(0.0),
+        ];
 
         if position[0] < 0.0
-            || position[0] > current_size.width
+            || position[0] > current_size[0]
             || position[1] < 0.0
-            || position[1] > current_size.height
+            || position[1] > current_size[1]
         {
             false
         } else {
@@ -158,29 +167,25 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
         }
     }
 
-    fn size(&self) -> Size {
+    fn size(&self) -> [Size; 2] {
         self.size
     }
 
     fn px_size(
         &self,
-        parent_size: crate::types::size::PxSize,
+        parent_size: [StdSize; 2],
         context: &crate::context::SharedContext,
-    ) -> crate::types::size::PxSize {
-        self.size.unwrap_to_px(parent_size, context)
-    }
-
-    fn default_size(&self) -> crate::types::size::PxSize {
-        crate::types::size::PxSize {
-            width: 0.0,
-            height: 0.0,
-        }
+    ) -> [f32; 2] {
+        [
+            self.size[0].to_std_size(parent_size[0], context).unwrap_or(0.0),
+            self.size[1].to_std_size(parent_size[1], context).unwrap_or(0.0),
+        ]
     }
 
     fn render(
         &mut self,
         // ui environment
-        parent_size: PxSize,
+        parent_size: [StdSize; 2],
         // context
         context: &SharedContext,
         renderer: &Renderer,
@@ -191,7 +196,10 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
         Arc<Vec<u16>>,
         nalgebra::Matrix4<f32>,
     )> {
-        let size = self.size.unwrap_to_px(parent_size, context);
+        let size = [
+            self.size[0].to_std_size(parent_size[0], context).unwrap_or(0.0),
+            self.size[1].to_std_size(parent_size[1], context).unwrap_or(0.0),
+        ];
 
         if self.texture.is_none() {
             let device = context.get_wgpu_device();
@@ -200,8 +208,8 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
             self.texture = Some(Arc::new(device.create_texture(&wgpu::TextureDescriptor {
                 label: None,
                 size: wgpu::Extent3d {
-                    width: size.width as u32,
-                    height: size.height as u32,
+                    width: size[0] as u32,
+                    height: size[1] as u32,
                     depth_or_array_layers: 1,
                 },
                 mip_level_count: 1,
@@ -218,6 +226,8 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
 
             let c = self.background_color.to_rgba_f64();
 
+            println!("texture size: {} {}", self.texture.as_ref().unwrap().size().width, self.texture.as_ref().unwrap().size().height);
+
             self.scene.fill(
                 vello::peniko::Fill::EvenOdd,
                 vello::kurbo::Affine::IDENTITY,
@@ -226,8 +236,8 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
                 &vello::kurbo::RoundedRect::new(
                     0.0,
                     0.0,
-                    size.width as f64,
-                    size.height as f64,
+                    size[0] as f64,
+                    size[1] as f64,
                     self.radius as f64,
                 ),
             );
@@ -243,8 +253,8 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
                     &vello::kurbo::RoundedRect::new(
                         self.border_width as f64 / 2.0,
                         self.border_width as f64 / 2.0,
-                        size.width as f64 - self.border_width as f64 / 2.0,
-                        size.height as f64 - self.border_width as f64 / 2.0,
+                        size[0] as f64 - self.border_width as f64 / 2.0,
+                        size[1] as f64 - self.border_width as f64 / 2.0,
                         self.radius as f64 - self.border_width as f64 / 2.0,
                     ),
                 );
@@ -263,8 +273,8 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
                         .create_view(&wgpu::TextureViewDescriptor::default()),
                     &vello::RenderParams {
                         base_color: vello::peniko::Color::TRANSPARENT,
-                        height: size.height as u32,
-                        width: size.width as u32,
+                        width: size[0] as u32,
+                        height: size[1] as u32,
                         antialiasing_method: vello::AaConfig::Area,
                     },
                 )
@@ -279,15 +289,15 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
                     tex_coords: [0.0, 0.0].into(),
                 },
                 UvVertex {
-                    position: [0.0, -size.height, 0.0].into(),
+                    position: [0.0, -size[1], 0.0].into(),
                     tex_coords: [0.0, 1.0].into(),
                 },
                 UvVertex {
-                    position: [size.width, -size.height, 0.0].into(),
+                    position: [size[0], -size[1], 0.0].into(),
                     tex_coords: [1.0, 1.0].into(),
                 },
                 UvVertex {
-                    position: [size.width, 0.0, 0.0].into(),
+                    position: [size[0], 0.0, 0.0].into(),
                     tex_coords: [1.0, 0.0].into(),
                 },
             ]),

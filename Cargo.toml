@@ -4,14 +4,19 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+# runtime
 rayon = "1.10.0"
+pollster = "0.3"
+# graphics
 wgpu = "22.1.0"
+bytemuck = { version = "1.17", features = ["derive"] }
 vello = "0.3.0"
 winit = "0.30"
-pollster = "0.3"
-bytemuck = { version = "1.17", features = ["derive"] }
+# math
 nalgebra = { version = "0.33", features = ["bytemuck"] }
+# image
 image = "0.25"
+# other
 pathfinder_geometry = "0.5.1"
 cosmic-text = "0.12.1"
 rand = "0.8"

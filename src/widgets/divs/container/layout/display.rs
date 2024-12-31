@@ -1,5 +1,3 @@
-use crate::types::size::Size;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FlexDirection {
     Row,
@@ -15,6 +13,7 @@ pub enum FlexWrap {
     WrapReverse,
 }
 
+/// control the alignment of children on the **main axis**
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JustifyContent {
     FlexStart,
@@ -25,20 +24,10 @@ pub enum JustifyContent {
     SpaceEvenly,
 }
 
-
+/// control the alignment of children on the **cross axis**
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AlignContent {
-    FlexStart,
-    FlexEnd,
+    Start,
+    End,
     Center,
-    SpaceBetween,
-    SpaceAround,
-    SpaceEvenly,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum FlexGrow {
-    Auto,
-    Number(u32),
-    Size(Size),
 }

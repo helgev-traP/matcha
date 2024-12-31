@@ -30,7 +30,7 @@ impl Renderer {
 
         let affine_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Panel Affine Bind Group Layout"),
+                label: Some("Affine Bind Group Layout"),
                 entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStages::VERTEX,
@@ -44,7 +44,7 @@ impl Renderer {
             });
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("Panel Texture Bind Group Layout"),
+            label: Some("Texture Bind Group Layout"),
             entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
@@ -67,18 +67,18 @@ impl Renderer {
 
         let textured_render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Panel Render Pipeline Layout"),
+                label: Some("Render Pipeline Layout"),
                 bind_group_layouts: &[&affine_bind_group_layout, &bind_group_layout],
                 push_constant_ranges: &[],
             });
 
         let textured_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Panel Shader"),
+            label: Some("Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("render_textured.wgsl").into()),
         });
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Panel Render Pipeline"),
+            label: Some("Render Pipeline"),
             layout: Some(&textured_render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &textured_shader,
@@ -128,7 +128,7 @@ impl Renderer {
 
         let surface_render_pipeline =
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("Panel Render Pipeline"),
+                label: Some("Surface Render Pipeline"),
                 layout: Some(&textured_render_pipeline_layout),
                 vertex: wgpu::VertexState {
                     module: &textured_shader,
@@ -204,7 +204,7 @@ impl Renderer {
         self.render_process(destination_view, texture_size, source, true);
     }
 
-    pub fn render(
+    pub fn render_to_texture(
         &self,
         destination_view: &wgpu::TextureView,
         texture_size: [f32; 2],
