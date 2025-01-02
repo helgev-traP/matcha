@@ -18,7 +18,7 @@ Development is underway with the goal of having a minimally functional version r
 
 #### Increase/Decrease Example
 
-<video src="./docs/increase_decrease_2024-12-18.mp4" controls="controls" width="500px"></video>
+![img](./docs/increase_decrease_2024-12-18.gif)
 
 ---
 
