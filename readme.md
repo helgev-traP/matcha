@@ -20,6 +20,10 @@ Development is underway with the goal of having a minimally functional version r
 
 ![img](./docs/increase_decrease_2024-12-18.gif)
 
+#### Grid with gap, grow.
+
+![img](./docs/grid_2024-12-31.png)
+
 ---
 
 ## Concepts and Goals
