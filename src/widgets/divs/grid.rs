@@ -12,7 +12,7 @@ use crate::{
 };
 
 // todo:
-// add padding, margin, border, box-sizing, etc.
+// add size, padding, margin, border, box-sizing, etc.
 
 pub struct GridDescriptor<T> {
     pub label: Option<String>,
@@ -413,7 +413,7 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
         parent_size: [StdSize; 2],
         context: &SharedContext,
     ) -> crate::events::UiEventResult<T> {
-        // todo: >>>>>>>>>>>>>> ここから <<<<<<<<<<<<<<<<
+        // todo
         Default::default()
     }
 
