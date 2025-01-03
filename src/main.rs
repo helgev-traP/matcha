@@ -52,8 +52,8 @@ fn local_update(
 fn view(model: &i32) -> Box<dyn Dom<Message>> {
     Row::new(RowDescriptor {
         size: [Size::Parent(1.0), Size::Pixel(100.0)],
-        justify_content: tea_ui::widgets::row::layout::JustifyContent::SpaceEvenly,
-        align_content: tea_ui::widgets::row::layout::AlignContent::End,
+        justify_content: tea_ui::widgets::layout::JustifyContent::SpaceEvenly,
+        align_content: tea_ui::widgets::layout::AlignContent::End,
         items: vec![
             Square::new(SquareDescriptor {
                 size: [Size::Pixel(50.0), Size::Pixel(50.0)],

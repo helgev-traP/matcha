@@ -1,10 +1,9 @@
-use std::{default, sync::{Arc, Mutex}};
+use std::sync::{Arc, Mutex};
 
 use crate::{
     context::SharedContext,
     events::UiEvent,
     renderer::Renderer,
-    text,
     types::size::{Size, StdSize},
     ui::{Dom, DomComPareResult, Widget},
     vertex::uv_vertex::UvVertex,
@@ -511,7 +510,8 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
                 let horizontal_end = grid.column_accumulate_template[horizontal_template_end];
 
                 // vertical position range
-                let (vertical_template_start, vertical_template_end) = if item.row[0] <= item.row[1] {
+                let (vertical_template_start, vertical_template_end) = if item.row[0] <= item.row[1]
+                {
                     (item.row[0], item.row[1])
                 } else {
                     (item.row[1], item.row[0])
