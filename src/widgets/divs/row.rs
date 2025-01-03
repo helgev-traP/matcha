@@ -1,6 +1,4 @@
-use std::{cell::Cell, sync::Arc};
-
-use layout::{AlignContent, JustifyContent};
+use std::sync::Arc;
 
 use crate::{
     context::SharedContext,
@@ -14,9 +12,13 @@ use crate::{
     vertex::uv_vertex::UvVertex,
 };
 
-use super::div_size::DivSize;
+use super::{
+    div_size::DivSize,
+    layout::{AlignContent, FlexWrap, JustifyContent},
+    style::{Border, BoxSizing, Margin, Padding, Visibility},
+};
 
-pub mod layout;
+// todo: consider the style properties
 
 pub struct RowDescriptor<R> {
     // label
@@ -32,9 +34,9 @@ pub struct RowDescriptor<R> {
     pub border_color: Color,
     // layout
     // direction -> row(not reverse)
-    pub wrap: layout::FlexWrap,
-    pub justify_content: layout::JustifyContent,
-    pub align_content: layout::AlignContent,
+    pub wrap: FlexWrap,
+    pub justify_content: JustifyContent,
+    pub align_content: AlignContent,
     // items
     pub items: Vec<Box<dyn Dom<R>>>,
 }
@@ -71,18 +73,18 @@ impl<R> Default for RowDescriptor<R> {
             background_color: [0, 0, 0, 0].into(),
             border_color: [0, 0, 0, 0].into(),
             // layout
-            wrap: layout::FlexWrap::NoWrap,
-            justify_content: layout::JustifyContent::FlexStart {
+            wrap: FlexWrap::NoWrap,
+            justify_content: JustifyContent::FlexStart {
                 gap: DivSize::Pixel(0.0),
             },
-            align_content: layout::AlignContent::Start,
+            align_content: AlignContent::Start,
             // items
             items: vec![],
         }
     }
 }
 
-pub struct Row<R: 'static> {
+pub struct Row<R> {
     // label
     label: Option<String>,
     // style
@@ -96,9 +98,9 @@ pub struct Row<R: 'static> {
     border_color: Color,
     // layout
     // direction -> row(not reverse)
-    wrap: layout::FlexWrap,
-    justify_content: layout::JustifyContent,
-    align_content: layout::AlignContent,
+    wrap: FlexWrap,
+    justify_content: JustifyContent,
+    align_content: AlignContent,
     // items
     items: Vec<Box<dyn Dom<R>>>,
 }
@@ -176,9 +178,9 @@ pub struct RowRenderNode<T: 'static> {
     border_color: Color,
 
     // layout (direction: row(not reverse))
-    wrap: layout::FlexWrap,
-    justify_content: layout::JustifyContent,
-    align_content: layout::AlignContent,
+    wrap: FlexWrap,
+    justify_content: JustifyContent,
+    align_content: AlignContent,
 
     // items
     items: Vec<Item<T>>,
@@ -290,18 +292,18 @@ impl<T> Widget<T> for RowRenderNode<T> {
         ];
 
         match self.wrap {
-            layout::FlexWrap::NoWrap => {
+            FlexWrap::NoWrap => {
                 // get the size of each child
                 let mut sizes = Vec::with_capacity(self.items.len());
                 let mut total_items_width: f32 = 0.0;
                 let mut max_items_height: f32 = 0.0;
 
                 for item in self.items.iter_mut() {
-                    let child_px_size = item.item.px_size(std_size, context);
+                    let px_size = item.item.px_size(std_size, context);
 
-                    sizes.push(child_px_size);
-                    total_items_width += child_px_size[0];
-                    max_items_height = max_items_height.max(child_px_size[1]);
+                    sizes.push(px_size);
+                    total_items_width += px_size[0];
+                    max_items_height = max_items_height.max(px_size[1]);
                 }
 
                 let height = if let StdSize::Pixel(height) = std_size[1] {
@@ -312,9 +314,9 @@ impl<T> Widget<T> for RowRenderNode<T> {
 
                 // calculate the position of each child
 
-                let mut y_positions = vec![0.0; self.items.len()];
-
                 // y position
+
+                let mut y_positions = vec![0.0; self.items.len()];
 
                 match self.align_content {
                     AlignContent::Start => {
@@ -352,7 +354,7 @@ impl<T> Widget<T> for RowRenderNode<T> {
                             JustifyContent::SpaceEvenly => 0.0,
                         };
 
-                        // all left offset will be 0.0
+                        // left offset will be 0.0
 
                         (gap, 0.0)
                     }
@@ -408,7 +410,7 @@ impl<T> Widget<T> for RowRenderNode<T> {
                         );
                         item.item
                             .render(
-                                [std_size[0], StdSize::Pixel(max_items_height)],
+                                [std_size[0], StdSize::Pixel(height)],
                                 context,
                                 renderer,
                                 frame,
@@ -421,48 +423,7 @@ impl<T> Widget<T> for RowRenderNode<T> {
                     .flatten()
                     .collect()
             }
-            layout::FlexWrap::Wrap | layout::FlexWrap::WrapReverse => todo!(),
+            FlexWrap::Wrap | FlexWrap::WrapReverse => todo!(),
         }
     }
-}
-
-// style
-
-#[derive(Debug, Clone, Copy)]
-pub struct Margin {
-    pub top: f32,
-    pub right: f32,
-    pub bottom: f32,
-    pub left: f32,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct Padding {
-    pub top: f32,
-    pub right: f32,
-    pub bottom: f32,
-    pub left: f32,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct Border {
-    pub px: f32,
-    pub color: [u8; 4],
-    pub top_left_radius: f32,
-    pub top_right_radius: f32,
-    pub bottom_left_radius: f32,
-    pub bottom_right_radius: f32,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum BoxSizing {
-    ContentBox,
-    BorderBox,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum Visibility {
-    Visible,
-    Hidden,
-    None,
 }
