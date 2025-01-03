@@ -226,8 +226,6 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
 
             let c = self.background_color.to_rgba_f64();
 
-            println!("texture size: {} {}", self.texture.as_ref().unwrap().size().width, self.texture.as_ref().unwrap().size().height);
-
             self.scene.fill(
                 vello::peniko::Fill::EvenOdd,
                 vello::kurbo::Affine::IDENTITY,

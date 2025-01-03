@@ -1,14 +1,22 @@
-use nalgebra as na;
 use std::{cell::Cell, sync::Arc};
+
+use layout::{AlignContent, JustifyContent};
 
 use crate::{
     context::SharedContext,
     events::UiEvent,
     renderer::Renderer,
-    types::size::{Size, StdSize},
+    types::{
+        color::Color,
+        size::{Size, StdSize},
+    },
     ui::{Dom, DomComPareResult, Widget},
     vertex::uv_vertex::UvVertex,
 };
+
+use super::div_size::DivSize;
+
+pub mod layout;
 
 pub struct RowDescriptor<R> {
     // label
@@ -20,7 +28,13 @@ pub struct RowDescriptor<R> {
     pub border: Border,
     pub box_sizing: BoxSizing,
     pub visibility: Visibility,
-    // todo: layout
+    pub background_color: Color,
+    pub border_color: Color,
+    // layout
+    // direction -> row(not reverse)
+    pub wrap: layout::FlexWrap,
+    pub justify_content: layout::JustifyContent,
+    pub align_content: layout::AlignContent,
     // items
     pub items: Vec<Box<dyn Dom<R>>>,
 }
@@ -28,7 +42,9 @@ pub struct RowDescriptor<R> {
 impl<R> Default for RowDescriptor<R> {
     fn default() -> Self {
         Self {
+            // label
             label: None,
+            // style
             size: [Size::Content(1.0), Size::Content(1.0)],
             margin: Margin {
                 top: 0.0,
@@ -52,22 +68,39 @@ impl<R> Default for RowDescriptor<R> {
             },
             box_sizing: BoxSizing::BorderBox,
             visibility: Visibility::Visible,
+            background_color: [0, 0, 0, 0].into(),
+            border_color: [0, 0, 0, 0].into(),
+            // layout
+            wrap: layout::FlexWrap::NoWrap,
+            justify_content: layout::JustifyContent::FlexStart {
+                gap: DivSize::Pixel(0.0),
+            },
+            align_content: layout::AlignContent::Start,
+            // items
             items: vec![],
         }
     }
 }
 
 pub struct Row<R: 'static> {
+    // label
     label: Option<String>,
-
+    // style
     size: [Size; 2],
     margin: Margin,
     padding: Padding,
     border: Border,
     box_sizing: BoxSizing,
     visibility: Visibility,
-
-    children: Vec<Box<dyn Dom<R>>>,
+    background_color: Color,
+    border_color: Color,
+    // layout
+    // direction -> row(not reverse)
+    wrap: layout::FlexWrap,
+    justify_content: layout::JustifyContent,
+    align_content: layout::AlignContent,
+    // items
+    items: Vec<Box<dyn Dom<R>>>,
 }
 
 impl<R> Row<R> {
@@ -80,12 +113,17 @@ impl<R> Row<R> {
             border: disc.border,
             box_sizing: disc.box_sizing,
             visibility: disc.visibility,
-            children: disc.items,
+            background_color: disc.background_color,
+            border_color: disc.border_color,
+            wrap: disc.wrap,
+            justify_content: disc.justify_content,
+            align_content: disc.align_content,
+            items: disc.items,
         })
     }
 
     pub fn push(&mut self, child: Box<dyn Dom<R>>) {
-        self.children.push(child);
+        self.items.push(child);
     }
 }
 
@@ -99,18 +137,22 @@ impl<R: Send + 'static> Dom<R> for Row<R> {
             border: self.border,
             box_sizing: self.box_sizing,
             visibility: self.visibility,
-            redraw: true,
-            children: self
-                .children
+            background_color: self.background_color,
+            border_color: self.border_color,
+            wrap: self.wrap,
+            justify_content: self.justify_content,
+            align_content: self.align_content,
+            items: self
+                .items
                 .iter()
-                .map(|child| Child {
+                .map(|child| Item {
                     item: child.build_widget_tree(),
                     position: None,
                     size: None,
                 })
                 .collect(),
-            cache_self_size: Cell::new(None),
-            mouse_hovering_index: None,
+            self_size: None,
+            rendering_cache: None,
         })
     }
 
@@ -120,22 +162,35 @@ impl<R: Send + 'static> Dom<R> for Row<R> {
 }
 
 pub struct RowRenderNode<T: 'static> {
+    // label
     label: Option<String>,
 
+    // style
     size: [Size; 2],
     margin: Margin,
     padding: Padding,
     border: Border,
     box_sizing: BoxSizing,
     visibility: Visibility,
+    background_color: Color,
+    border_color: Color,
 
-    redraw: bool,
-    children: Vec<Child<T>>,
-    cache_self_size: Cell<Option<[f32; 2]>>,
-    mouse_hovering_index: Option<usize>,
+    // layout (direction: row(not reverse))
+    wrap: layout::FlexWrap,
+    justify_content: layout::JustifyContent,
+    align_content: layout::AlignContent,
+
+    // items
+    items: Vec<Item<T>>,
+
+    // render status
+    self_size: Option<[f32; 2]>,
+
+    // rendering cache
+    rendering_cache: Option<(Arc<wgpu::Texture>, Arc<Vec<UvVertex>>)>,
 }
 
-struct Child<T> {
+struct Item<T> {
     item: Box<dyn Widget<T>>,
     // cache
     position: Option<[f32; 2]>,
@@ -153,10 +208,16 @@ impl<T> Widget<T> for RowRenderNode<T> {
         parent_size: [StdSize; 2],
         context: &SharedContext,
     ) -> crate::events::UiEventResult<T> {
-        todo!()
+        // todo
+        crate::events::UiEventResult::default()
     }
 
-    fn is_inside(&self, position: [f32; 2], parent_size: [StdSize; 2], context: &SharedContext) -> bool {
+    fn is_inside(
+        &self,
+        position: [f32; 2],
+        parent_size: [StdSize; 2],
+        context: &SharedContext,
+    ) -> bool {
         todo!()
     }
 
@@ -168,16 +229,16 @@ impl<T> Widget<T> for RowRenderNode<T> {
             // todo: differential update
             let mut i = 0;
             loop {
-                match (self.children.get_mut(i), dom.children.get(i)) {
+                match (self.items.get_mut(i), dom.items.get(i)) {
                     (Some(child), Some(new_child)) => {
                         child.item.update_widget_tree(&**new_child)?;
                         i += 1;
                     }
                     (Some(_), None) => {
-                        self.children.pop();
+                        self.items.pop();
                     }
                     (None, Some(new_child)) => {
-                        self.children.push(Child {
+                        self.items.push(Item {
                             item: new_child.build_widget_tree(),
                             position: None,
                             size: None,
@@ -223,7 +284,145 @@ impl<T> Widget<T> for RowRenderNode<T> {
         Arc<Vec<u16>>,
         nalgebra::Matrix4<f32>,
     )> {
-        todo!()
+        let std_size = [
+            self.size[0].to_std_size(parent_size[0], context),
+            self.size[1].to_std_size(parent_size[1], context),
+        ];
+
+        match self.wrap {
+            layout::FlexWrap::NoWrap => {
+                // get the size of each child
+                let mut sizes = Vec::with_capacity(self.items.len());
+                let mut total_items_width: f32 = 0.0;
+                let mut max_items_height: f32 = 0.0;
+
+                for item in self.items.iter_mut() {
+                    let child_px_size = item.item.px_size(std_size, context);
+
+                    sizes.push(child_px_size);
+                    total_items_width += child_px_size[0];
+                    max_items_height = max_items_height.max(child_px_size[1]);
+                }
+
+                let height = if let StdSize::Pixel(height) = std_size[1] {
+                    height
+                } else {
+                    max_items_height
+                };
+
+                // calculate the position of each child
+
+                let mut y_positions = vec![0.0; self.items.len()];
+
+                // y position
+
+                match self.align_content {
+                    AlignContent::Start => {
+                        // all y positions are 0.0
+                    }
+                    AlignContent::End => {
+                        for (i, y) in y_positions.iter_mut().enumerate() {
+                            *y = height - sizes[i][1];
+                        }
+                    }
+                    AlignContent::Center => {
+                        for (i, y) in y_positions.iter_mut().enumerate() {
+                            *y = (height - sizes[i][1]) / 2.0;
+                        }
+                    }
+                }
+
+                // x position and layout
+
+                let (gap, mut x) = match std_size[0] {
+                    StdSize::Content(_) => {
+                        // No grow, no space, x left offset is 0.0
+
+                        let gap = match self.justify_content {
+                            JustifyContent::FlexStart { gap }
+                            | JustifyContent::FlexEnd { gap }
+                            | JustifyContent::Center { gap } => {
+                                match gap.to_std_size(std_size[0], context) {
+                                    crate::widgets::div_size::StdDivSize::Pixel(px) => px,
+                                    crate::widgets::div_size::StdDivSize::Grow(_) => 0.0,
+                                }
+                            }
+                            JustifyContent::SpaceBetween => 0.0,
+                            JustifyContent::SpaceAround => 0.0,
+                            JustifyContent::SpaceEvenly => 0.0,
+                        };
+
+                        // all left offset will be 0.0
+
+                        (gap, 0.0)
+                    }
+                    StdSize::Pixel(width) => {
+                        let gap = match self.justify_content {
+                            JustifyContent::FlexStart { gap }
+                            | JustifyContent::FlexEnd { gap }
+                            | JustifyContent::Center { gap } => {
+                                match gap.to_std_size(std_size[0], context) {
+                                    crate::widgets::div_size::StdDivSize::Pixel(px) => px,
+                                    crate::widgets::div_size::StdDivSize::Grow(_) => {
+                                        (width - total_items_width)
+                                            / (self.items.len() as f32 - 1.0)
+                                    }
+                                }
+                            }
+                            JustifyContent::SpaceBetween => ((width - total_items_width)
+                                / (self.items.len() as f32 - 1.0))
+                                .max(0.0),
+                            JustifyContent::SpaceAround => {
+                                ((width - total_items_width) / (self.items.len() as f32)).max(0.0)
+                            }
+                            JustifyContent::SpaceEvenly => ((width - total_items_width)
+                                / (self.items.len() as f32 + 1.0))
+                                .max(0.0),
+                        };
+
+                        let x = match self.justify_content {
+                            JustifyContent::FlexStart { .. } | JustifyContent::SpaceBetween => 0.0,
+                            JustifyContent::FlexEnd { .. } => {
+                                width - total_items_width - gap * (self.items.len() as f32 - 1.0)
+                            }
+                            JustifyContent::Center { .. } => {
+                                (width - total_items_width - gap * (self.items.len() as f32 - 1.0))
+                                    / 2.0
+                            }
+                            JustifyContent::SpaceAround => gap / 2.0,
+                            JustifyContent::SpaceEvenly => gap,
+                        };
+
+                        (gap, x)
+                    }
+                };
+
+                self.items
+                    .iter_mut()
+                    .enumerate()
+                    .map(|(i, item)| {
+                        let position = [x, y_positions[i]];
+                        x += sizes[i][0] + gap;
+                        let translate = nalgebra::Matrix4::new_translation(
+                            &nalgebra::Vector3::new(position[0], -position[1], 0.0),
+                        );
+                        item.item
+                            .render(
+                                [std_size[0], StdSize::Pixel(max_items_height)],
+                                context,
+                                renderer,
+                                frame,
+                            )
+                            .into_iter()
+                            .map(move |(texture, vertices, indices, transform)| {
+                                (texture, vertices, indices, transform * translate)
+                            })
+                    })
+                    .flatten()
+                    .collect()
+            }
+            layout::FlexWrap::Wrap | layout::FlexWrap::WrapReverse => todo!(),
+        }
     }
 }
 
