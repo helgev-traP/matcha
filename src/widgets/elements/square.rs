@@ -208,8 +208,8 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
             self.texture = Some(Arc::new(device.create_texture(&wgpu::TextureDescriptor {
                 label: None,
                 size: wgpu::Extent3d {
-                    width: size[0] as u32,
-                    height: size[1] as u32,
+                    width: size[0] as u32 + 1,
+                    height: size[1] as u32 + 1,
                     depth_or_array_layers: 1,
                 },
                 mip_level_count: 1,

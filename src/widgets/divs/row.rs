@@ -30,7 +30,6 @@ pub struct RowDescriptor<R> {
     pub box_sizing: BoxSizing,
     pub visibility: Visibility,
     pub background_color: Color,
-    pub border_color: Color,
     // todo: border_radius: f32,
     // layout
     // direction -> row(not reverse)
@@ -56,7 +55,7 @@ impl<R> Default for RowDescriptor<R> {
             },
             border: Border {
                 px: 0.0,
-                color: [0, 0, 0, 0],
+                color: [0, 0, 0, 0].into(),
                 top_left_radius: 0.0,
                 top_right_radius: 0.0,
                 bottom_left_radius: 0.0,
@@ -65,7 +64,6 @@ impl<R> Default for RowDescriptor<R> {
             box_sizing: BoxSizing::BorderBox,
             visibility: Visibility::Visible,
             background_color: [0, 0, 0, 0].into(),
-            border_color: [0, 0, 0, 0].into(),
             // layout
             wrap: FlexWrap::NoWrap,
             justify_content: JustifyContent::FlexStart {
@@ -88,7 +86,6 @@ pub struct Row<R> {
     box_sizing: BoxSizing,
     visibility: Visibility,
     background_color: Color,
-    border_color: Color,
     // layout
     // direction -> row(not reverse)
     wrap: FlexWrap,
@@ -108,7 +105,6 @@ impl<R> Row<R> {
             box_sizing: disc.box_sizing,
             visibility: disc.visibility,
             background_color: disc.background_color,
-            border_color: disc.border_color,
             wrap: disc.wrap,
             justify_content: disc.justify_content,
             align_content: disc.align_content,
@@ -131,7 +127,6 @@ impl<R: Send + 'static> Dom<R> for Row<R> {
             box_sizing: self.box_sizing,
             visibility: self.visibility,
             background_color: self.background_color,
-            border_color: self.border_color,
             wrap: self.wrap,
             justify_content: self.justify_content,
             align_content: self.align_content,
@@ -165,7 +160,6 @@ pub struct RowRenderNode<T: 'static> {
     box_sizing: BoxSizing,
     visibility: Visibility,
     background_color: Color,
-    border_color: Color,
 
     // layout (direction: row(not reverse))
     wrap: FlexWrap,
