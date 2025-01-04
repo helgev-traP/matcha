@@ -15,7 +15,7 @@ use crate::{
 use super::{
     div_size::DivSize,
     layout::{AlignContent, FlexWrap, JustifyContent},
-    style::{Border, BoxSizing, Margin, Padding, Visibility},
+    style::{Border, BoxSizing, Padding, Visibility},
 };
 
 // todo: consider the style properties
@@ -25,13 +25,13 @@ pub struct RowDescriptor<R> {
     pub label: Option<String>,
     // style
     pub size: [Size; 2],
-    pub margin: Margin,
     pub padding: Padding,
     pub border: Border,
     pub box_sizing: BoxSizing,
     pub visibility: Visibility,
     pub background_color: Color,
     pub border_color: Color,
+    // todo: border_radius: f32,
     // layout
     // direction -> row(not reverse)
     pub wrap: FlexWrap,
@@ -48,12 +48,6 @@ impl<R> Default for RowDescriptor<R> {
             label: None,
             // style
             size: [Size::Content(1.0), Size::Content(1.0)],
-            margin: Margin {
-                top: 0.0,
-                right: 0.0,
-                bottom: 0.0,
-                left: 0.0,
-            },
             padding: Padding {
                 top: 0.0,
                 right: 0.0,
@@ -89,7 +83,6 @@ pub struct Row<R> {
     label: Option<String>,
     // style
     size: [Size; 2],
-    margin: Margin,
     padding: Padding,
     border: Border,
     box_sizing: BoxSizing,
@@ -110,7 +103,6 @@ impl<R> Row<R> {
         Box::new(Self {
             label: disc.label,
             size: disc.size,
-            margin: disc.margin,
             padding: disc.padding,
             border: disc.border,
             box_sizing: disc.box_sizing,
@@ -134,7 +126,6 @@ impl<R: Send + 'static> Dom<R> for Row<R> {
         Box::new(RowRenderNode {
             label: self.label.clone(),
             size: self.size,
-            margin: self.margin,
             padding: self.padding,
             border: self.border,
             box_sizing: self.box_sizing,
@@ -169,7 +160,6 @@ pub struct RowRenderNode<T: 'static> {
 
     // style
     size: [Size; 2],
-    margin: Margin,
     padding: Padding,
     border: Border,
     box_sizing: BoxSizing,

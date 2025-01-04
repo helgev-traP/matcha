@@ -1,20 +1,11 @@
 // #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::ops::Div;
-
 use tea_ui::{
     app::App,
     component::{Component, ComponentAccess},
     types::{color::Color, size::Size},
     ui::Dom,
     widgets::{
-        container::{
-            layout::Layout,
-            style::{Border, Style, Visibility},
-            Container, ContainerDescriptor,
-        },
-        div_size::DivSize,
-        grid::{Grid, GridDescriptor, GridItem},
         row::{Row, RowDescriptor},
         square::{Square, SquareDescriptor},
     },
