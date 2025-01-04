@@ -24,8 +24,6 @@ Development is underway with the goal of having a minimally functional version r
 
 ![img](./docs/grid_2024-12-31.png)
 
----
-
 ## Concepts and Goals
 
 ### 1. Able to control elements on each frame
