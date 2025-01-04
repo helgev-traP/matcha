@@ -6,6 +6,7 @@ use tea_ui::{
     types::{color::Color, size::Size},
     ui::Dom,
     widgets::{
+        position::Position,
         row::{Row, RowDescriptor},
         square::{Square, SquareDescriptor},
     },
@@ -41,29 +42,24 @@ fn local_update(
 }
 
 fn view(model: &i32) -> Box<dyn Dom<Message>> {
-    Row::new(RowDescriptor {
-        size: [Size::Parent(1.0), Size::Pixel(100.0)],
-        justify_content: tea_ui::widgets::layout::JustifyContent::SpaceEvenly,
-        align_content: tea_ui::widgets::layout::AlignContent::End,
-        items: vec![
+    let mut position = Position::new(None)
+        .size(Size::Parent(1.0), Size::Parent(1.0))
+        .background_color([0.5, 0.5, 0.5, 1.0].into());
+
+    // randomly place a lot of squares
+
+    for _ in 0..1000 {
+        position.push(
+            [Size::Pixel(rand::random::<f32>() * 800.0), Size::Pixel(rand::random::<f32>() * 600.0)],
             Square::new(SquareDescriptor {
-                size: [Size::Pixel(50.0), Size::Pixel(50.0)],
-                background_color: Color::Rgb8USrgb { r: 255, g: 0, b: 0 },
+                size: [Size::Pixel(rand::random::<f32>() * 300.0), Size::Pixel(rand::random::<f32>() * 300.0)],
+                background_color: [rand::random::<u8>(), rand::random::<u8>(), rand::random::<u8>(), 255].into(),
                 ..Default::default()
             }),
-            Square::new(SquareDescriptor {
-                size: [Size::Pixel(30.0), Size::Pixel(30.0)],
-                background_color: Color::Rgb8USrgb { r: 0, g: 255, b: 0 },
-                ..Default::default()
-            }),
-            Square::new(SquareDescriptor {
-                size: [Size::Pixel(100.0), Size::Pixel(100.0)],
-                background_color: Color::Rgb8USrgb { r: 0, g: 0, b: 255 },
-                ..Default::default()
-            }),
-        ],
-        ..Default::default()
-    })
+        );
+    }
+
+    position
 }
 
 fn main() {

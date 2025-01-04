@@ -10,7 +10,7 @@ pub enum Color {
 
 impl Default for Color {
     fn default() -> Self {
-        Color::Rgba8USrgb { r: 0, g: 0, b: 0, a: 255 }
+        Color::Rgba8USrgb { r: 0, g: 0, b: 0, a: 0 }
     }
 }
 

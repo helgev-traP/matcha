@@ -4,14 +4,12 @@ use crate::{
     context::SharedContext,
     events::UiEvent,
     renderer::Renderer,
-    text,
     types::{
         color::Color,
         size::{Size, StdSize},
     },
     ui::{Dom, DomComPareResult, Widget},
     vertex::uv_vertex::UvVertex,
-    widgets::position,
 };
 
 use super::style::{Border, BoxSizing, Padding, Visibility};
@@ -26,7 +24,6 @@ pub struct Position<T> {
     box_sizing: BoxSizing,
     visibility: Visibility,
     background_color: Color,
-    border_color: Color,
     // items
     items: Vec<PositionItem<T>>,
 }
@@ -36,7 +33,65 @@ pub struct PositionItem<T> {
     pub item: Box<dyn Dom<T>>,
 }
 
-impl<T> Position<T> {}
+impl<T> Position<T> {
+    // new
+
+    pub fn new(label: Option<&str>) -> Box<Self> {
+        Box::new(Self {
+            label: label.map(|s| s.to_string()),
+            size: [Size::Parent(1.0), Size::Parent(1.0)],
+            padding: Padding::default(),
+            border: Border::default(),
+            box_sizing: BoxSizing::default(),
+            visibility: Visibility::default(),
+            background_color: [0, 0, 0, 0].into(),
+            items: Vec::new(),
+        })
+    }
+
+    // build chain
+
+    pub fn size(mut self, width: Size, height: Size) -> Box<Self> {
+        self.size = [width, height];
+        Box::new(self)
+    }
+
+    pub fn padding(mut self, padding: Padding) -> Box<Self> {
+        self.padding = padding;
+        Box::new(self)
+    }
+
+    pub fn border(mut self, border: Border) -> Box<Self> {
+        self.border = border;
+        Box::new(self)
+    }
+
+    pub fn box_sizing(mut self, box_sizing: BoxSizing) -> Box<Self> {
+        self.box_sizing = box_sizing;
+        Box::new(self)
+    }
+
+    pub fn visibility(mut self, visibility: Visibility) -> Box<Self> {
+        self.visibility = visibility;
+        Box::new(self)
+    }
+
+    pub fn background_color(mut self, color: Color) -> Box<Self> {
+        self.background_color = color;
+        Box::new(self)
+    }
+
+    pub fn item(mut self, v: Vec<PositionItem<T>>) -> Box<Self> {
+        self.items = v;
+        Box::new(self)
+    }
+
+    // push item
+
+    pub fn push(&mut self, position: [Size; 2], item: Box<dyn Dom<T>>) {
+        self.items.push(PositionItem { position, item });
+    }
+}
 
 impl<T: Send + 'static> Dom<T> for Position<T> {
     fn build_widget_tree(&self) -> Box<dyn Widget<T>> {
@@ -48,7 +103,6 @@ impl<T: Send + 'static> Dom<T> for Position<T> {
             box_sizing: self.box_sizing,
             visibility: self.visibility,
             background_color: self.background_color,
-            border_color: self.border_color,
             items: self
                 .items
                 .iter()
@@ -76,7 +130,6 @@ pub struct PositionNode<T> {
     box_sizing: BoxSizing,
     visibility: Visibility,
     background_color: Color,
-    border_color: Color,
     // items
     items: Vec<PositionNodeItem<T>>,
 
@@ -130,7 +183,7 @@ impl<T: Send + 'static> Widget<T> for PositionNode<T> {
         parent_size: [StdSize; 2],
         context: &SharedContext,
     ) -> crate::events::UiEventResult<T> {
-        todo!()
+        crate::events::UiEventResult::default()
     }
 
     fn is_inside(
@@ -139,7 +192,9 @@ impl<T: Send + 'static> Widget<T> for PositionNode<T> {
         parent_size: [StdSize; 2],
         context: &SharedContext,
     ) -> bool {
-        todo!()
+        let size = self.px_size(parent_size, context);
+
+        !(position[0] < 0.0 || position[0] > size[0] || position[1] < 0.0 || position[1] > size[1])
     }
 
     fn size(&self) -> [Size; 2] {
@@ -147,8 +202,36 @@ impl<T: Send + 'static> Widget<T> for PositionNode<T> {
     }
 
     fn px_size(&self, parent_size: [StdSize; 2], context: &SharedContext) -> [f32; 2] {
-        // todo !
-        todo!()
+        match self.box_sizing {
+            BoxSizing::ContentBox => [
+                match self.size[0].to_std_size(parent_size[0], context) {
+                    StdSize::Pixel(px) => {
+                        px + self.padding.left + self.padding.right + self.border.px * 2.0
+                    }
+                    StdSize::Content(_) => {
+                        self.padding.left + self.padding.right + self.border.px * 2.0
+                    }
+                },
+                match self.size[1].to_std_size(parent_size[1], context) {
+                    StdSize::Pixel(px) => {
+                        px + self.padding.top + self.padding.bottom + self.border.px * 2.0
+                    }
+                    StdSize::Content(_) => {
+                        self.padding.top + self.padding.bottom + self.border.px * 2.0
+                    }
+                },
+            ],
+            BoxSizing::BorderBox => [
+                match self.size[0].to_std_size(parent_size[0], context) {
+                    StdSize::Pixel(px) => px,
+                    StdSize::Content(_) => 0.0,
+                },
+                match self.size[1].to_std_size(parent_size[1], context) {
+                    StdSize::Pixel(px) => px,
+                    StdSize::Content(_) => 0.0,
+                },
+            ],
+        }
     }
 
     fn render(
@@ -168,36 +251,11 @@ impl<T: Send + 'static> Widget<T> for PositionNode<T> {
         // calculate the size of content box
         // StdSize::Content(_) will be 0.0
 
-        let field_size = match self.box_sizing {
-            BoxSizing::ContentBox => [
-                match self.size[0].to_std_size(parent_size[0], context) {
-                    StdSize::Pixel(px) => px,
-                    StdSize::Content(_) => 0.0,
-                },
-                match self.size[1].to_std_size(parent_size[1], context) {
-                    StdSize::Pixel(px) => px,
-                    StdSize::Content(_) => 0.0,
-                },
-            ],
-            BoxSizing::BorderBox => [
-                match self.size[0].to_std_size(parent_size[0], context) {
-                    StdSize::Pixel(px) => {
-                        px - self.padding.left - self.padding.right - self.border.px * 2.0
-                    }
-                    StdSize::Content(_) => 0.0,
-                },
-                match self.size[1].to_std_size(parent_size[1], context) {
-                    StdSize::Pixel(px) => {
-                        px - self.padding.top - self.padding.bottom - self.border.px * 2.0
-                    }
-                    StdSize::Content(_) => 0.0,
-                },
-            ],
-        };
+        let texture_size = self.px_size(parent_size, context);
 
-        let texture_size = [
-            field_size[0] + self.padding.left + self.padding.right + self.border.px * 2.0,
-            field_size[1] + self.padding.top + self.padding.bottom + self.border.px * 2.0,
+        let field_size = [
+            texture_size[0] - self.padding.left - self.padding.right - self.border.px * 2.0,
+            texture_size[1] - self.padding.top - self.padding.bottom - self.border.px * 2.0,
         ];
 
         // padding and border translate
@@ -251,7 +309,7 @@ impl<T: Send + 'static> Widget<T> for PositionNode<T> {
         if cache.redraw {
             // render self
             if !self.background_color.is_transparent()
-                || (self.border.px > 0.0 && !self.border_color.is_transparent())
+                || (self.border.px > 0.0 && !self.border.color.is_transparent())
             {
                 let vello_texture = cache.vello_texture.get_or_insert_with(|| {
                     Arc::new(context.create_texture(
@@ -270,7 +328,7 @@ impl<T: Send + 'static> Widget<T> for PositionNode<T> {
                     ))
                 });
 
-                let mut scene = cache.scene.get_or_insert(vello::Scene::new());
+                let scene = cache.scene.get_or_insert(vello::Scene::new());
 
                 scene.reset();
 
@@ -298,7 +356,7 @@ impl<T: Send + 'static> Widget<T> for PositionNode<T> {
                 }
 
                 // border
-                let color = self.border_color.to_rgba_f64();
+                let color = self.border.color.to_rgba_f64();
                 let px = self.border.px as f64;
                 if px > 0.0 && color[3] > 0.0 {
                     scene.stroke(
@@ -358,7 +416,7 @@ impl<T: Send + 'static> Widget<T> for PositionNode<T> {
                         ];
 
                         let translate = nalgebra::Matrix4::new_translation(
-                            &nalgebra::Vector3::new(position[0], position[1], 0.0),
+                            &nalgebra::Vector3::new(position[0], -position[1], 0.0),
                         );
 
                         item.item
