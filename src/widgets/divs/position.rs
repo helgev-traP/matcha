@@ -281,15 +281,15 @@ impl<T: Send + 'static> Widget<T> for PositionNode<T> {
                     tex_coords: [0.0, 0.0].into(),
                 },
                 UvVertex {
-                    position: [0.0, -field_size[1], 0.0].into(),
+                    position: [0.0, -texture_size[1], 0.0].into(),
                     tex_coords: [0.0, 1.0].into(),
                 },
                 UvVertex {
-                    position: [field_size[0], -field_size[1], 0.0].into(),
+                    position: [texture_size[0], -texture_size[1], 0.0].into(),
                     tex_coords: [1.0, 1.0].into(),
                 },
                 UvVertex {
-                    position: [field_size[0], 0.0, 0.0].into(),
+                    position: [texture_size[0], 0.0, 0.0].into(),
                     tex_coords: [1.0, 0.0].into(),
                 },
             ]);
@@ -313,16 +313,8 @@ impl<T: Send + 'static> Widget<T> for PositionNode<T> {
             {
                 let vello_texture = cache.vello_texture.get_or_insert_with(|| {
                     Arc::new(context.create_texture(
-                        (field_size[0]
-                            + self.padding.left
-                            + self.padding.right
-                            + self.border.px * 2.0) as u32
-                            + 1,
-                        (field_size[1]
-                            + self.padding.top
-                            + self.padding.bottom
-                            + self.border.px * 2.0) as u32
-                            + 1,
+                        texture_size[0] as u32 + 1,
+                        texture_size[1] as u32 + 1,
                         wgpu::TextureFormat::Rgba8Unorm,
                         wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::STORAGE_BINDING,
                     ))
@@ -378,6 +370,8 @@ impl<T: Send + 'static> Widget<T> for PositionNode<T> {
                         ),
                     );
                 }
+
+                println!("vello_texture: {:?}", [vello_texture.width(), vello_texture.height()]);
 
                 renderer
                     .vello_renderer()
