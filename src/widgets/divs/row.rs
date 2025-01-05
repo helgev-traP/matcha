@@ -30,7 +30,6 @@ pub struct RowDescriptor<R> {
     pub box_sizing: BoxSizing,
     pub visibility: Visibility,
     pub background_color: Color,
-    // todo: border_radius: f32,
     // layout
     // direction -> row(not reverse)
     pub wrap: FlexWrap,

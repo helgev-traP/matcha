@@ -5,10 +5,12 @@ use tea_ui::{
     component::{Component, ComponentAccess},
     types::{color::Color, size::Size},
     ui::Dom,
+    vertex::vertex_generator::border,
     widgets::{
         position::Position,
         row::{Row, RowDescriptor},
         square::{Square, SquareDescriptor},
+        style::Border,
     },
 };
 
@@ -44,16 +46,29 @@ fn local_update(
 fn view(model: &i32) -> Box<dyn Dom<Message>> {
     let mut position = Position::new(None)
         .size(Size::Parent(1.0), Size::Parent(1.0))
-        .background_color([0.5, 0.5, 0.5, 1.0].into());
+        .background_color([0.5, 0.5, 0.5, 1.0].into())
+        .border(Border::new(20.0, [255, 0, 0].into()).radius(50.0));
 
     // randomly place a lot of squares
 
-    for _ in 0..1000 {
+    for _ in 0..0 {
         position.push(
-            [Size::Pixel(rand::random::<f32>() * 800.0), Size::Pixel(rand::random::<f32>() * 600.0)],
+            [
+                Size::Pixel(rand::random::<f32>() * 800.0),
+                Size::Pixel(rand::random::<f32>() * 600.0),
+            ],
             Square::new(SquareDescriptor {
-                size: [Size::Pixel(rand::random::<f32>() * 300.0), Size::Pixel(rand::random::<f32>() * 300.0)],
-                background_color: [rand::random::<u8>(), rand::random::<u8>(), rand::random::<u8>(), 255].into(),
+                size: [
+                    Size::Pixel(rand::random::<f32>() * 300.0),
+                    Size::Pixel(rand::random::<f32>() * 300.0),
+                ],
+                background_color: [
+                    rand::random::<u8>(),
+                    rand::random::<u8>(),
+                    rand::random::<u8>(),
+                    255,
+                ]
+                .into(),
                 ..Default::default()
             }),
         );
