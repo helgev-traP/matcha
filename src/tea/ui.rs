@@ -1,5 +1,7 @@
 use std::{any::Any, sync::Arc};
 
+use wgpu::naga::back;
+
 use super::{
     context::SharedContext,
     events::{UiEvent, UiEventResult},
@@ -58,10 +60,17 @@ pub trait Widget<T> {
     /// Actual size including its sub widgets with pixel value.
     fn px_size(&self, parent_size: [StdSize; 2], context: &SharedContext) -> [f32; 2];
 
+    fn has_dynamic(&self) -> bool;
+
+    fn redraw(&self) -> bool;
+
     fn render(
         &mut self,
         // ui environment
         parent_size: [StdSize; 2],
+        background_view: &wgpu::TextureView,
+        // [{upper left x, y}, {lower right x, y}]
+        background_position: [[f32; 2]; 2],
         // context
         context: &SharedContext,
         renderer: &Renderer,
