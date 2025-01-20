@@ -150,13 +150,18 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
         // get root component's render result
         let render_result = self.root_widget.as_mut().unwrap().render(
             [viewport_size[0].into(), viewport_size[1].into()],
+            &surface_texture_view, // todo: check if this is works
+            [
+                [0.0, 0.0],
+                [viewport_size[0].into(), viewport_size[1].into()],
+            ],
             self.context.as_ref().unwrap(),
             self.renderer.as_ref().unwrap(),
             self.frame,
         );
 
         // project to screen
-        self.renderer.as_mut().unwrap().render_to_screen(
+        self.renderer.as_mut().unwrap().render_to_surface(
             &surface_texture_view,
             viewport_size,
             render_result,

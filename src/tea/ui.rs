@@ -1,7 +1,5 @@
 use std::{any::Any, sync::Arc};
 
-use wgpu::naga::back;
-
 use super::{
     context::SharedContext,
     events::{UiEvent, UiEventResult},
@@ -60,6 +58,12 @@ pub trait Widget<T> {
     /// Actual size including its sub widgets with pixel value.
     fn px_size(&self, parent_size: [StdSize; 2], context: &SharedContext) -> [f32; 2];
 
+    /// The drawing range of the whole widget.
+    fn drawing_range(&self) -> [[f32; 2]; 2];
+
+    /// The area that the widget always covers.
+    fn cover_area(&self) -> Option<[[f32; 2]; 2]>;
+
     fn has_dynamic(&self) -> bool;
 
     fn redraw(&self) -> bool;
@@ -75,16 +79,35 @@ pub trait Widget<T> {
         context: &SharedContext,
         renderer: &Renderer,
         frame: u64,
-    ) -> Vec<(
-        Arc<wgpu::Texture>,
-        Arc<Vec<UvVertex>>,
-        Arc<Vec<u16>>,
-        nalgebra::Matrix4<f32>,
-    )>;
+    ) -> Vec<Object>;
 }
 
 pub enum DomComPareResult {
     Same,
     Changed,
     Different,
+}
+
+// todo: add object type when renderer is ready
+pub enum Object {
+    TextureObject(TextureObject),
+    TextureBlur(TextureBlur),
+    // Gradation
+    // GradationBlur ?
+    // and more ...?
+}
+
+pub struct TextureObject {
+    pub texture: Arc<wgpu::Texture>,
+    pub uv_vertices: Arc<Vec<UvVertex>>,
+    pub indices: Arc<Vec<u16>>,
+    pub transform: nalgebra::Matrix4<f32>,
+}
+
+pub struct TextureBlur {
+    pub texture: Arc<wgpu::Texture>,
+    pub uv_vertices: Arc<Vec<UvVertex>>,
+    pub indices: Arc<Vec<u16>>,
+    pub transform: nalgebra::Matrix4<f32>,
+    pub blur: f32,
 }
