@@ -1,7 +1,10 @@
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use super::{
-    context::SharedContext, events::UiEventResult, types::size::{Size, StdSize}, ui::{Dom, DomComPareResult, Widget}, vertex::uv_vertex::UvVertex
+    context::SharedContext,
+    events::UiEventResult,
+    types::size::{Size, StdSize},
+    ui::{Dom, DomComPareResult, Object, Widget},
 };
 
 pub struct Component<Model, Message, OuterResponse, InnerResponse> {
@@ -233,23 +236,40 @@ impl<Model, O, I> Widget<O> for ComponentWidget<Model, O, I> {
         self.node.lock().unwrap().px_size(parent_size, context)
     }
 
+    fn drawing_range(&self) -> [[f32; 2]; 2] {
+        self.node.lock().unwrap().drawing_range()
+    }
+
+    fn cover_area(&self) -> Option<[[f32; 2]; 2]> {
+        self.node.lock().unwrap().cover_area()
+    }
+
+    fn has_dynamic(&self) -> bool {
+        self.node.lock().unwrap().has_dynamic()
+    }
+
+    fn redraw(&self) -> bool {
+        self.node.lock().unwrap().redraw()
+    }
+
     fn render(
         &mut self,
         // ui environment
         parent_size: [StdSize; 2],
+        background_view: &wgpu::TextureView,
+        background_position: [[f32; 2]; 2],
         // context
         context: &SharedContext,
         renderer: &super::renderer::Renderer,
         frame: u64,
-    ) -> Vec<(
-        Arc<wgpu::Texture>,
-        Arc<Vec<UvVertex>>,
-        Arc<Vec<u16>>,
-        nalgebra::Matrix4<f32>,
-    )> {
-        self.node
-            .lock()
-            .unwrap()
-            .render(parent_size, context, renderer, frame)
+    ) -> Vec<Object> {
+        self.node.lock().unwrap().render(
+            parent_size,
+            background_view,
+            background_position,
+            context,
+            renderer,
+            frame,
+        )
     }
 }
