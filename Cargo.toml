@@ -8,9 +8,9 @@ edition = "2021"
 rayon = "1.10.0"
 pollster = "0.3"
 # graphics
-wgpu = "22.1.0"
+wgpu = "23.0.1"
 bytemuck = { version = "1.17", features = ["derive"] }
-vello = "0.3.0"
+vello = "0.4.0"
 winit = "0.30"
 # math
 nalgebra = { version = "0.33", features = ["bytemuck"] }

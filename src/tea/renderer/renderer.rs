@@ -82,13 +82,13 @@ impl Renderer {
             layout: Some(&textured_render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &textured_shader,
-                entry_point: "vs_main",
+                entry_point: Some("vs_main"),
                 buffers: &[UvVertex::desc()],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
                 module: &textured_shader,
-                entry_point: "fs_main",
+                entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: wgpu::TextureFormat::Rgba8UnormSrgb,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
@@ -132,13 +132,13 @@ impl Renderer {
                 layout: Some(&textured_render_pipeline_layout),
                 vertex: wgpu::VertexState {
                     module: &textured_shader,
-                    entry_point: "vs_main",
+                    entry_point: Some("vs_main"),
                     buffers: &[UvVertex::desc()],
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
                 },
                 fragment: Some(wgpu::FragmentState {
                     module: &textured_shader,
-                    entry_point: "fs_main",
+                    entry_point: Some("fs_main"),
                     targets: &[Some(wgpu::ColorTargetState {
                         format: context.get_surface_format(),
                         blend: Some(wgpu::BlendState::ALPHA_BLENDING),
