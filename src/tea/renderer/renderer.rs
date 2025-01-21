@@ -47,6 +47,10 @@ impl Renderer {
         }
     }
 
+    pub fn vello_renderer(&self) -> std::sync::MutexGuard<vello::Renderer> {
+        self.vello_renderer.lock().unwrap()
+    }
+
     pub fn render(
         &self,
         destination_view: &wgpu::TextureView,

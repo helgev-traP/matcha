@@ -11,7 +11,8 @@ use super::{
 // dom tree node
 
 pub trait Dom<T>: Any + 'static {
-    fn build_widget_tree(&self) -> Box<dyn Widget<T>>;
+    // if any dynamic widget is included in the widget tree, the second value is true.
+    fn build_widget_tree(&self) -> (Box<dyn Widget<T>>, bool);
     fn as_any(&self) -> &dyn Any;
 }
 
@@ -59,10 +60,10 @@ pub trait Widget<T> {
     fn px_size(&self, parent_size: [StdSize; 2], context: &SharedContext) -> [f32; 2];
 
     /// The drawing range of the whole widget.
-    fn drawing_range(&self) -> [[f32; 2]; 2];
+    fn drawing_range(&self, parent_size: [StdSize; 2], context: &SharedContext) -> [[f32; 2]; 2];
 
     /// The area that the widget always covers.
-    fn cover_area(&self) -> Option<[[f32; 2]; 2]>;
+    fn cover_area(&self, parent_size: [StdSize; 2], context: &SharedContext) -> Option<[[f32; 2]; 2]>;
 
     fn has_dynamic(&self) -> bool;
 
@@ -73,8 +74,7 @@ pub trait Widget<T> {
         // ui environment
         parent_size: [StdSize; 2],
         background_view: &wgpu::TextureView,
-        // [{upper left x, y}, {lower right x, y}]
-        background_position: [[f32; 2]; 2],
+        background_position: [[f32; 2]; 2], // [{upper left uv_x, uv_y}, {lower right uv_x, uv_y}]
         // context
         context: &SharedContext,
         renderer: &Renderer,
@@ -110,4 +110,17 @@ pub struct TextureBlur {
     pub indices: Arc<Vec<u16>>,
     pub transform: nalgebra::Matrix4<f32>,
     pub blur: f32,
+}
+
+impl Object {
+    pub fn translate(&mut self, affine: nalgebra::Matrix4<f32>) {
+        match self {
+            Object::TextureObject(texture_object) => {
+                texture_object.transform = affine * texture_object.transform;
+            }
+            Object::TextureBlur(texture_blur) => {
+                texture_blur.transform = affine * texture_blur.transform;
+            }
+        }
+    }
 }

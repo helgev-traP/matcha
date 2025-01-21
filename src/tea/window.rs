@@ -34,6 +34,7 @@ pub struct Window<'a, Model: Send + 'static, Message: 'static> {
     // root component
     root_component: Component<Model, Message, Message, Message>,
     root_widget: Option<Box<dyn Widget<Message>>>,
+    root_widget_has_dynamic: bool,
 
     // frame
     frame: u64,
@@ -69,6 +70,7 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
             renderer: None,
             root_component: component,
             root_widget: None,
+            root_widget_has_dynamic: false,
             frame: 0,
             mouse_state: None,
             mouse_primary_button: winit::event::MouseButton::Left,
@@ -254,7 +256,10 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
         }
 
         // --- render ---
-        self.root_widget = Some(self.root_component.view().build_widget_tree());
+        let (root_widget, root_widget_has_dynamic) = self.root_component.view().build_widget_tree();
+
+        self.root_widget = Some(root_widget);
+        self.root_widget_has_dynamic = root_widget_has_dynamic;
 
         self.render();
     }
