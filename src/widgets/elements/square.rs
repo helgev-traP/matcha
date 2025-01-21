@@ -8,12 +8,8 @@ use crate::{
         color::Color,
         size::{Size, StdSize},
     },
-    ui::{Dom, DomComPareResult, Widget},
-    vertex::{
-        colored_vertex::ColoredVertex,
-        uv_vertex::UvVertex,
-        vertex_generator::{BorderDescriptor, RectangleDescriptor},
-    },
+    ui::{Dom, DomComPareResult, Object, TextureObject, Widget},
+    vertex::uv_vertex::UvVertex,
 };
 
 pub struct SquareDescriptor {
@@ -63,20 +59,24 @@ impl Square {
     }
 }
 
-impl<R: Copy + Send + 'static> Dom<R> for Square {
-    fn build_widget_tree(&self) -> Box<dyn Widget<R>> {
-        Box::new(SquareWidget {
-            label: self.label.clone(),
-            size: self.size,
-            radius: self.radius,
-            background_color: self.background_color,
-            border_width: self.border_width,
-            border_color: self.border_color,
-            scene: vello::Scene::new(),
-            texture: None,
-            vertex: None,
-            index: Arc::new(vec![0, 1, 2, 0, 2, 3]),
-        })
+impl<T: Copy + Send + 'static> Dom<T> for Square {
+    fn build_widget_tree(&self) -> (Box<dyn Widget<T>>, bool) {
+        (
+            Box::new(SquareWidget {
+                label: self.label.clone(),
+                size: self.size,
+                radius: self.radius,
+                background_color: self.background_color,
+                border_width: self.border_width,
+                border_color: self.border_color,
+                scene: vello::Scene::new(),
+                texture: None,
+                vertex: None,
+                index: Arc::new(vec![0, 1, 2, 0, 2, 3]),
+                redraw: true,
+            }),
+            false,
+        )
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -98,9 +98,12 @@ pub struct SquareWidget {
     texture: Option<Arc<wgpu::Texture>>,
     vertex: Option<Arc<Vec<UvVertex>>>,
     index: Arc<Vec<u16>>,
+
+    // caching
+    redraw: bool,
 }
 
-impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
+impl<R: Send + 'static> Widget<R> for SquareWidget {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
@@ -171,37 +174,65 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
         self.size
     }
 
-    fn px_size(
+    fn px_size(&self, parent_size: [StdSize; 2], context: &SharedContext) -> [f32; 2] {
+        [
+            self.size[0]
+                .to_std_size(parent_size[0], context)
+                .unwrap_or(0.0),
+            self.size[1]
+                .to_std_size(parent_size[1], context)
+                .unwrap_or(0.0),
+        ]
+    }
+
+    fn drawing_range(&self, parent_size: [StdSize; 2], context: &SharedContext) -> [[f32; 2]; 2] {
+        let px_size: [f32; 2] = Widget::<R>::px_size(self, parent_size, context);
+
+        [[0.0, 0.0], px_size]
+    }
+
+    fn cover_area(
         &self,
         parent_size: [StdSize; 2],
-        context: &crate::context::SharedContext,
-    ) -> [f32; 2] {
-        [
-            self.size[0].to_std_size(parent_size[0], context).unwrap_or(0.0),
-            self.size[1].to_std_size(parent_size[1], context).unwrap_or(0.0),
-        ]
+        context: &SharedContext,
+    ) -> Option<[[f32; 2]; 2]> {
+        let px_size = Widget::<R>::px_size(self, parent_size, context);
+
+        Some([
+            [self.radius, self.radius],
+            [px_size[0] - self.radius, px_size[1] - self.radius],
+        ])
+    }
+
+    fn has_dynamic(&self) -> bool {
+        false
+    }
+
+    fn redraw(&self) -> bool {
+        self.redraw
     }
 
     fn render(
         &mut self,
         // ui environment
         parent_size: [StdSize; 2],
+        background_view: &wgpu::TextureView,
+        background_position: [[f32; 2]; 2], // [{upper left x, y}, {lower right x, y}]
         // context
         context: &SharedContext,
         renderer: &Renderer,
         frame: u64,
-    ) -> Vec<(
-        Arc<wgpu::Texture>,
-        Arc<Vec<UvVertex>>,
-        Arc<Vec<u16>>,
-        nalgebra::Matrix4<f32>,
-    )> {
+    ) -> Vec<Object> {
         let size = [
-            self.size[0].to_std_size(parent_size[0], context).unwrap_or(0.0),
-            self.size[1].to_std_size(parent_size[1], context).unwrap_or(0.0),
+            self.size[0]
+                .to_std_size(parent_size[0], context)
+                .unwrap_or(0.0),
+            self.size[1]
+                .to_std_size(parent_size[1], context)
+                .unwrap_or(0.0),
         ];
 
-        if self.texture.is_none() {
+        if self.texture.is_none() || self.redraw {
             let device = context.get_wgpu_device();
 
             // create texture
@@ -277,11 +308,13 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
                     },
                 )
                 .unwrap();
+
+            self.redraw = false;
         }
 
-        vec![(
-            self.texture.as_ref().unwrap().clone(),
-            Arc::new(vec![
+        vec![Object::TextureObject(TextureObject {
+            texture: self.texture.as_ref().unwrap().clone(),
+            uv_vertices: Arc::new(vec![
                 UvVertex {
                     position: [0.0, 0.0, 0.0].into(),
                     tex_coords: [0.0, 0.0].into(),
@@ -299,8 +332,8 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
                     tex_coords: [1.0, 0.0].into(),
                 },
             ]),
-            self.index.clone(),
-            nalgebra::Matrix4::identity(),
-        )]
+            indices: self.index.clone(),
+            transform: nalgebra::Matrix4::identity(),
+        })]
     }
 }

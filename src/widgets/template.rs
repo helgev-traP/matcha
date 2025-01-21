@@ -35,11 +35,14 @@ impl Template {
 }
 
 impl<T: Send + 'static> Dom<T> for Template {
-    fn build_widget_tree(&self) -> Box<dyn Widget<T>> {
-        Box::new(TemplateNode {
-            label: self.label.clone(),
-            size: self.size,
-        })
+    fn build_widget_tree(&self) -> (Box<dyn Widget<T>>, bool) {
+        (
+            Box::new(TemplateNode {
+                label: self.label.clone(),
+                size: self.size,
+            }),
+            false,
+        )
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -90,15 +93,22 @@ impl<T: Send + 'static> Widget<T> for TemplateNode {
     }
 
     // inside / outside check
+    // implement this if your widget has a non rectangular shape.
+    /*
     fn is_inside(
         &self,
         position: [f32; 2],
         parent_size: [StdSize; 2],
         context: &SharedContext,
     ) -> bool {
-        let _ = (position, parent_size, context);
-        todo!()
+        let px_size = Widget::<T>::px_size(self, parent_size, context);
+
+        !(position[0] < 0.0
+            || position[0] > px_size[0]
+            || position[1] < 0.0
+            || position[1] > px_size[1])
     }
+    */
 
     // The size configuration of the widget.
     fn size(&self) -> [Size; 2] {
@@ -112,12 +122,16 @@ impl<T: Send + 'static> Widget<T> for TemplateNode {
     }
 
     // The drawing range of the whole widget.
-    fn drawing_range(&self) -> [[f32; 2]; 2] {
+    fn drawing_range(&self, parent_size: [StdSize; 2], context: &SharedContext) -> [[f32; 2]; 2] {
         todo!()
     }
 
     // The area that the widget always covers.
-    fn cover_area(&self) -> Option<[[f32; 2]; 2]> {
+    fn cover_area(
+        &self,
+        parent_size: [StdSize; 2],
+        context: &SharedContext,
+    ) -> Option<[[f32; 2]; 2]> {
         todo!()
     }
 
@@ -137,13 +151,20 @@ impl<T: Send + 'static> Widget<T> for TemplateNode {
         // ui environment
         parent_size: [StdSize; 2],
         background_view: &wgpu::TextureView,
-        background_position: [[f32; 2]; 2], // [{upper left x, y}, {lower right x, y}]
+        background_position: [[f32; 2]; 2], // [{upper left uv_x, uv_y}, {lower right uv_x, uv_y}]
         // context
         context: &SharedContext,
         renderer: &Renderer,
         frame: u64,
     ) -> Vec<Object> {
-        let _ = (parent_size, background_view, background_position, context, renderer, frame);
+        let _ = (
+            parent_size,
+            background_view,
+            background_position,
+            context,
+            renderer,
+            frame,
+        );
         todo!()
     }
 }

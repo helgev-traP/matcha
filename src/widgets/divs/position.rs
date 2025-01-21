@@ -8,7 +8,7 @@ use crate::{
         color::Color,
         size::{Size, StdSize},
     },
-    ui::{Dom, DomComPareResult, Widget},
+    ui::{Dom, DomComPareResult, Object, Widget},
     vertex::uv_vertex::UvVertex,
 };
 
@@ -94,8 +94,10 @@ impl<T> Position<T> {
 }
 
 impl<T: Send + 'static> Dom<T> for Position<T> {
-    fn build_widget_tree(&self) -> Box<dyn Widget<T>> {
-        Box::new(PositionNode {
+    fn build_widget_tree(&self) -> (Box<dyn Widget<T>>, bool) {
+        let mut has_dynamic = false;
+
+        let widget_tree = Box::new(PositionNode {
             label: self.label.clone(),
             size: self.size,
             padding: self.padding,
@@ -108,11 +110,17 @@ impl<T: Send + 'static> Dom<T> for Position<T> {
                 .iter()
                 .map(|item| PositionNodeItem {
                     position: item.position,
-                    item: item.item.build_widget_tree(),
+                    item: {
+                        let (item, d) = item.item.build_widget_tree();
+                        has_dynamic |= d;
+                        item
+                    },
                 })
                 .collect(),
             cache: None,
-        })
+        });
+
+        (widget_tree, has_dynamic)
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -234,20 +242,44 @@ impl<T: Send + 'static> Widget<T> for PositionNode<T> {
         }
     }
 
+    fn drawing_range(&self, parent_size: [StdSize; 2], context: &SharedContext) -> [[f32; 2]; 2] {
+        let size = self.px_size(parent_size, context);
+
+        [[0.0, 0.0], [size[0], size[1]]]
+    }
+
+    fn cover_area(
+        &self,
+        parent_size: [StdSize; 2],
+        context: &SharedContext,
+    ) -> Option<[[f32; 2]; 2]> {
+        let size = self.px_size(parent_size, context);
+
+        Some([
+            [self.border.px, self.border.px],
+            [size[0] - self.border.px, size[1] - self.border.px],
+        ])
+    }
+
+    fn has_dynamic(&self) -> bool {
+        todo!()
+    }
+
+    fn redraw(&self) -> bool {
+        todo!()
+    }
+
     fn render(
         &mut self,
         // ui environment
         parent_size: [StdSize; 2],
+        background_view: &wgpu::TextureView,
+        background_position: [[f32; 2]; 2], // [{upper left x, y}, {lower right x, y}]
         // context
         context: &SharedContext,
         renderer: &Renderer,
         frame: u64,
-    ) -> Vec<(
-        Arc<wgpu::Texture>,
-        Arc<Vec<UvVertex>>,
-        Arc<Vec<u16>>,
-        nalgebra::Matrix4<f32>,
-    )> {
+    ) -> Vec<Object> {
         // calculate the size of content box
         // StdSize::Content(_) will be 0.0
 
@@ -371,7 +403,10 @@ impl<T: Send + 'static> Widget<T> for PositionNode<T> {
                     );
                 }
 
-                println!("vello_texture: {:?}", [vello_texture.width(), vello_texture.height()]);
+                println!(
+                    "vello_texture: {:?}",
+                    [vello_texture.width(), vello_texture.height()]
+                );
 
                 renderer
                     .vello_renderer()

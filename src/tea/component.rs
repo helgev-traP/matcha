@@ -96,9 +96,9 @@ impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'sta
             if let Ok(_) = render_tree.lock().unwrap().update_widget_tree(&*dom) {
                 return;
             }
-            *self.widget_tree.as_ref().unwrap().lock().unwrap() = dom.build_widget_tree();
+            *self.widget_tree.as_ref().unwrap().lock().unwrap() = dom.build_widget_tree().0;
         } else {
-            self.widget_tree = Some(Arc::new(Mutex::new(dom.build_widget_tree())));
+            self.widget_tree = Some(Arc::new(Mutex::new(dom.build_widget_tree().0)));
         }
     }
 
@@ -116,7 +116,7 @@ impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'sta
                 model_updated: self.model_updated.clone(),
             },
             fn_inner_udate: self.fn_inner_update,
-            render_tree: self.widget_tree.as_ref().unwrap().clone(),
+            widget_tree: self.widget_tree.as_ref().unwrap().clone(),
         })
     }
 }
@@ -156,7 +156,7 @@ where
     component_model: ComponentAccess<Model>,
     fn_inner_udate:
         fn(&ComponentAccess<Model>, UiEventResult<InnerResponse>) -> UiEventResult<OuterResponse>,
-    render_tree: Arc<Mutex<Box<dyn Widget<InnerResponse>>>>,
+    widget_tree: Arc<Mutex<Box<dyn Widget<InnerResponse>>>>,
 }
 
 impl<Model: Send, OuterResponse, InnerResponse> Dom<OuterResponse>
@@ -166,13 +166,16 @@ where
     OuterResponse: 'static,
     InnerResponse: 'static,
 {
-    fn build_widget_tree(&self) -> Box<dyn Widget<OuterResponse>> {
-        Box::new(ComponentWidget {
-            label: self.label.clone(),
-            component_model: self.component_model.clone(),
-            local_update_component: self.fn_inner_udate,
-            node: self.render_tree.clone(),
-        })
+    fn build_widget_tree(&self) -> (Box<dyn Widget<OuterResponse>>, bool) {
+        (
+            Box::new(ComponentWidget {
+                label: self.label.clone(),
+                component_model: self.component_model.clone(),
+                local_update_component: self.fn_inner_udate,
+                node: self.widget_tree.clone(),
+            }),
+            self.widget_tree.lock().unwrap().has_dynamic(),
+        )
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -236,12 +239,12 @@ impl<Model, O, I> Widget<O> for ComponentWidget<Model, O, I> {
         self.node.lock().unwrap().px_size(parent_size, context)
     }
 
-    fn drawing_range(&self) -> [[f32; 2]; 2] {
-        self.node.lock().unwrap().drawing_range()
+    fn drawing_range(&self, parent_size: [StdSize; 2], context: &SharedContext) -> [[f32; 2]; 2] {
+        self.node.lock().unwrap().drawing_range(parent_size, context)
     }
 
-    fn cover_area(&self) -> Option<[[f32; 2]; 2]> {
-        self.node.lock().unwrap().cover_area()
+    fn cover_area(&self, parent_size: [StdSize; 2], context: &SharedContext) -> Option<[[f32; 2]; 2]> {
+        self.node.lock().unwrap().cover_area(parent_size, context)
     }
 
     fn has_dynamic(&self) -> bool {
