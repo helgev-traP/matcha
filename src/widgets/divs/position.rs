@@ -325,12 +325,12 @@ impl<T: Send + 'static> Widget<T> for PositionNode<T> {
                 scene.reset();
 
                 // background
-                let color = self.background_color.to_rgba_f64();
+                let color = self.background_color.to_rgba_f32();
                 if color[3] > 0.0 {
                     scene.fill(
                         vello::peniko::Fill::EvenOdd,
                         vello::kurbo::Affine::IDENTITY,
-                        vello::peniko::Color::rgba(color[0], color[1], color[2], color[3]),
+                        vello::peniko::Color::new(color),
                         None,
                         &vello::kurbo::RoundedRect::new(
                             0.0,
@@ -348,13 +348,13 @@ impl<T: Send + 'static> Widget<T> for PositionNode<T> {
                 }
 
                 // border
-                let color = self.border.color.to_rgba_f64();
+                let color = self.border.color.to_rgba_f32();
                 let px = self.border.px as f64;
                 if px > 0.0 && color[3] > 0.0 {
                     scene.stroke(
                         &vello::kurbo::Stroke::new(px),
                         vello::kurbo::Affine::IDENTITY,
-                        vello::peniko::Color::rgba(color[0], color[1], color[2], color[3]),
+                        vello::peniko::Color::new(color),
                         None,
                         &vello::kurbo::RoundedRect::new(
                             px / 2.0,

@@ -224,12 +224,12 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
 
             self.scene.reset();
 
-            let c = self.background_color.to_rgba_f64();
+            let c = self.background_color.to_rgba_f32();
 
             self.scene.fill(
                 vello::peniko::Fill::EvenOdd,
                 vello::kurbo::Affine::IDENTITY,
-                vello::peniko::Color::rgba(c[0], c[1], c[2], c[3]),
+                vello::peniko::Color::new(c),
                 None,
                 &vello::kurbo::RoundedRect::new(
                     0.0,
@@ -241,12 +241,12 @@ impl<R: Copy + Send + 'static> Widget<R> for SquareWidget {
             );
 
             if self.border_width > 0.0 {
-                let c = self.border_color.to_rgba_f64();
+                let c = self.border_color.to_rgba_f32();
 
                 self.scene.stroke(
                     &vello::kurbo::Stroke::new(self.border_width as f64),
                     vello::kurbo::Affine::IDENTITY,
-                    vello::peniko::Color::rgba(c[0], c[1], c[2], c[3]),
+                    vello::peniko::Color::new(c),
                     None,
                     &vello::kurbo::RoundedRect::new(
                         self.border_width as f64 / 2.0,
