@@ -78,7 +78,7 @@ fn view(model: &i32) -> Box<dyn Dom<Message>> {
 }
 
 fn main() {
-    let component = Component::new(None, 0, update, view).inner_update(local_update);
+    let component = Component::new(None, 0, update, view).react_fn(local_update);
 
     App::new(component)
         .base_color(Color::Rgb8USrgb { r: 0, g: 0, b: 0 })

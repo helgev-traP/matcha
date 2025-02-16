@@ -1,16 +1,18 @@
 use std::sync::{Arc, Mutex};
 
+use wgpu::naga::back;
+
 use crate::{
     context::SharedContext,
     events::UiEvent,
     renderer::Renderer,
-    types::size::{Size, StdSize},
+    types::{
+        range::Range2D,
+        size::{Size, StdSize},
+    },
     ui::{Dom, DomComPareResult, Widget},
-    vertex::uv_vertex::UvVertex,
     widgets::div_size::{DivSize, StdDivSize},
 };
-
-use super::style::{Border, BoxSizing, Padding};
 
 pub struct Grid<T: Send + 'static> {
     // label
@@ -100,9 +102,6 @@ struct GridCache {
     row_gap: f32,
 
     px_size: [f32; 2],
-
-    // rendering cache
-    rendering_cache: Option<(Arc<wgpu::Texture>, Arc<Vec<UvVertex>>)>,
 }
 
 pub struct GridItemNode<T: Send + 'static> {
@@ -113,6 +112,9 @@ pub struct GridItemNode<T: Send + 'static> {
 
 impl<T: Send + 'static> GridNode<T> {
     fn cache_grid(&self, parent_size: [StdSize; 2], context: &SharedContext) -> GridCache {
+        // TODO: check efficiency and refactor
+        // TODO: divide into smaller functions
+
         // calculate template size
 
         let (total_horizontal_size, total_horizontal_grow) =
@@ -386,7 +388,6 @@ impl<T: Send + 'static> GridNode<T> {
             row_accumulate_template,
             row_gap,
             px_size,
-            rendering_cache: None,
         }
     }
 }
@@ -438,10 +439,7 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
     }
 
     fn size(&self) -> [Size; 2] {
-        [
-            Size::Parent(1.0),
-            Size::Parent(1.0),
-        ]
+        [Size::Parent(1.0), Size::Parent(1.0)]
     }
 
     fn px_size(&self, parent_size: [StdSize; 2], context: &SharedContext) -> [f32; 2] {
@@ -463,29 +461,6 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
         parent_size: [StdSize; 2],
         context: &SharedContext,
     ) -> Option<[[f32; 2]; 2]> {
-        // todo: これをContainerBackgroundに書く
-
-        // if self.background_color.is_transparent() {
-        //     None
-        // } else {
-        //     let px_size = self.px_size(parent_size, context);
-
-        //     let reduction = [
-        //         self.border.top_left_radius,
-        //         self.border.top_right_radius,
-        //         self.border.bottom_left_radius,
-        //         self.border.bottom_right_radius,
-        //     ]
-        //     .iter()
-        //     .fold(f32::MAX, |acc, r| acc.min(*r))
-        //         * (1.0 - 1.0 / 2.0f32.sqrt());
-
-        //     Some([
-        //         [reduction, reduction],
-        //         [px_size[0] - reduction, px_size[1] - reduction],
-        //     ])
-        // }
-
         None
     }
 
@@ -502,12 +477,14 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
         // ui environment
         parent_size: [StdSize; 2],
         background_view: &wgpu::TextureView,
-        background_position: [[f32; 2]; 2], // [{upper left uv_x, uv_y}, {lower right uv_x, uv_y}]
+        background_range: Range2D<f32>,
         // context
         context: &SharedContext,
         renderer: &Renderer,
         frame: u64,
     ) -> Vec<crate::ui::Object> {
+        // ! pay attention to that this widget are always Overflow::Visible and do not cache children's render result.
+
         // delete cache if cache miss.
         {
             let mut grid_cache = self.grid_cache.lock().unwrap();
@@ -569,28 +546,20 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
                         StdSize::Pixel(vertical_end - vertical_start),
                     ],
                     background_view,
-                    [
-                        [
-                            background_position[0][0] * (grid_cache.px_size[0] - horizontal_start)
-                                / grid_cache.px_size[0]
-                                + background_position[1][0] * (horizontal_start)
-                                    / grid_cache.px_size[0],
-                            background_position[0][1] * (grid_cache.px_size[1] - vertical_start)
-                                / grid_cache.px_size[1]
-                                + background_position[1][1] * (vertical_start)
-                                    / grid_cache.px_size[1],
+                    Range2D {
+                        // rewrite it to use completion function
+                        x: [
+                            completion(background_range.x, vertical_start / grid_cache.px_size[0]),
+                            completion(background_range.x, vertical_end / grid_cache.px_size[0]),
                         ],
-                        [
-                            background_position[0][0] * (grid_cache.px_size[0] - horizontal_end)
-                                / grid_cache.px_size[0]
-                                + background_position[1][0] * (horizontal_end)
-                                    / grid_cache.px_size[0],
-                            background_position[0][1] * (grid_cache.px_size[1] - vertical_end)
-                                / grid_cache.px_size[1]
-                                + background_position[1][1] * (vertical_end)
-                                    / grid_cache.px_size[1],
+                        y: [
+                            completion(
+                                background_range.y,
+                                horizontal_start / grid_cache.px_size[1],
+                            ),
+                            completion(background_range.y, horizontal_end / grid_cache.px_size[1]),
                         ],
-                    ],
+                    },
                     context,
                     renderer,
                     frame,
@@ -611,4 +580,8 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
             .flatten()
             .collect()
     }
+}
+
+fn completion(completion: [f32; 2], ratio: f32) -> f32 {
+    completion[0] * ratio + completion[1] * (1.0 - ratio)
 }

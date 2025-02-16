@@ -4,7 +4,7 @@ use super::{
     context::SharedContext,
     events::{UiEvent, UiEventResult},
     renderer::Renderer,
-    types::size::{Size, StdSize},
+    types::{range::Range2D, size::{Size, StdSize}},
     vertex::uv_vertex::UvVertex,
 };
 
@@ -74,7 +74,7 @@ pub trait Widget<T> {
         // ui environment
         parent_size: [StdSize; 2],
         background_view: &wgpu::TextureView,
-        background_position: [[f32; 2]; 2], // [{upper left uv_x, uv_y}, {lower right uv_x, uv_y}]
+        background_range: Range2D<f32>,
         // context
         context: &SharedContext,
         renderer: &Renderer,
@@ -89,6 +89,7 @@ pub enum DomComPareResult {
 }
 
 // todo: add object type when renderer is ready
+#[derive(Clone)]
 pub enum Object {
     TextureObject(TextureObject),
     TextureBlur(TextureBlur),
@@ -104,12 +105,35 @@ pub struct TextureObject {
     pub transform: nalgebra::Matrix4<f32>,
 }
 
+impl Clone for TextureObject {
+    fn clone(&self) -> Self {
+        TextureObject {
+            texture: Arc::clone(&self.texture),
+            uv_vertices: Arc::clone(&self.uv_vertices),
+            indices: Arc::clone(&self.indices),
+            transform: self.transform.clone(),
+        }
+    }
+}
+
 pub struct TextureBlur {
     pub texture: Arc<wgpu::Texture>,
     pub uv_vertices: Arc<Vec<UvVertex>>,
     pub indices: Arc<Vec<u16>>,
     pub transform: nalgebra::Matrix4<f32>,
     pub blur: f32,
+}
+
+impl Clone for TextureBlur {
+    fn clone(&self) -> Self {
+        TextureBlur {
+            texture: Arc::clone(&self.texture),
+            uv_vertices: Arc::clone(&self.uv_vertices),
+            indices: Arc::clone(&self.indices),
+            transform: self.transform.clone(),
+            blur: self.blur,
+        }
+    }
 }
 
 impl Object {

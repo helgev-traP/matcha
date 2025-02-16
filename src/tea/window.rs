@@ -1,10 +1,12 @@
 use std::sync::Arc;
 
+use wgpu::util::DeviceExt;
+
 use super::{
     component::Component,
     context,
     renderer::Renderer,
-    types::{color::Color, size::StdSize},
+    types::{color::Color, range::Range2D},
     ui::Widget,
 };
 
@@ -35,6 +37,7 @@ pub struct Window<'a, Model: Send + 'static, Message: 'static> {
     root_component: Component<Model, Message, Message, Message>,
     root_widget: Option<Box<dyn Widget<Message>>>,
     root_widget_has_dynamic: bool,
+    background_texture: Option<wgpu::Texture>,
 
     // frame
     frame: u64,
@@ -71,6 +74,7 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
             root_component: component,
             root_widget: None,
             root_widget_has_dynamic: false,
+            background_texture: None,
             frame: 0,
             mouse_state: None,
             mouse_primary_button: winit::event::MouseButton::Left,
@@ -146,17 +150,47 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
 
         // --- rendering ---
 
+        // prepare background texture
+
+        let background_texture = self.background_texture.get_or_insert_with(|| {
+            let device = self.context.as_ref().unwrap().get_wgpu_device();
+            let queue = self.context.as_ref().unwrap().get_wgpu_queue();
+
+            device.create_texture_with_data(
+                queue,
+                &wgpu::TextureDescriptor {
+                    size: wgpu::Extent3d {
+                        width: 1,
+                        height: 1,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST,
+                    label: None,
+                    view_formats: &[],
+                },
+                wgpu::util::TextureDataOrder::MipMajor,
+                &self.base_color.to_rgba_u8(),
+            )
+        });
+        let background_texture_view =
+            background_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let background_range = Range2D {
+            x: [0.0, 1.0],
+            y: [0.0, 1.0],
+        };
+
         // benchmark timer start ----------------------------------
         self.benchmark.as_mut().unwrap().start();
 
         // get root component's render result
         let render_result = self.root_widget.as_mut().unwrap().render(
             [viewport_size[0].into(), viewport_size[1].into()],
-            &surface_texture_view, // todo: check if this is works
-            [
-                [0.0, 0.0],
-                [viewport_size[0].into(), viewport_size[1].into()],
-            ],
+            &background_texture_view,
+            background_range,
             self.context.as_ref().unwrap(),
             self.renderer.as_ref().unwrap(),
             self.frame,
