@@ -2,7 +2,7 @@ use crate::{
     context::SharedContext,
     events::UiEvent,
     renderer::Renderer,
-    types::size::{Size, StdSize},
+    types::{range::Range2D, size::{Size, StdSize}},
     ui::{Dom, DomComPareResult, Object, Widget},
 };
 
@@ -62,6 +62,7 @@ impl<T: Send + 'static> Widget<T> for TemplateNode {
     }
 
     // for dom handling
+    // keep in mind to change redraw flag to true if some change is made.
     fn update_widget_tree(&mut self, dom: &dyn Dom<T>) -> Result<(), ()> {
         if (*dom).type_id() != std::any::TypeId::of::<Template>() {
             Err(())
@@ -151,7 +152,7 @@ impl<T: Send + 'static> Widget<T> for TemplateNode {
         // ui environment
         parent_size: [StdSize; 2],
         background_view: &wgpu::TextureView,
-        background_position: [[f32; 2]; 2], // [{upper left uv_x, uv_y}, {lower right uv_x, uv_y}]
+        background_position: Range2D<f32>,
         // context
         context: &SharedContext,
         renderer: &Renderer,

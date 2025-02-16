@@ -45,6 +45,15 @@ impl Color {
         }
     }
 
+    pub fn is_opaque(&self) -> bool {
+        match self {
+            Color::Rgba8USrgb { a, .. } => *a == 255,
+            Color::RgbaF32 { a, .. } => *a >= 1.0,
+            Color::RgbaF64 { a, .. } => *a >= 1.0,
+            _ => true,
+        }
+    }
+
     pub fn to_rgba_u8(&self) -> [u8; 4] {
         match self {
             Color::Rgb8USrgb { r, g, b } => {

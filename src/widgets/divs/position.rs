@@ -449,7 +449,14 @@ impl<T: Send + 'static> Widget<T> for PositionNode<T> {
                         );
 
                         item.item
-                            .render(field_std_size, context, renderer, frame)
+                            .render(
+                                field_std_size,
+                                background_view, // fix this
+                                background_position, // fix this
+                                context,
+                                renderer,
+                                frame
+                            )
                             .into_iter()
                             .map(|(texture, vertices, indices, matrix)| {
                                 (
