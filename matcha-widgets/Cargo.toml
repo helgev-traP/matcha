@@ -1,0 +1,25 @@
+[package]
+name = "matcha-widgets"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+# runtime
+rayon = { workspace = true }
+pollster = { workspace = true }
+# winit
+winit = { workspace = true }
+# graphics
+wgpu = { workspace = true }
+bytemuck = { features = ["derive"], workspace = true }
+# math
+nalgebra = { features = ["bytemuck"], workspace = true }
+# image
+image = { workspace = true }
+# other
+rand = { workspace = true }
+num = { workspace = true }
+downcast-rs = { workspace = true }
+ahash = { workspace = true }
+uuid = { features = ["v4"], workspace = true }

@@ -10,6 +10,7 @@ pub struct Renderer {
     context: SharedContext,
 
     // vello renderer
+    // todo: remove
     vello_renderer: std::sync::Mutex<vello::Renderer>,
 
     // renderers
@@ -22,7 +23,7 @@ impl Renderer {
 
         // vello renderer
         let vello_renderer = vello::Renderer::new(
-            &device,
+            device,
             vello::RendererOptions {
                 surface_format: Some(wgpu::TextureFormat::Rgba8Unorm),
                 use_cpu: false,
@@ -30,13 +31,12 @@ impl Renderer {
                 num_init_threads: None,
             },
         )
-        .unwrap()
-        .into();
+        .unwrap();
 
         // pipelines
 
         let texture_object_renderer = texture_object_renderer::TextureObjectRenderer::new(
-            &device,
+            device,
             context.get_surface_format(),
         );
 
