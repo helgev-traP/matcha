@@ -5,8 +5,7 @@ use crate::{
     events::UiEvent,
     renderer::Renderer,
     types::{
-        color::Color,
-        size::{Size, StdSize},
+        color::Color, range::Range2D, size::{Size, StdSize}
     },
     ui::{Dom, DomComPareResult, Object, TextureObject, Widget},
     vertex::uv_vertex::UvVertex,
@@ -118,7 +117,7 @@ impl<R: Send + 'static> Widget<R> for SquareWidget {
     }
 
     fn is_inside(
-        &self,
+        &mut self,
         position: [f32; 2],
         parent_size: [StdSize; 2],
         context: &SharedContext,
@@ -174,7 +173,7 @@ impl<R: Send + 'static> Widget<R> for SquareWidget {
         self.size
     }
 
-    fn px_size(&self, parent_size: [StdSize; 2], context: &SharedContext) -> [f32; 2] {
+    fn px_size(&mut self, parent_size: [StdSize; 2], context: &SharedContext) -> [f32; 2] {
         [
             self.size[0]
                 .to_std_size(parent_size[0], context)
@@ -185,14 +184,14 @@ impl<R: Send + 'static> Widget<R> for SquareWidget {
         ]
     }
 
-    fn drawing_range(&self, parent_size: [StdSize; 2], context: &SharedContext) -> [[f32; 2]; 2] {
+    fn draw_range(&mut self, parent_size: [StdSize; 2], context: &SharedContext) -> [[f32; 2]; 2] {
         let px_size: [f32; 2] = Widget::<R>::px_size(self, parent_size, context);
 
         [[0.0, 0.0], px_size]
     }
 
     fn cover_area(
-        &self,
+        &mut self,
         parent_size: [StdSize; 2],
         context: &SharedContext,
     ) -> Option<[[f32; 2]; 2]> {
@@ -217,7 +216,7 @@ impl<R: Send + 'static> Widget<R> for SquareWidget {
         // ui environment
         parent_size: [StdSize; 2],
         background_view: &wgpu::TextureView,
-        background_position: [[f32; 2]; 2], // [{upper left x, y}, {lower right x, y}]
+        background_position: Range2D<f32>,
         // context
         context: &SharedContext,
         renderer: &Renderer,

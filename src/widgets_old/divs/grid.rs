@@ -1,7 +1,5 @@
 use std::sync::{Arc, Mutex};
 
-use wgpu::naga::back;
-
 use crate::{
     context::SharedContext,
     events::UiEvent,
@@ -425,7 +423,7 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
     }
 
     fn is_inside(
-        &self,
+        &mut self,
         position: [f32; 2],
         parent_size: [StdSize; 2],
         context: &SharedContext,
@@ -442,7 +440,7 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
         [Size::Parent(1.0), Size::Parent(1.0)]
     }
 
-    fn px_size(&self, parent_size: [StdSize; 2], context: &SharedContext) -> [f32; 2] {
+    fn px_size(&mut self, parent_size: [StdSize; 2], context: &SharedContext) -> [f32; 2] {
         self.grid_cache
             .lock()
             .unwrap()
@@ -450,17 +448,24 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
             .px_size
     }
 
-    fn drawing_range(&self, parent_size: [StdSize; 2], context: &SharedContext) -> [[f32; 2]; 2] {
+    fn draw_range(
+        &mut self,
+        parent_size: [StdSize; 2],
+        context: &SharedContext,
+    ) -> Option<Range2D<f32>> {
         let px_size = self.px_size(parent_size, context);
 
-        [[0.0, 0.0], [px_size[0], px_size[1]]]
+        Some(Range2D {
+            x: [0.0, px_size[0]],
+            y: [0.0, px_size[1]],
+        })
     }
 
     fn cover_area(
-        &self,
+        &mut self,
         parent_size: [StdSize; 2],
         context: &SharedContext,
-    ) -> Option<[[f32; 2]; 2]> {
+    ) -> Option<Range2D<f32>> {
         None
     }
 
@@ -546,20 +551,29 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
                         StdSize::Pixel(vertical_end - vertical_start),
                     ],
                     background_view,
-                    Range2D {
-                        // rewrite it to use completion function
-                        x: [
-                            completion(background_range.x, vertical_start / grid_cache.px_size[0]),
-                            completion(background_range.x, vertical_end / grid_cache.px_size[0]),
-                        ],
-                        y: [
+                    Range2D::new(
+                        [
                             completion(
-                                background_range.y,
+                                background_range.x_range(),
+                                vertical_start / grid_cache.px_size[0],
+                            ),
+                            completion(
+                                background_range.x_range(),
+                                vertical_end / grid_cache.px_size[0],
+                            ),
+                        ],
+                        [
+                            completion(
+                                background_range.y_range(),
                                 horizontal_start / grid_cache.px_size[1],
                             ),
-                            completion(background_range.y, horizontal_end / grid_cache.px_size[1]),
+                            completion(
+                                background_range.y_range(),
+                                horizontal_end / grid_cache.px_size[1],
+                            ),
                         ],
-                    },
+                    )
+                    .unwrap(),
                     context,
                     renderer,
                     frame,

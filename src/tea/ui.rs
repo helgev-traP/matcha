@@ -4,48 +4,56 @@ use super::{
     context::SharedContext,
     events::{UiEvent, UiEventResult},
     renderer::Renderer,
-    types::{range::Range2D, size::{Size, StdSize}},
+    types::range::Range2D,
     vertex::uv_vertex::UvVertex,
 };
 
 // dom tree node
 
-pub trait Dom<T>: Any + 'static {
+pub trait Dom<T>: Any {
     // if any dynamic widget is included in the widget tree, the second value is true.
-    fn build_widget_tree(&self) -> (Box<dyn Widget<T>>, bool);
+    fn build_widget_tree(&self) -> Box<dyn Widget<T>>;
+    // todo: consider use downcast-rs crate
     fn as_any(&self) -> &dyn Any;
 }
 
 // render tree node
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum UpdateWidgetError {
+    TypeMismatch,
+}
+
+// todo: consider integrate frame into `SharedContext`.
 pub trait Widget<T> {
     // label
     fn label(&self) -> Option<&str>;
 
     // for dom handling
-    fn update_widget_tree(&mut self, dom: &dyn Dom<T>) -> Result<(), ()>;
-    fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult;
+    fn update_widget_tree(&mut self, dom: &dyn Dom<T>) -> Result<(), UpdateWidgetError>;
 
-    // raw event
-    // todo ?
-    // fn raw_event(&self, event: ?) -> ?;
+    fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult;
 
     // widget event
     fn widget_event(
         &mut self,
         event: &UiEvent,
-        parent_size: [StdSize; 2],
+        parent_size: [Option<f32>; 2],
         context: &SharedContext,
+        tag: u64,
+        frame: u64,
     ) -> UiEventResult<T>;
 
     // inside / outside check
     fn is_inside(
-        &self,
+        &mut self,
         position: [f32; 2],
-        parent_size: [StdSize; 2],
+        parent_size: [Option<f32>; 2],
         context: &SharedContext,
+        tag: u64,
+        frame: u64,
     ) -> bool {
-        let px_size = self.px_size(parent_size, context);
+        let px_size = self.px_size(parent_size, context, tag, frame);
 
         !(position[0] < 0.0
             || position[0] > px_size[0]
@@ -53,33 +61,69 @@ pub trait Widget<T> {
             || position[1] > px_size[1])
     }
 
-    /// The size configuration of the widget.
-    fn size(&self) -> [Size; 2];
-
     /// Actual size including its sub widgets with pixel value.
-    fn px_size(&self, parent_size: [StdSize; 2], context: &SharedContext) -> [f32; 2];
+    fn px_size(
+        &mut self,
+        parent_size: [Option<f32>; 2],
+        context: &SharedContext,
+        tag: u64,
+        frame: u64,
+    ) -> [f32; 2];
 
     /// The drawing range of the whole widget.
-    fn drawing_range(&self, parent_size: [StdSize; 2], context: &SharedContext) -> [[f32; 2]; 2];
+    fn draw_range(
+        &mut self,
+        parent_size: [Option<f32>; 2],
+        context: &SharedContext,
+        tag: u64,
+        frame: u64,
+    ) -> Option<Range2D<f32>>;
 
     /// The area that the widget always covers.
-    fn cover_area(&self, parent_size: [StdSize; 2], context: &SharedContext) -> Option<[[f32; 2]; 2]>;
-
-    fn has_dynamic(&self) -> bool;
+    fn cover_area(
+        &mut self,
+        parent_size: [Option<f32>; 2],
+        context: &SharedContext,
+        tag: u64,
+        frame: u64,
+    ) -> Option<Range2D<f32>>;
 
     fn redraw(&self) -> bool;
 
+    // fn render(
+    //     &mut self,
+    //     // ui background
+    //     parent_size: [Option<f32>; 2],
+    //     background_view: &wgpu::TextureView,
+    //     background_range: Range2D<f32>,
+    //     // context
+    //     context: &SharedContext,
+    //     renderer: &Renderer,
+    //     tag: u64,
+    //     frame: u64,
+    // ) -> Vec<Object>;
+
     fn render(
         &mut self,
-        // ui environment
-        parent_size: [StdSize; 2],
-        background_view: &wgpu::TextureView,
-        background_range: Range2D<f32>,
-        // context
-        context: &SharedContext,
-        renderer: &Renderer,
-        frame: u64,
+        ui_background: UiBackground,
+        ui_context: UiContext,
     ) -> Vec<Object>;
+
+    // todo
+    // fn update_gpu_device(&mut self, device: &wgpu::Device, queue: &wgpu::Queue);
+}
+
+pub struct UiBackground<'a> {
+    pub parent_size: [Option<f32>; 2],
+    pub background_view: &'a wgpu::TextureView,
+    pub background_range: Range2D<f32>,
+}
+
+pub struct UiContext<'a> {
+    pub context: &'a SharedContext,
+    pub renderer: &'a Renderer,
+    pub tag: u64,
+    pub frame: u64,
 }
 
 pub enum DomComPareResult {
@@ -89,6 +133,10 @@ pub enum DomComPareResult {
 }
 
 // todo: add object type when renderer is ready
+// todo: Arcによる共有をObject内に持つべきか検討
+// todo: add re-rendering range to apply scissors test for optimization
+/// `Arc` is not necessary for sharing objects
+/// since `Arc` is already used in this struct.
 #[derive(Clone)]
 pub enum Object {
     TextureObject(TextureObject),

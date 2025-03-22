@@ -24,14 +24,14 @@ pub enum Size {
 
 impl Size {
     /// standardize `Size` to `StdSize` with dependent on parent `StdSize`.
-    pub fn to_std_size(&self, parent_px_size: StdSize, app_context: &SharedContext) -> StdSize {
+    pub fn to_std_size(&self, parent_px_size: Option<f32>, app_context: &SharedContext) -> StdSize {
         match self {
             Size::Pixel(x) => StdSize::Pixel(*x),
             Size::Inch(x) => StdSize::Pixel(*x * app_context.get_dpi() as f32),
             Size::Point(x) => StdSize::Pixel(*x * app_context.get_dpi() as f32 / 72.0),
             Size::Parent(x) => match parent_px_size {
-                StdSize::Pixel(px) => StdSize::Pixel(px * x),
-                StdSize::Content(_) => StdSize::Content(1.0), // todo: consider is this correct?
+                Some(px) => StdSize::Pixel(px * x),
+                None => StdSize::Content(1.0),
             },
             Size::Em(_) => todo!(),
             Size::Rem(_) => todo!(),

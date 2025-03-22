@@ -20,6 +20,8 @@ impl Default for TemplateDescriptor {
     }
 }
 
+// MARK: DOM
+
 pub struct Template {
     label: Option<String>,
     size: [Size; 2],
@@ -50,12 +52,18 @@ impl<T: Send + 'static> Dom<T> for Template {
     }
 }
 
+// MARK: Widget
+
 pub struct TemplateNode {
     label: Option<String>,
     size: [Size; 2],
 }
 
+// MARK: Widget trait
+
 impl<T: Send + 'static> Widget<T> for TemplateNode {
+    // todo: more documentation
+
     // label
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
@@ -117,22 +125,22 @@ impl<T: Send + 'static> Widget<T> for TemplateNode {
     }
 
     // Actual size including its sub widgets with pixel value.
-    fn px_size(&self, parent_size: [StdSize; 2], context: &SharedContext) -> [f32; 2] {
+    fn px_size(&mut self, parent_size: [StdSize; 2], context: &SharedContext) -> [f32; 2] {
         let _ = (parent_size, context);
         todo!()
     }
 
     // The drawing range of the whole widget.
-    fn drawing_range(&self, parent_size: [StdSize; 2], context: &SharedContext) -> [[f32; 2]; 2] {
+    fn draw_range(&mut self, parent_size: [StdSize; 2], context: &SharedContext) -> Option<Range2D<f32>> {
         todo!()
     }
 
     // The area that the widget always covers.
     fn cover_area(
-        &self,
+        &mut self,
         parent_size: [StdSize; 2],
         context: &SharedContext,
-    ) -> Option<[[f32; 2]; 2]> {
+    ) -> Option<Range2D<f32>> {
         todo!()
     }
 

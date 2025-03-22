@@ -1,18 +1,19 @@
-use nalgebra::{Point2, Point3};
-use wgpu::util::DeviceExt;
+use std::sync::Arc;
 
-use super::vertex_generator::{rectangle, RectangleDescriptor};
-use crate::context::SharedContext;
+use crate::types::range::Range2D;
+use nalgebra::{Point2, Point3};
+
+use super::vertex::{Mesh, Vertex};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct UvVertex {
     pub position: Point3<f32>,
-    pub tex_coords: Point2<f32>,
+    pub uv: Point2<f32>,
 }
 
 impl UvVertex {
-    pub fn desc() -> wgpu::VertexBufferLayout<'static> {
+    pub const fn desc<'a>() -> wgpu::VertexBufferLayout<'a> {
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<UvVertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
@@ -30,138 +31,57 @@ impl UvVertex {
             ],
         }
     }
+}
 
-    /// Create a rectangle with the given position of upper-left corner, width, and height.
-    pub fn atomic_rectangle(x: f32, y: f32, width: f32, height: f32) -> ([UvVertex; 4], [u16; 6]) {
-        // 0-------3
-        // | \     |
-        // |   \   |
-        // |     \ |
-        // 1-------2
-        (
-            [
-                UvVertex {
-                    position: [x, y, 0.0].into(),
-                    tex_coords: [0.0, 0.0].into(),
-                },
-                UvVertex {
-                    position: [x, y - height, 0.0].into(),
-                    tex_coords: [0.0, 1.0].into(),
-                },
-                UvVertex {
-                    position: [x + width, y - height, 0.0].into(),
-                    tex_coords: [1.0, 1.0].into(),
-                },
-                UvVertex {
-                    position: [x + width, y, 0.0].into(),
-                    tex_coords: [1.0, 0.0].into(),
-                },
-            ],
-            [0, 1, 2, 0, 2, 3],
-        )
+// MARK: Uv Mesh
+
+pub struct UvMesh {
+    pub vertices: Vec<UvVertex>,
+    pub indices: Vec<u16>,
+    pub texture: Arc<wgpu::Texture>,
+}
+
+impl UvMesh {
+    pub fn data_len(&self) -> usize {
+        self.vertices.len() + self.indices.len()
     }
 
-    pub fn atomic_rectangle_buffer(
-        context: &SharedContext,
-        x: f32,
-        y: f32,
-        width: f32,
-        height: f32,
-        compute: bool,
-    ) -> (wgpu::Buffer, wgpu::Buffer, u32) {
-        let (vertices, indices) = UvVertex::atomic_rectangle(x, y, width, height);
+    pub fn mesh_integrate(&mut self, other: &mut UvMesh) -> Result<(), ()> {
+        // check if texture are same
+        if Arc::ptr_eq(&self.texture, &other.texture) {
+            let offset = self.vertices.len() as u16;
 
-        let vertex_buffer;
+            self.vertices.append(&mut other.vertices);
 
-        if compute {
-            vertex_buffer =
-                context
-                    .get_wgpu_device()
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Vertex Buffer"),
-                        contents: bytemuck::cast_slice(&vertices),
-                        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::STORAGE,
-                    });
+            self.indices
+                .extend(other.indices.drain(..).map(|i| i + offset));
+
+            Ok(())
         } else {
-            vertex_buffer =
-                context
-                    .get_wgpu_device()
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Vertex Buffer"),
-                        contents: bytemuck::cast_slice(&vertices),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    });
+            Err(())
+        }
+    }
+}
+
+fn uv_mesh_integrate(meshes: Vec<UvMesh>) -> Vec<UvMesh> {
+    // integrate meshes as much as possible
+
+    let mut new_meshes: Vec<UvMesh> = Vec::new();
+
+    meshes.into_iter().for_each(|mut mesh| {
+        let mut is_integrated = false;
+
+        for new_mesh in new_meshes.iter_mut() {
+            if let Ok(_) = new_mesh.mesh_integrate(&mut mesh) {
+                is_integrated = true;
+                break;
+            }
         }
 
-        let index_buffer =
-            context
-                .get_wgpu_device()
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Index Buffer"),
-                    contents: bytemuck::cast_slice(&indices),
-                    usage: wgpu::BufferUsages::INDEX,
-                });
-
-        (vertex_buffer, index_buffer, indices.len() as u32)
-    }
-
-    pub fn rectangle(desc: RectangleDescriptor) -> (Vec<UvVertex>, Vec<u16>) {
-        let (raw_vertex, index) = rectangle(desc);
-
-        let mut vertex = Vec::with_capacity(raw_vertex.len());
-
-        for raw_vertex in raw_vertex {
-            vertex.push(UvVertex {
-                position: raw_vertex.position.into(),
-                tex_coords: [
-                    (raw_vertex.position[0] - desc.x) / desc.width,
-                    (raw_vertex.position[1] + desc.y) / desc.height,
-                ]
-                .into(),
-            });
+        if !is_integrated {
+            new_meshes.push(mesh);
         }
+    });
 
-        (vertex, index)
-    }
-
-    pub fn rectangle_buffer(
-        context: &SharedContext,
-        desc: RectangleDescriptor,
-        compute: bool,
-    ) -> (wgpu::Buffer, wgpu::Buffer, u32) {
-        let (vertices, indices) = UvVertex::rectangle(desc);
-
-        let vertex_buffer;
-
-        if compute {
-            vertex_buffer =
-                context
-                    .get_wgpu_device()
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Vertex Buffer"),
-                        contents: bytemuck::cast_slice(&vertices),
-                        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::STORAGE,
-                    });
-        } else {
-            vertex_buffer =
-                context
-                    .get_wgpu_device()
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Vertex Buffer"),
-                        contents: bytemuck::cast_slice(&vertices),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    });
-        }
-
-        let index_buffer =
-            context
-                .get_wgpu_device()
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Index Buffer"),
-                    contents: bytemuck::cast_slice(&indices),
-                    usage: wgpu::BufferUsages::INDEX,
-                });
-
-        (vertex_buffer, index_buffer, indices.len() as u32)
-    }
+    new_meshes
 }

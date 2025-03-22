@@ -12,6 +12,15 @@ where
     current_frame: u64,
 }
 
+impl<K, V> Default for DoubleSetCache<K, V>
+where
+    K: Eq + std::hash::Hash + Clone,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<K, V> DoubleSetCache<K, V>
 where
     K: Eq + std::hash::Hash + Clone,
