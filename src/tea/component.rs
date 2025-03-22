@@ -3,12 +3,11 @@ use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use super::{
     context::SharedContext,
     events::UiEventResult,
-    types::{
-        range::Range2D,
-        size::{Size, StdSize},
-    },
-    ui::{Dom, DomComPareResult, Object, Widget},
+    types::range::Range2D,
+    ui::{Dom, DomComPareResult, Object, UiBackground, UiContext, UpdateWidgetError, Widget},
 };
+
+// MARK: - Component
 
 pub struct Component<Model, Message, OuterResponse, InnerResponse> {
     label: Option<String>,
@@ -32,6 +31,9 @@ pub struct Component<Model, Message, OuterResponse, InnerResponse> {
     widget_tree: Option<Arc<Mutex<Box<dyn Widget<InnerResponse>>>>>,
 }
 
+// MARK: - constructor
+
+// Component constructor
 impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'static>
     Component<Model, Message, OuterResponse, InnerResponse>
 {
@@ -65,6 +67,8 @@ impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'sta
     }
 }
 
+// MARK: - methods
+
 // access to the model immutable
 // todo: モデルの変更を直接行うか、メッセージを通して行うか判断。
 impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'static>
@@ -75,6 +79,7 @@ impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'sta
     }
 }
 
+// methods
 impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'static>
     Component<Model, Message, OuterResponse, InnerResponse>
 {
@@ -90,32 +95,6 @@ impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'sta
             },
             message,
         );
-    }
-
-    fn update_local(
-        &mut self,
-        event: UiEventResult<InnerResponse>,
-    ) -> UiEventResult<OuterResponse> {
-        (self.react_fn)(
-            &ComponentAccess {
-                model: self.model.clone(),
-                model_updated: self.model_updated.clone(),
-            },
-            event,
-        )
-    }
-
-    fn update_widget_tree(&mut self) {
-        let dom = (self.fn_view)(&*self.model.read().unwrap());
-
-        if let Some(ref mut render_tree) = self.widget_tree {
-            if let Ok(_) = render_tree.lock().unwrap().update_widget_tree(&*dom) {
-                return;
-            }
-            *self.widget_tree.as_ref().unwrap().lock().unwrap() = dom.build_widget_tree().0;
-        } else {
-            self.widget_tree = Some(Arc::new(Mutex::new(dom.build_widget_tree().0)));
-        }
     }
 
     pub fn view(&mut self) -> Arc<dyn Dom<OuterResponse>> {
@@ -136,6 +115,47 @@ impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'sta
         })
     }
 }
+
+// MARK: - inner methods
+
+// inner methods
+impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'static>
+    Component<Model, Message, OuterResponse, InnerResponse>
+{
+    // todo: this seems not necessary
+    // fn update_local(
+    //     &mut self,
+    //     event: UiEventResult<InnerResponse>,
+    // ) -> UiEventResult<OuterResponse> {
+    //     (self.react_fn)(
+    //         &ComponentAccess {
+    //             model: self.model.clone(),
+    //             model_updated: self.model_updated.clone(),
+    //         },
+    //         event,
+    //     )
+    // }
+
+    fn update_widget_tree(&mut self) {
+        let dom = (self.fn_view)(&*self.model.read().unwrap());
+
+        if let Some(ref mut render_tree) = self.widget_tree {
+            if render_tree
+                .lock()
+                .unwrap()
+                .update_widget_tree(&*dom)
+                .is_ok()
+            {
+                return;
+            }
+            *self.widget_tree.as_ref().unwrap().lock().unwrap() = dom.build_widget_tree();
+        } else {
+            self.widget_tree = Some(Arc::new(Mutex::new(dom.build_widget_tree())));
+        }
+    }
+}
+
+// MARK: - ComponentAccess
 
 pub struct ComponentAccess<Model> {
     model: Arc<RwLock<Model>>,
@@ -162,6 +182,8 @@ impl<Model> ComponentAccess<Model> {
     }
 }
 
+// MARK: - ComponentDom
+
 pub struct ComponentDom<Model, OuterResponse, InnerResponse>
 where
     Model: Send + 'static,
@@ -175,27 +197,6 @@ where
     widget_tree: Arc<Mutex<Box<dyn Widget<InnerResponse>>>>,
 }
 
-// impl<Model: Send, OuterResponse, InnerResponse> ComponentDom<Model, OuterResponse, InnerResponse>
-// where
-//     Model: 'static,
-//     OuterResponse: 'static,
-//     InnerResponse: 'static,
-// {
-//     fn build_widget_tree_as_root(
-//         &self,
-//         background_color: [f32; 4],
-//     ) -> Box<dyn Widget<OuterResponse>> {
-//         Box::new(ComponentWidget {
-//             label: self.label.clone(),
-//             component_model: self.component_model.clone(),
-//             local_update_component: self.react_fn,
-//             node: self.widget_tree.clone(),
-//             root_background_color: Some(background_color),
-//             root_texture: None,
-//         })
-//     }
-// }
-
 impl<Model: Send, OuterResponse, InnerResponse> Dom<OuterResponse>
     for ComponentDom<Model, OuterResponse, InnerResponse>
 where
@@ -203,24 +204,21 @@ where
     OuterResponse: 'static,
     InnerResponse: 'static,
 {
-    fn build_widget_tree(&self) -> (Box<dyn Widget<OuterResponse>>, bool) {
-        (
-            Box::new(ComponentWidget {
-                label: self.label.clone(),
-                component_model: self.component_model.clone(),
-                local_update_component: self.react_fn,
-                node: self.widget_tree.clone(),
-                root_background_color: None,
-                root_texture: None,
-            }),
-            self.widget_tree.lock().unwrap().has_dynamic(),
-        )
+    fn build_widget_tree(&self) -> Box<dyn Widget<OuterResponse>> {
+        Box::new(ComponentWidget {
+            label: self.label.clone(),
+            component_model: self.component_model.clone(),
+            local_update_component: self.react_fn,
+            node: self.widget_tree.clone(),
+        })
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
 }
+
+// MARK: - ComponentWidget
 
 pub struct ComponentWidget<Model, OuterResponse, InnerResponse>
 where
@@ -233,47 +231,6 @@ where
     local_update_component:
         fn(&ComponentAccess<Model>, UiEventResult<InnerResponse>) -> UiEventResult<OuterResponse>,
     node: Arc<Mutex<Box<dyn Widget<InnerResponse>>>>,
-    // if this is root component
-    root_background_color: Option<[f32; 4]>,
-    root_texture: Option<wgpu::Texture>,
-}
-
-impl<Model, OuterResponse, InnerResponse> ComponentWidget<Model, OuterResponse, InnerResponse>
-where
-    Model: 'static,
-    OuterResponse: 'static,
-    InnerResponse: 'static,
-{
-    pub(crate) fn render_as_root(
-        &mut self,
-        // ui environment
-        parent_size: [StdSize; 2],
-        // context
-        context: &SharedContext,
-        renderer: &super::renderer::Renderer,
-        frame: u64,
-    ) -> Vec<Object> {
-        let texture = self.root_texture.get_or_insert_with(|| {
-            // prepare the background texture
-
-            todo!()
-        });
-
-        let background_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let background_range = Range2D {
-            x: [0.0, 1.0],
-            y: [0.0, 1.0],
-        };
-
-        self.node.lock().unwrap().render(
-            parent_size,
-            &background_view,
-            background_range,
-            context,
-            renderer,
-            frame,
-        )
-    }
 }
 
 impl<Model, OuterResponse, InnerResponse> Widget<OuterResponse>
@@ -283,90 +240,96 @@ impl<Model, OuterResponse, InnerResponse> Widget<OuterResponse>
         self.label.as_deref()
     }
 
-    fn widget_event(
+    fn update_widget_tree(
         &mut self,
-        event: &super::events::UiEvent,
-        parent_size: [StdSize; 2],
-        context: &SharedContext,
-    ) -> UiEventResult<OuterResponse> {
-        (self.local_update_component)(
-            &self.component_model,
-            self.node
-                .lock()
-                .unwrap()
-                .widget_event(event, parent_size, context),
-        )
-    }
-
-    fn is_inside(
-        &self,
-        position: [f32; 2],
-        parent_size: [StdSize; 2],
-        context: &SharedContext,
-    ) -> bool {
-        self.node
-            .lock()
-            .unwrap()
-            .is_inside(position, parent_size, context)
+        dom: &dyn Dom<OuterResponse>,
+    ) -> Result<(), UpdateWidgetError> {
+        if dom.as_any().is::<Self>() {
+            Ok(())
+        } else {
+            Err(UpdateWidgetError::TypeMismatch)
+        }
     }
 
     fn compare(&self, _: &dyn Dom<OuterResponse>) -> DomComPareResult {
         DomComPareResult::Different
     }
 
-    fn update_widget_tree(&mut self, _: &dyn Dom<OuterResponse>) -> Result<(), ()> {
-        Ok(())
+    fn widget_event(
+        &mut self,
+        event: &super::events::UiEvent,
+        parent_size: [Option<f32>; 2],
+        context: &SharedContext,
+        tag: u64,
+        frame: u64,
+    ) -> UiEventResult<OuterResponse> {
+        (self.local_update_component)(
+            &self.component_model,
+            self.node
+                .lock()
+                .unwrap()
+                .widget_event(event, parent_size, context, tag, frame),
+        )
     }
 
-    fn size(&self) -> [Size; 2] {
-        self.node.lock().unwrap().size()
-    }
-
-    fn px_size(&self, parent_size: [StdSize; 2], context: &SharedContext) -> [f32; 2] {
-        self.node.lock().unwrap().px_size(parent_size, context)
-    }
-
-    fn drawing_range(&self, parent_size: [StdSize; 2], context: &SharedContext) -> [[f32; 2]; 2] {
+    fn is_inside(
+        &mut self,
+        position: [f32; 2],
+        parent_size: [Option<f32>; 2],
+        context: &SharedContext,
+        tag: u64,
+        frame: u64,
+    ) -> bool {
         self.node
             .lock()
             .unwrap()
-            .drawing_range(parent_size, context)
+            .is_inside(position, parent_size, context, tag, frame)
+    }
+
+    fn px_size(
+        &mut self,
+        parent_size: [Option<f32>; 2],
+        context: &SharedContext,
+        tag: u64,
+        frame: u64,
+    ) -> [f32; 2] {
+        self.node
+            .lock()
+            .unwrap()
+            .px_size(parent_size, context, tag, frame)
+    }
+
+    fn draw_range(
+        &mut self,
+        parent_size: [Option<f32>; 2],
+        context: &SharedContext,
+        tag: u64,
+        frame: u64,
+    ) -> Option<Range2D<f32>> {
+        self.node
+            .lock()
+            .unwrap()
+            .draw_range(parent_size, context, tag, frame)
     }
 
     fn cover_area(
-        &self,
-        parent_size: [StdSize; 2],
+        &mut self,
+        parent_size: [Option<f32>; 2],
         context: &SharedContext,
-    ) -> Option<[[f32; 2]; 2]> {
-        self.node.lock().unwrap().cover_area(parent_size, context)
-    }
-
-    fn has_dynamic(&self) -> bool {
-        self.node.lock().unwrap().has_dynamic()
+        tag: u64,
+        frame: u64,
+    ) -> Option<Range2D<f32>> {
+        self.node
+            .lock()
+            .unwrap()
+            .cover_area(parent_size, context, tag, frame)
     }
 
     fn redraw(&self) -> bool {
         self.node.lock().unwrap().redraw()
     }
 
-    fn render(
-        &mut self,
-        // ui environment
-        parent_size: [StdSize; 2],
-        background_view: &wgpu::TextureView,
-        background_range: Range2D<f32>,
-        // context
-        context: &SharedContext,
-        renderer: &super::renderer::Renderer,
-        frame: u64,
-    ) -> Vec<Object> {
-        self.node.lock().unwrap().render(
-            parent_size,
-            background_view,
-            background_range,
-            context,
-            renderer,
-            frame,
-        )
+    fn render(&mut self, ui_background: UiBackground, ui_context: UiContext) -> Vec<Object> {
+        self.node.lock().unwrap().render(ui_background, ui_context)
     }
 }

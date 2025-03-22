@@ -36,7 +36,6 @@ pub struct Window<'a, Model: Send + 'static, Message: 'static> {
     // root component
     root_component: Component<Model, Message, Message, Message>,
     root_widget: Option<Box<dyn Widget<Message>>>,
-    root_widget_has_dynamic: bool,
     background_texture: Option<wgpu::Texture>,
 
     // frame
@@ -73,7 +72,6 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
             renderer: None,
             root_component: component,
             root_widget: None,
-            root_widget_has_dynamic: false,
             background_texture: None,
             frame: 0,
             mouse_state: None,
@@ -178,22 +176,23 @@ impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
         });
         let background_texture_view =
             background_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let background_range = Range2D {
-            x: [0.0, 1.0],
-            y: [0.0, 1.0],
-        };
+        let background_range = Range2D::new([0.0, 1.0], [0.0, 1.0]).unwrap();
 
         // benchmark timer start ----------------------------------
         self.benchmark.as_mut().unwrap().start();
 
-        // get root component's render result
         let render_result = self.root_widget.as_mut().unwrap().render(
-            [viewport_size[0].into(), viewport_size[1].into()],
-            &background_texture_view,
-            background_range,
-            self.context.as_ref().unwrap(),
-            self.renderer.as_ref().unwrap(),
-            self.frame,
+            crate::ui::UiBackground {
+                parent_size: [Some(viewport_size[0]), Some(viewport_size[1])],
+                background_view: &background_texture_view,
+                background_range,
+            },
+            crate::ui::UiContext {
+                context: self.context.as_ref().unwrap(),
+                renderer: self.renderer.as_ref().unwrap(),
+                tag: 0,
+                frame: self.frame,
+            },
         );
 
         // project to screen
@@ -290,10 +289,9 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
         }
 
         // --- render ---
-        let (root_widget, root_widget_has_dynamic) = self.root_component.view().build_widget_tree();
+        let root_widget = self.root_component.view().build_widget_tree();
 
         self.root_widget = Some(root_widget);
-        self.root_widget_has_dynamic = root_widget_has_dynamic;
 
         self.render();
     }
@@ -406,6 +404,8 @@ impl<Model: Send, Message: 'static> winit::application::ApplicationHandler<Messa
             &ui_event,
             [viewport_size[0].into(), viewport_size[1].into()],
             self.context.as_ref().unwrap(),
+            0,
+            self.frame,
         );
 
         // update component

@@ -33,8 +33,8 @@ impl SharedContext {
     ) -> Self {
         Self {
             winit_window,
-            device: device,
-            queue: queue,
+            device,
+            queue,
             surface_format,
             cosmic_text: if let Some(cosmic_text) = cosmic_text {
                 cosmic_text

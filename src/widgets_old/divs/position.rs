@@ -242,7 +242,7 @@ impl<T: Send + 'static> Widget<T> for PositionNode<T> {
         }
     }
 
-    fn drawing_range(&self, parent_size: [StdSize; 2], context: &SharedContext) -> [[f32; 2]; 2] {
+    fn draw_range(&self, parent_size: [StdSize; 2], context: &SharedContext) -> [[f32; 2]; 2] {
         let size = self.px_size(parent_size, context);
 
         [[0.0, 0.0], [size[0], size[1]]]

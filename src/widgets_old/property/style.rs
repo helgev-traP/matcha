@@ -123,7 +123,6 @@ impl Padding {
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Border {
     pub px: f32,
-    pub color: Color,
     pub top_left_radius: f32,
     pub top_right_radius: f32,
     pub bottom_left_radius: f32,
@@ -131,10 +130,9 @@ pub struct Border {
 }
 
 impl Border {
-    pub fn new(px: f32, color: Color) -> Self {
+    pub fn new(px: f32) -> Self {
         Border {
             px,
-            color,
             ..Default::default()
         }
     }
