@@ -1,9 +1,15 @@
-[package]
-name = "tea-ui"
-version = "0.1.0"
-edition = "2021"
+[workspace]
+members = [
+    "main",
+    "matcha-core",
+    "matcha-widgets",
+]
 
-[dependencies]
+[workspace.dependencies]
+# self
+matcha-core = { path = "matcha-core" }
+matcha-widgets = { path = "matcha-widgets" }
+
 # runtime
 # todo: consider use tokio instead of rayon + pollster.
 rayon = "1.10.0"
@@ -26,4 +32,3 @@ num = "0.4.3"
 downcast-rs = "2.0.1"
 ahash = "0.8.11"
 uuid = { version = "1.16.0", features = ["v4"] }
-
