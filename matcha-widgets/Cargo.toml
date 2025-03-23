@@ -1,10 +1,13 @@
 [package]
 name = "matcha-widgets"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 publish = false
 
 [dependencies]
+# matcha
+matcha-core = { workspace = true }
+
 # runtime
 rayon = { workspace = true }
 pollster = { workspace = true }

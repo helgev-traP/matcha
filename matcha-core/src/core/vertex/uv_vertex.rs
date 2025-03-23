@@ -72,7 +72,7 @@ fn uv_mesh_integrate(meshes: Vec<UvMesh>) -> Vec<UvMesh> {
         let mut is_integrated = false;
 
         for new_mesh in new_meshes.iter_mut() {
-            if let Ok(_) = new_mesh.mesh_integrate(&mut mesh) {
+            if new_mesh.mesh_integrate(&mut mesh).is_ok() {
                 is_integrated = true;
                 break;
             }
