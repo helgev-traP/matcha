@@ -1,7 +1,5 @@
-mod tea;
-pub use tea::*;
-
-pub mod widgets;
+mod core;
+pub use core::*;
 
 mod text;
 pub use text::*;
