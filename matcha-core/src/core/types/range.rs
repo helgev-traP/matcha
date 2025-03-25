@@ -1,10 +1,13 @@
 use num::Float;
+use winit::dpi::Position;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Range2D<T: Float> {
     x: [T; 2],
     y: [T; 2],
 }
+
+// MARK: Initialization
 
 impl<T: Float> Range2D<T> {
     pub fn new(x: [T; 2], y: [T; 2]) -> Option<Self> {
@@ -52,6 +55,8 @@ impl<T: Float> Range2D<T> {
     }
 }
 
+// MARK: Operation
+
 impl<T: Float> Range2D<T> {
     pub fn slide(self, s: [T; 2]) -> Self {
         Range2D {
@@ -76,6 +81,8 @@ impl<T: Float> Range2D<T> {
         Range2D { x, y }
     }
 }
+
+// MARK: Getter
 
 impl<T: Float> Range2D<T> {
     pub fn width(&self) -> T {
@@ -109,6 +116,22 @@ impl<T: Float> Range2D<T> {
         self.width() * self.height()
     }
 
+    pub fn left(&self) -> T {
+        self.x[0]
+    }
+
+    pub fn right(&self) -> T {
+        self.x[1]
+    }
+
+    pub fn top(&self) -> T {
+        self.y[0]
+    }
+
+    pub fn bottom(&self) -> T {
+        self.y[1]
+    }
+
     pub fn upper_left(&self) -> [T; 2] {
         [self.x[0], self.y[0]]
     }
@@ -125,6 +148,25 @@ impl<T: Float> Range2D<T> {
         self.y
     }
 }
+
+// MARK: Utils
+
+impl<T: Float> Range2D<T> {
+    pub fn interpolate(value: Self, mix: Self) -> Self {
+        Range2D {
+            x: [
+                value.x[0] + (value.x[1] - value.x[0]) * mix.x[0],
+                value.x[0] + (value.x[1] - value.x[0]) * mix.x[1],
+            ],
+            y: [
+                value.y[0] + (value.y[1] - value.y[0]) * mix.y[0],
+                value.y[0] + (value.y[1] - value.y[0]) * mix.y[1],
+            ],
+        }
+    }
+}
+
+// MARK: CoverRange
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CoverRange<T: Float> {
