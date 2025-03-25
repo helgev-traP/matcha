@@ -113,12 +113,14 @@ pub trait Widget<T> {
     // fn update_gpu_device(&mut self, device: &wgpu::Device, queue: &wgpu::Queue);
 }
 
+#[derive(Clone, Copy)]
 pub struct UiBackground<'a> {
     pub parent_size: [Option<f32>; 2],
     pub background_view: &'a wgpu::TextureView,
     pub background_range: Range2D<f32>,
 }
 
+#[derive(Clone, Copy)]
 pub struct UiContext<'a> {
     pub context: &'a SharedContext,
     pub renderer: &'a Renderer,
