@@ -70,6 +70,8 @@ pub trait Widget<T> {
         frame: u64,
     ) -> [f32; 2];
 
+    // todo: integrate `draw_range` and `cover_area` into `cover_area` use `range::CoverRange` as return value
+
     /// The drawing range of the whole widget.
     fn draw_range(
         &mut self,
@@ -161,7 +163,7 @@ impl Clone for TextureObject {
             texture: Arc::clone(&self.texture),
             uv_vertices: Arc::clone(&self.uv_vertices),
             indices: Arc::clone(&self.indices),
-            transform: self.transform.clone(),
+            transform: self.transform,
         }
     }
 }
@@ -180,7 +182,7 @@ impl Clone for TextureBlur {
             texture: Arc::clone(&self.texture),
             uv_vertices: Arc::clone(&self.uv_vertices),
             indices: Arc::clone(&self.indices),
-            transform: self.transform.clone(),
+            transform: self.transform,
             blur: self.blur,
         }
     }

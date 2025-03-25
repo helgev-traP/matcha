@@ -308,9 +308,9 @@ fn render_item<T: Send + 'static>(
     item: &mut GridNodeItem<T>,
     grid_cache: &GridCache,
     UiBackground {
-        parent_size,
         background_view,
         background_range,
+        ..
     }: UiBackground,
     UiContext {
         context,
@@ -320,43 +320,31 @@ fn render_item<T: Send + 'static>(
     }: UiContext,
 ) -> Vec<Object> {
     // calculate range
-    let grid_size = grid_cache.get_actual_size();
-    let x_range = [
-        grid_cache.column_range[item.column[0]][0],
-        grid_cache.column_range[item.column[1]][1],
-    ];
-    let y_range = [
-        grid_cache.row_range[item.row[0]][0],
-        grid_cache.row_range[item.row[1]][1],
-    ];
+    let actual_size = grid_cache.get_actual_size();
 
-    let bg_range_x = background_range.x_range();
-    let bg_range_y = background_range.y_range();
+    let actual_range = Range2D::new([0.0, actual_size[0]], [0.0, actual_size[1]]).unwrap();
 
-    // calculate background range
-    let background_range_x_start =
-        interpolate(0.0, bg_range_x[0], grid_size[0], bg_range_x[1], x_range[0]);
+    let item_range = Range2D::new(
+        [
+            grid_cache.column_range[item.column[0]][0], // col start
+            grid_cache.column_range[item.column[1]][1], // col end
+        ],
+        [
+            grid_cache.row_range[item.row[0]][0], // row start
+            grid_cache.row_range[item.row[1]][1], // row end
+        ],
+    )
+    .unwrap();
 
-    let background_range_x_end =
-        interpolate(0.0, bg_range_x[0], grid_size[0], bg_range_x[1], x_range[1]);
-
-    let background_range_y_start =
-        interpolate(0.0, bg_range_y[0], grid_size[1], bg_range_y[1], y_range[0]);
-
-    let background_range_y_end =
-        interpolate(0.0, bg_range_y[0], grid_size[1], bg_range_y[1], y_range[1]);
+    let background_range = interpolate(actual_range, background_range, item_range);
 
     // render
     item.item
         .render(
             UiBackground {
-                parent_size: [Some(x_range[1] - x_range[0]), Some(y_range[1] - y_range[0])],
+                parent_size: [Some(item_range.width()), Some(item_range.height())],
                 background_view,
-                background_range: Range2D::new(
-                    [background_range_x_start, background_range_x_end],
-                    [background_range_y_start, background_range_y_end],
-                )
-                .unwrap(),
+                background_range,
             },
             UiContext {
                 context,
@@ -368,7 +356,9 @@ fn render_item<T: Send + 'static>(
         .into_iter()
         .map(|mut object| {
             object.translate(nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(
-                x_range[0], y_range[0], 0.0,
+                item_range.left(),
+                item_range.top(),
+                0.0,
             )));
             object
         })
@@ -377,8 +367,44 @@ fn render_item<T: Send + 'static>(
 
 // MARK: interpolate fn
 
-fn interpolate<T: Float>(a_pos: T, a_val: T, b_pos: T, b_val: T, position: T) -> T {
-    a_val + (position - a_pos) * ((b_val - a_val) / (b_pos - a_pos))
+fn interpolate<T: Float>(p: Range2D<T>, v: Range2D<T>, x: Range2D<T>) -> Range2D<T> {
+    fn interpolate<T: Float>(p1: T, v1: T, p2: T, v2: T, x: T) -> T {
+        v1 + (x - p1) * (v2 - v1) / (p2 - p1)
+    }
+
+    let x_start = interpolate(
+        p.x_range()[0],
+        v.x_range()[0],
+        p.x_range()[1],
+        v.x_range()[1],
+        x.x_range()[0],
+    );
+
+    let x_end = interpolate(
+        p.x_range()[0],
+        v.x_range()[0],
+        p.x_range()[1],
+        v.x_range()[1],
+        x.x_range()[1],
+    );
+
+    let y_start = interpolate(
+        p.y_range()[0],
+        v.y_range()[0],
+        p.y_range()[1],
+        v.y_range()[1],
+        x.y_range()[0],
+    );
+
+    let y_end = interpolate(
+        p.y_range()[0],
+        v.y_range()[0],
+        p.y_range()[1],
+        v.y_range()[1],
+        x.y_range()[1],
+    );
+
+    Range2D::new([x_start, x_end], [y_start, y_end]).unwrap()
 }
 
 // MARK: calc_px_size
