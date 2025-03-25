@@ -148,9 +148,9 @@ pub struct SolidColorNode<T: Send + 'static> {
     settings_cache: Option<SettingsCache>,
 
     // context cache
-    // context_key: Option<ContextKey>,
+    // context_key: Option<CacheKey>,
     // context_cache: Option<ContextCache>,
-    context_cache: DoubleSetCache<ContextKey, ContextCache<()>>,
+    context_cache: DoubleSetCache<CacheKey, ContextCache<()>>,
 }
 
 // MARK: settings cache
@@ -163,17 +163,18 @@ struct SettingsCache {
 
 /// stores tenfold width and height with integer.
 #[derive(Hash, Eq, PartialEq, Debug, Clone)]
-struct ContextKey {
-    x: Option<u32>,
-    y: Option<u32>,
+struct CacheKey {
+    size: [Option<u32>; 2],
     tag: u64,
 }
 
-impl ContextKey {
+impl CacheKey {
     fn new(size: [Option<f32>; 2], tag: u64) -> Self {
         Self {
-            x: size[0].map(|f| (f * 10.0) as u32),
-            y: size[1].map(|f| (f * 10.0) as u32),
+            size: [
+                size[0].map(|f| (f * 10.0) as u32),
+                size[1].map(|f| (f * 10.0) as u32),
+            ],
             tag,
         }
     }
@@ -329,7 +330,7 @@ impl<T: Send + 'static> Widget<T> for SolidColorNode<T> {
     ) -> [f32; 2] {
         // todo: update this after Widget interface is changed
 
-        let current_key = ContextKey::new(parent_size, tag);
+        let current_key = CacheKey::new(parent_size, tag);
 
         // get context cache
         let context_cache = self
@@ -396,7 +397,7 @@ impl<T: Send + 'static> Widget<T> for SolidColorNode<T> {
         frame: u64,
     ) -> Vec<crate::ui::Object> {
         // this is a temporary implementation
-        let current_key = ContextKey::new(parent_size, tag);
+        let current_key = CacheKey::new(parent_size, tag);
 
         let context_cache = self
             .context_cache

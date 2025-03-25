@@ -108,6 +108,8 @@ pub struct GridItemNode<T: Send + 'static> {
     item: Box<dyn Widget<T>>,
 }
 
+// MARK: cache_grid
+
 impl<T: Send + 'static> GridNode<T> {
     fn cache_grid(&self, parent_size: [StdSize; 2], context: &SharedContext) -> GridCache {
         // TODO: check efficiency and refactor
@@ -389,6 +391,8 @@ impl<T: Send + 'static> GridNode<T> {
         }
     }
 }
+
+// MARK: Widget implementation
 
 impl<T: Send + 'static> Widget<T> for GridNode<T> {
     fn label(&self) -> Option<&str> {
