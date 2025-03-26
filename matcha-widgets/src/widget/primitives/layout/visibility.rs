@@ -88,7 +88,6 @@ where
                 .content
                 .as_ref()
                 .map(|content| content.build_widget_tree()),
-            redraw: true,
         })
     }
 
@@ -109,10 +108,6 @@ where
 
     // content
     content: Option<Box<dyn Widget<T>>>,
-
-    // redraw flag
-    // 1. initial value is true.
-    redraw: bool,
 }
 
 impl<T> Widget<T> for VisibilityNode<T>
@@ -161,8 +156,14 @@ where
         tag: u64,
         frame: u64,
     ) -> UiEventResult<T> {
-        // todo !
-        UiEventResult::default()
+        match self.visible {
+            VisibilityState::Visible => self
+                .content
+                .as_mut()
+                .map(|content| content.widget_event(event, parent_size, context, tag, frame))
+                .unwrap_or_default(),
+            VisibilityState::Hidden | VisibilityState::None => UiEventResult::default(),
+        }
     }
 
     fn px_size(
@@ -221,7 +222,6 @@ where
             .as_ref()
             .map(|content| content.redraw())
             .unwrap_or(false)
-            || self.redraw
     }
 
     fn render(
