@@ -25,6 +25,7 @@ pub enum UpdateWidgetError {
 }
 
 // todo: consider integrate frame into `SharedContext`.
+// todo: remove tag
 pub trait Widget<T> {
     // label
     fn label(&self) -> Option<&str>;

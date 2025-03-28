@@ -5,7 +5,7 @@ pub struct App<'a, Model: Send + 'static, Message: 'static> {
 }
 
 impl<Model: Send + 'static, Message: 'static> App<'_, Model, Message> {
-    pub fn new(component: Component<Model, Message, Message, Message>) -> Self {
+    pub fn new(component: Component<Model, Message>) -> Self {
         Self {
             window: Window::new(component),
         }

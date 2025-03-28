@@ -1,5 +1,3 @@
-use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
-
 use super::{
     context::SharedContext,
     events::UiEventResult,
@@ -7,210 +5,120 @@ use super::{
     ui::{Dom, DomComPareResult, Object, UiBackground, UiContext, UpdateWidgetError, Widget},
 };
 
+/// ! rewrite of component_old.rs
 // MARK: - Component
-
-pub struct Component<Model, Message, OuterResponse, InnerResponse> {
+pub struct Component<Model: Send + 'static, T: 'static> {
     label: Option<String>,
+    id: uuid::Uuid,
 
     // model
-    // shared with ComponentAccess
-    model: Arc<RwLock<Model>>,
-    model_updated: Arc<RwLock<bool>>,
+    model: Model,
+    model_updated: bool,
 
-    // update function
-    // update from the outside Message
-    update_fn: fn(&ComponentAccess<Model>, Message),
-    // update from the inside InnerResponse and return OuterResponse
-    react_fn:
-        fn(&ComponentAccess<Model>, UiEventResult<InnerResponse>) -> UiEventResult<OuterResponse>,
+    // elm update function
+    update_fn: fn(&mut Model, T),
 
-    // view function
-    fn_view: fn(&Model) -> Box<dyn Dom<InnerResponse>>,
-
-    // cached widget tree
-    widget_tree: Option<Arc<Mutex<Box<dyn Widget<InnerResponse>>>>>,
+    // elm view function
+    view_fn: fn(&Model) -> Box<dyn Dom<T>>,
 }
 
-// MARK: - constructor
-
-// Component constructor
-impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'static>
-    Component<Model, Message, OuterResponse, InnerResponse>
-{
+// constructor
+impl<Model: Send + 'static, T: 'static> Component<Model, T> {
     pub fn new(
-        label: Option<String>,
+        label: Option<&str>,
         model: Model,
-        update: fn(&ComponentAccess<Model>, Message),
-        view: fn(&Model) -> Box<dyn Dom<InnerResponse>>,
+        update: fn(&mut Model, T),
+        view: fn(&Model) -> Box<dyn Dom<T>>
     ) -> Self {
         Self {
-            label,
-            model: Arc::new(RwLock::new(model)),
-            model_updated: Arc::new(RwLock::new(true)),
+            label: label.map(|s| s.to_string()),
+            id: uuid::Uuid::new_v4(),
+            model,
+            model_updated: true,
             update_fn: update,
-            react_fn: |_, _| Default::default(),
-            fn_view: view,
-            widget_tree: None,
+            view_fn: view,
         }
-    }
-
-    // react to the inner response and return the outer response
-    pub fn react_fn(
-        mut self,
-        react: fn(
-            &ComponentAccess<Model>,
-            UiEventResult<InnerResponse>,
-        ) -> UiEventResult<OuterResponse>,
-    ) -> Self {
-        self.react_fn = react;
-        self
     }
 }
 
-// MARK: - methods
+// access to the model
+impl<Model: Send + 'static, T: 'static> Component<Model, T> {
+    pub fn model(&self) -> &Model {
+        &self.model
+    }
 
-// access to the model immutable
-// todo: モデルの変更を直接行うか、メッセージを通して行うか判断。
-impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'static>
-    Component<Model, Message, OuterResponse, InnerResponse>
-{
-    pub fn model_ref(&self) -> RwLockReadGuard<Model> {
-        self.model.read().unwrap()
+    pub fn model_mut(&mut self) -> &mut Model {
+        self.model_updated = true;
+        &mut self.model
     }
 }
 
 // methods
-impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'static>
-    Component<Model, Message, OuterResponse, InnerResponse>
-{
-    pub fn label(&self) -> Option<&String> {
-        self.label.as_ref()
+impl<Model: Send + 'static, T: 'static> Component<Model, T> {
+    pub fn label(&self) -> Option<&str> {
+        self.label.as_deref()
     }
 
-    pub fn update(&mut self, message: Message) {
-        (self.update_fn)(
-            &ComponentAccess {
-                model: self.model.clone(),
-                model_updated: self.model_updated.clone(),
-            },
-            message,
-        );
+    pub fn update(&mut self, message: T) {
+        self.model_updated = true;
+        (self.update_fn)(&mut self.model, message);
     }
 
-    pub fn view(&mut self) -> Arc<dyn Dom<OuterResponse>> {
-        if self.widget_tree.is_none() || *self.model_updated.read().unwrap() {
-            self.update_widget_tree();
-
-            *self.model_updated.write().unwrap() = false;
-        }
-
-        Arc::new(ComponentDom {
-            label: self.label.clone(),
-            component_model: ComponentAccess {
-                model: self.model.clone(),
-                model_updated: self.model_updated.clone(),
-            },
-            react_fn: self.react_fn,
-            widget_tree: self.widget_tree.as_ref().unwrap().clone(),
-        })
-    }
-}
-
-// MARK: - inner methods
-
-// inner methods
-impl<Model: Send + 'static, Message, OuterResponse: 'static, InnerResponse: 'static>
-    Component<Model, Message, OuterResponse, InnerResponse>
-{
-    // todo: this seems not necessary
-    // fn update_local(
-    //     &mut self,
-    //     event: UiEventResult<InnerResponse>,
-    // ) -> UiEventResult<OuterResponse> {
-    //     (self.react_fn)(
-    //         &ComponentAccess {
-    //             model: self.model.clone(),
-    //             model_updated: self.model_updated.clone(),
-    //         },
-    //         event,
-    //     )
-    // }
-
-    fn update_widget_tree(&mut self) {
-        let dom = (self.fn_view)(&*self.model.read().unwrap());
-
-        if let Some(ref mut render_tree) = self.widget_tree {
-            if render_tree
-                .lock()
-                .unwrap()
-                .update_widget_tree(&*dom)
-                .is_ok()
-            {
-                return;
-            }
-            *self.widget_tree.as_ref().unwrap().lock().unwrap() = dom.build_widget_tree();
+    pub fn view(&mut self) -> Box<dyn Dom<T>> {
+        if self.model_updated {
+            self.model_updated = false;
+            Box::new(ComponentDom::Dom {
+                label: self.label.clone(),
+                id: self.id,
+                dom: (self.view_fn)(&self.model),
+            })
         } else {
-            self.widget_tree = Some(Arc::new(Mutex::new(dom.build_widget_tree())));
+            Box::new(ComponentDom::NoChange {
+                label: self.label.clone(),
+                id: self.id,
+                dom: (self.view_fn)(&self.model),
+            })
         }
-    }
-}
-
-// MARK: - ComponentAccess
-
-pub struct ComponentAccess<Model> {
-    model: Arc<RwLock<Model>>,
-    model_updated: Arc<RwLock<bool>>,
-}
-
-impl<Model> Clone for ComponentAccess<Model> {
-    fn clone(&self) -> Self {
-        Self {
-            model: self.model.clone(),
-            model_updated: self.model_updated.clone(),
-        }
-    }
-}
-
-impl<Model> ComponentAccess<Model> {
-    pub fn model_ref(&self) -> RwLockReadGuard<Model> {
-        self.model.read().unwrap()
-    }
-
-    pub fn model_mut(&self) -> RwLockWriteGuard<Model> {
-        *self.model_updated.write().unwrap() = true;
-        self.model.write().unwrap()
     }
 }
 
 // MARK: - ComponentDom
 
-pub struct ComponentDom<Model, OuterResponse, InnerResponse>
-where
-    Model: Send + 'static,
-    OuterResponse: 'static,
-    InnerResponse: 'static,
-{
-    label: Option<String>,
-    component_model: ComponentAccess<Model>,
-    react_fn:
-        fn(&ComponentAccess<Model>, UiEventResult<InnerResponse>) -> UiEventResult<OuterResponse>,
-    widget_tree: Arc<Mutex<Box<dyn Widget<InnerResponse>>>>,
+pub enum ComponentDom<T: 'static> {
+    Dom {
+        label: Option<String>,
+        id: uuid::Uuid,
+        dom: Box<dyn Dom<T>>,
+    },
+    NoChange {
+        label: Option<String>,
+        id: uuid::Uuid,
+        dom: Box<dyn Dom<T>>,
+    },
 }
 
-impl<Model: Send, OuterResponse, InnerResponse> Dom<OuterResponse>
-    for ComponentDom<Model, OuterResponse, InnerResponse>
-where
-    Model: 'static,
-    OuterResponse: 'static,
-    InnerResponse: 'static,
-{
-    fn build_widget_tree(&self) -> Box<dyn Widget<OuterResponse>> {
-        Box::new(ComponentWidget {
-            label: self.label.clone(),
-            component_model: self.component_model.clone(),
-            local_update_component: self.react_fn,
-            node: self.widget_tree.clone(),
-        })
+impl<T: 'static> Dom<T> for ComponentDom<T> {
+    fn build_widget_tree(&self) -> Box<dyn Widget<T>> {
+        match self {
+            ComponentDom::Dom { label, id, dom } => Box::new(ComponentWidget {
+                label: label.clone(),
+                id: *id,
+                node: dom.build_widget_tree(),
+            }),
+            ComponentDom::NoChange {
+                label,
+                id,
+                dom,
+            } => {
+                let dom = dom.as_ref();
+
+                Box::new(ComponentWidget {
+                    label: label.clone(),
+                    id: *id,
+                    node: dom.build_widget_tree(),
+                })
+            }
+        }
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -220,39 +128,56 @@ where
 
 // MARK: - ComponentWidget
 
-pub struct ComponentWidget<Model, OuterResponse, InnerResponse>
-where
-    Model: 'static,
-    OuterResponse: 'static,
-    InnerResponse: 'static,
-{
+pub struct ComponentWidget<T: 'static> {
     label: Option<String>,
-    component_model: ComponentAccess<Model>,
-    local_update_component:
-        fn(&ComponentAccess<Model>, UiEventResult<InnerResponse>) -> UiEventResult<OuterResponse>,
-    node: Arc<Mutex<Box<dyn Widget<InnerResponse>>>>,
+    id: uuid::Uuid,
+    node: Box<dyn Widget<T>>,
 }
 
-impl<Model, OuterResponse, InnerResponse> Widget<OuterResponse>
-    for ComponentWidget<Model, OuterResponse, InnerResponse>
-{
+impl<T> Widget<T> for ComponentWidget<T> {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
 
-    fn update_widget_tree(
-        &mut self,
-        dom: &dyn Dom<OuterResponse>,
-    ) -> Result<(), UpdateWidgetError> {
-        if dom.as_any().is::<Self>() {
-            Ok(())
-        } else {
-            Err(UpdateWidgetError::TypeMismatch)
+    fn update_widget_tree(&mut self, dom: &dyn Dom<T>) -> Result<(), UpdateWidgetError> {
+        let Some(dom) = dom.as_any().downcast_ref::<ComponentDom<T>>() else {
+            return Err(UpdateWidgetError::TypeMismatch);
+        };
+
+        match dom {
+            ComponentDom::Dom { label, id, dom } => {
+                // update the label
+                self.label = label.clone();
+
+                // update the id
+                self.id = *id;
+
+                // Update the widget tree
+                self.node.update_widget_tree(dom.as_ref())
+            }
+            ComponentDom::NoChange {
+                label,
+                id,
+                dom,
+            } => {
+                if self.label == *label && self.id == *id {
+                    Ok(())
+                } else {
+                    // update the label
+                    self.label = label.clone();
+
+                    // update the id
+                    self.id = *id;
+
+                    // Update the widget tree
+                    self.node.update_widget_tree(dom.as_ref())
+                }
+            }
         }
     }
 
-    fn compare(&self, _: &dyn Dom<OuterResponse>) -> DomComPareResult {
-        DomComPareResult::Different
+    fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult {
+        todo!()
     }
 
     fn widget_event(
@@ -262,28 +187,8 @@ impl<Model, OuterResponse, InnerResponse> Widget<OuterResponse>
         context: &SharedContext,
         tag: u64,
         frame: u64,
-    ) -> UiEventResult<OuterResponse> {
-        (self.local_update_component)(
-            &self.component_model,
-            self.node
-                .lock()
-                .unwrap()
-                .widget_event(event, parent_size, context, tag, frame),
-        )
-    }
-
-    fn is_inside(
-        &mut self,
-        position: [f32; 2],
-        parent_size: [Option<f32>; 2],
-        context: &SharedContext,
-        tag: u64,
-        frame: u64,
-    ) -> bool {
-        self.node
-            .lock()
-            .unwrap()
-            .is_inside(position, parent_size, context, tag, frame)
+    ) -> UiEventResult<T> {
+        self.node.widget_event(event, parent_size, context, tag, frame)
     }
 
     fn px_size(
@@ -293,10 +198,7 @@ impl<Model, OuterResponse, InnerResponse> Widget<OuterResponse>
         tag: u64,
         frame: u64,
     ) -> [f32; 2] {
-        self.node
-            .lock()
-            .unwrap()
-            .px_size(parent_size, context, tag, frame)
+        self.node.px_size(parent_size, context, tag, frame)
     }
 
     fn draw_range(
@@ -306,10 +208,7 @@ impl<Model, OuterResponse, InnerResponse> Widget<OuterResponse>
         tag: u64,
         frame: u64,
     ) -> Option<Range2D<f32>> {
-        self.node
-            .lock()
-            .unwrap()
-            .draw_range(parent_size, context, tag, frame)
+        self.node.draw_range(parent_size, context, tag, frame)
     }
 
     fn cover_area(
@@ -319,17 +218,14 @@ impl<Model, OuterResponse, InnerResponse> Widget<OuterResponse>
         tag: u64,
         frame: u64,
     ) -> Option<Range2D<f32>> {
-        self.node
-            .lock()
-            .unwrap()
-            .cover_area(parent_size, context, tag, frame)
+        self.node.cover_area(parent_size, context, tag, frame)
     }
 
     fn redraw(&self) -> bool {
-        self.node.lock().unwrap().redraw()
+        self.node.redraw()
     }
 
     fn render(&mut self, ui_background: UiBackground, ui_context: UiContext) -> Vec<Object> {
-        self.node.lock().unwrap().render(ui_background, ui_context)
+        self.node.render(ui_background, ui_context)
     }
 }
