@@ -34,7 +34,7 @@ pub struct Window<'a, Model: Send + 'static, Message: 'static> {
     renderer: Option<Renderer>,
 
     // root component
-    root_component: Component<Model, Message, Message, Message>,
+    root_component: Component<Model, Message>,
     root_widget: Option<Box<dyn Widget<Message>>>,
     background_texture: Option<wgpu::Texture>,
 
@@ -57,7 +57,7 @@ pub struct Window<'a, Model: Send + 'static, Message: 'static> {
 
 // build chain
 impl<Model: Send, Message: 'static> Window<'_, Model, Message> {
-    pub fn new(component: Component<Model, Message, Message, Message>) -> Self {
+    pub fn new(component: Component<Model, Message>) -> Self {
         Self {
             performance: wgpu::PowerPreference::default(),
             title: "Tea".to_string(),
