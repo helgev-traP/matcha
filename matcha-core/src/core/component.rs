@@ -9,14 +9,11 @@ use super::{
 // MARK: - Component
 pub struct Component<Model: Send + 'static, T: 'static> {
     label: Option<String>,
-    id: uuid::Uuid,
+    // id: uuid::Uuid,
 
     // model
     model: Model,
-    model_updated: bool,
-
-    // elm update function
-    update_fn: fn(&mut Model, T),
+    // model_updated: bool,
 
     // elm view function
     view_fn: fn(&Model) -> Box<dyn Dom<T>>,
@@ -27,15 +24,11 @@ impl<Model: Send + 'static, T: 'static> Component<Model, T> {
     pub fn new(
         label: Option<&str>,
         model: Model,
-        update: fn(&mut Model, T),
-        view: fn(&Model) -> Box<dyn Dom<T>>
+        view: fn(&Model) -> Box<dyn Dom<T>>,
     ) -> Self {
         Self {
             label: label.map(|s| s.to_string()),
-            id: uuid::Uuid::new_v4(),
             model,
-            model_updated: true,
-            update_fn: update,
             view_fn: view,
         }
     }
@@ -48,7 +41,7 @@ impl<Model: Send + 'static, T: 'static> Component<Model, T> {
     }
 
     pub fn model_mut(&mut self) -> &mut Model {
-        self.model_updated = true;
+        // self.model_updated = true;
         &mut self.model
     }
 }
@@ -59,27 +52,22 @@ impl<Model: Send + 'static, T: 'static> Component<Model, T> {
         self.label.as_deref()
     }
 
-    pub fn update(&mut self, message: T) {
-        self.model_updated = true;
-        (self.update_fn)(&mut self.model, message);
-    }
-
-    pub fn view(&mut self) -> Box<dyn Dom<T>> {
-        if self.model_updated {
-            self.model_updated = false;
-            Box::new(ComponentDom::Dom {
-                label: self.label.clone(),
-                id: self.id,
-                dom: (self.view_fn)(&self.model),
-            })
-        } else {
-            Box::new(ComponentDom::NoChange {
-                label: self.label.clone(),
-                id: self.id,
-                dom: (self.view_fn)(&self.model),
-            })
-        }
-    }
+    // pub fn view(&mut self) -> Box<dyn Dom<T>> {
+    //     if self.model_updated {
+    //         self.model_updated = false;
+    //         Box::new(ComponentDom::Dom {
+    //             label: self.label.clone(),
+    //             id: self.id,
+    //             dom: (self.view_fn)(&self.model),
+    //         })
+    //     } else {
+    //         Box::new(ComponentDom::NoChange {
+    //             label: self.label.clone(),
+    //             id: self.id,
+    //             dom: (self.view_fn)(&self.model),
+    //         })
+    //     }
+    // }
 }
 
 // MARK: - ComponentDom
@@ -105,11 +93,7 @@ impl<T: 'static> Dom<T> for ComponentDom<T> {
                 id: *id,
                 node: dom.build_widget_tree(),
             }),
-            ComponentDom::NoChange {
-                label,
-                id,
-                dom,
-            } => {
+            ComponentDom::NoChange { label, id, dom } => {
                 let dom = dom.as_ref();
 
                 Box::new(ComponentWidget {
@@ -155,11 +139,7 @@ impl<T> Widget<T> for ComponentWidget<T> {
                 // Update the widget tree
                 self.node.update_widget_tree(dom.as_ref())
             }
-            ComponentDom::NoChange {
-                label,
-                id,
-                dom,
-            } => {
+            ComponentDom::NoChange { label, id, dom } => {
                 if self.label == *label && self.id == *id {
                     Ok(())
                 } else {
@@ -177,7 +157,18 @@ impl<T> Widget<T> for ComponentWidget<T> {
     }
 
     fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult {
-        todo!()
+        let Some(dom) = dom.as_any().downcast_ref::<ComponentDom<T>>() else {
+            return DomComPareResult::Different;
+        };
+
+        match dom {
+            ComponentDom::Dom { dom, .. } => match self.node.compare(dom.as_ref()) {
+                DomComPareResult::Same => DomComPareResult::Same,
+                DomComPareResult::Different => DomComPareResult::Different,
+                DomComPareResult::Changed(x) => DomComPareResult::Changed(x),
+            },
+            ComponentDom::NoChange { .. } => DomComPareResult::Same,
+        }
     }
 
     fn widget_event(
@@ -188,7 +179,8 @@ impl<T> Widget<T> for ComponentWidget<T> {
         tag: u64,
         frame: u64,
     ) -> UiEventResult<T> {
-        self.node.widget_event(event, parent_size, context, tag, frame)
+        self.node
+            .widget_event(event, parent_size, context, tag, frame)
     }
 
     fn px_size(
