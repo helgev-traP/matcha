@@ -133,7 +133,7 @@ pub struct UiContext<'a> {
 
 pub enum DomComPareResult {
     Same,
-    Changed,
+    Changed(usize),
     Different,
 }
 
