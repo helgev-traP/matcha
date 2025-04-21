@@ -8,8 +8,8 @@ edition = "2024"
 matcha-core = { workspace = true }
 matcha-widgets = { workspace = true }
 # runtime
-rayon = { workspace = true }
-pollster = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
 # winit
 winit = { workspace = true }
 # graphics

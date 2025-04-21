@@ -5,19 +5,25 @@ edition = "2024"
 publish = false
 
 [dependencies]
-# runtime
-rayon = { workspace = true }
-pollster = { workspace = true }
+# async runtime, utility
+tokio = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+
 # winit
 winit = { workspace = true }
+
 # graphics
 wgpu = { workspace = true }
 bytemuck = { features = ["derive"], workspace = true }
 vello = { workspace = true }
+
 # math
 nalgebra = { features = ["bytemuck"], workspace = true }
+
 # image
 image = { workspace = true }
+
 # other
 pathfinder_geometry = { workspace = true }
 cosmic-text = { workspace = true }

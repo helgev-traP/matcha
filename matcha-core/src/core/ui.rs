@@ -3,6 +3,7 @@ use std::{any::Any, sync::Arc};
 use super::{
     context::SharedContext,
     events::{UiEvent, UiEventResult},
+    observer::Observer,
     renderer::Renderer,
     types::range::Range2D,
     vertex::uv_vertex::UvVertex,
@@ -10,9 +11,11 @@ use super::{
 
 // dom tree node
 
-pub trait Dom<T>: Any {
+#[async_trait::async_trait]
+pub trait Dom<T>: Sync + Any {
     // if any dynamic widget is included in the widget tree, the second value is true.
     fn build_widget_tree(&self) -> Box<dyn Widget<T>>;
+    async fn collect_observer(&self) -> Observer;
     // todo: consider use downcast-rs crate
     fn as_any(&self) -> &dyn Any;
 }
@@ -25,13 +28,17 @@ pub enum UpdateWidgetError {
 }
 
 // todo: consider integrate frame into `SharedContext`.
-// todo: remove tag
-pub trait Widget<T> {
+#[async_trait::async_trait]
+pub trait Widget<T>: Send {
     // label
     fn label(&self) -> Option<&str>;
 
     // for dom handling
-    fn update_widget_tree(&mut self, dom: &dyn Dom<T>) -> Result<(), UpdateWidgetError>;
+    async fn update_widget_tree(
+        &mut self,
+        component_updated: bool,
+        dom: &dyn Dom<T>,
+    ) -> Result<(), UpdateWidgetError>;
 
     fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult;
 
@@ -41,8 +48,6 @@ pub trait Widget<T> {
         event: &UiEvent,
         parent_size: [Option<f32>; 2],
         context: &SharedContext,
-        tag: u64,
-        frame: u64,
     ) -> UiEventResult<T>;
 
     // inside / outside check
@@ -51,10 +56,8 @@ pub trait Widget<T> {
         position: [f32; 2],
         parent_size: [Option<f32>; 2],
         context: &SharedContext,
-        tag: u64,
-        frame: u64,
     ) -> bool {
-        let px_size = self.px_size(parent_size, context, tag, frame);
+        let px_size = self.px_size(parent_size, context);
 
         !(position[0] < 0.0
             || position[0] > px_size[0]
@@ -67,8 +70,6 @@ pub trait Widget<T> {
         &mut self,
         parent_size: [Option<f32>; 2],
         context: &SharedContext,
-        tag: u64,
-        frame: u64,
     ) -> [f32; 2];
 
     // todo: integrate `draw_range` and `cover_area` into `cover_area` use `range::CoverRange` as return value
@@ -78,8 +79,6 @@ pub trait Widget<T> {
         &mut self,
         parent_size: [Option<f32>; 2],
         context: &SharedContext,
-        tag: u64,
-        frame: u64,
     ) -> Option<Range2D<f32>>;
 
     /// The area that the widget always covers.
@@ -87,48 +86,21 @@ pub trait Widget<T> {
         &mut self,
         parent_size: [Option<f32>; 2],
         context: &SharedContext,
-        tag: u64,
-        frame: u64,
     ) -> Option<Range2D<f32>>;
 
     fn redraw(&self) -> bool;
 
-    // fn render(
-    //     &mut self,
-    //     // ui background
-    //     parent_size: [Option<f32>; 2],
-    //     background_view: &wgpu::TextureView,
-    //     background_range: Range2D<f32>,
-    //     // context
-    //     context: &SharedContext,
-    //     renderer: &Renderer,
-    //     tag: u64,
-    //     frame: u64,
-    // ) -> Vec<Object>;
-
     fn render(
         &mut self,
-        ui_background: UiBackground,
-        ui_context: UiContext,
+        parent_size: [Option<f32>; 2],
+        background_view: &wgpu::TextureView,
+        background_range: Range2D<f32>,
+        context: &SharedContext,
+        renderer: &Renderer,
     ) -> Vec<Object>;
 
     // todo
     // fn update_gpu_device(&mut self, device: &wgpu::Device, queue: &wgpu::Queue);
-}
-
-#[derive(Clone, Copy)]
-pub struct UiBackground<'a> {
-    pub parent_size: [Option<f32>; 2],
-    pub background_view: &'a wgpu::TextureView,
-    pub background_range: Range2D<f32>,
-}
-
-#[derive(Clone, Copy)]
-pub struct UiContext<'a> {
-    pub context: &'a SharedContext,
-    pub renderer: &'a Renderer,
-    pub tag: u64,
-    pub frame: u64,
 }
 
 pub enum DomComPareResult {

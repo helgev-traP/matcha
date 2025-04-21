@@ -1,9 +1,5 @@
 [workspace]
-members = [
-    "main",
-    "matcha-core",
-    "matcha-widgets",
-]
+members = ["main", "matcha-core", "matcha-widgets"]
 
 [workspace.dependencies]
 # self
@@ -11,19 +7,23 @@ matcha = { path = "main" }
 matcha-core = { path = "matcha-core" }
 matcha-widgets = { path = "matcha-widgets" }
 
-# runtime
-# todo: consider use tokio instead of rayon + pollster.
-rayon = "1.10.0"
-pollster = "0.3"
+# async runtime, utilities
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1.88"
+futures = "0.3.31"
+
 # graphics
 wgpu = "22.1.0"
 bytemuck = { version = "1.17", features = ["derive"] }
 vello = "0.3.0"
 winit = "0.30"
+
 # math
 nalgebra = { version = "0.33", features = ["bytemuck"] }
+
 # image
 image = "0.25"
+
 # other
 pathfinder_geometry = "0.5.1"
 cosmic-text = "0.12.1"
@@ -31,8 +31,8 @@ rand = "0.8"
 bitflags = "2.6"
 num = "0.4.3"
 downcast-rs = "2.0.1"
-ahash = "0.8.11"
-uuid = { version = "1.16.0", features = ["v4"] }
+ahash = "0.8.11"                                 # delete this if not needed
+uuid = { version = "1.16.0", features = ["v4"] } # delete this if not needed
 
 # interpolation crate
 # todo: maybe useful.

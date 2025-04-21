@@ -1,108 +1,175 @@
+use std::sync::Arc;
+
+use tokio::sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
+
 use super::{
     context::SharedContext,
     events::UiEventResult,
+    observer::{ObserverReceiver, ObserverSender, create_observer_ch},
     types::range::Range2D,
-    ui::{Dom, DomComPareResult, Object, UiBackground, UiContext, UpdateWidgetError, Widget},
+    ui::{Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
 };
 
-/// ! rewrite of component_old.rs
+// MARK: - ModelAccessor
+
+struct ModelAccessor<Model: 'static> {
+    model: Arc<RwLock<Model>>,
+    update_flag: Arc<UpdateFlag>,
+}
+
+impl<Model: 'static> Clone for ModelAccessor<Model> {
+    fn clone(&self) -> Self {
+        Self {
+            model: Arc::clone(&self.model),
+            update_flag: Arc::clone(&self.update_flag),
+        }
+    }
+}
+
+impl<Model: 'static> ModelAccessor<Model> {
+    pub async fn get_ref(&self) -> RwLockReadGuard<Model> {
+        self.model.read().await
+    }
+
+    pub async fn update<F>(&self, f: F)
+    where
+        F: FnOnce(RwLockWriteGuard<Model>),
+    {
+        // ensure update function finish before change the update flag
+        let model = self.model.write().await;
+        f(model);
+        self.update_flag.set_to_true().await;
+    }
+}
+
+// MARK: - UpdateFlag
+
+struct UpdateFlag {
+    updated: Mutex<bool>, // todo: consider use `AtomicBool` or std-Mutex
+    observer_sender: Mutex<Option<ObserverSender>>,
+}
+
+impl UpdateFlag {
+    fn new() -> Self {
+        Self {
+            updated: Mutex::new(true),
+            observer_sender: Mutex::new(None),
+        }
+    }
+
+    /// When the model is updated, this function should be called to notify the observer.
+    async fn set_to_true(&self) {
+        let mut updated = self.updated.lock().await;
+        *updated = true;
+        if let Some(sender) = &mut *self.observer_sender.lock().await {
+            sender.send_update();
+        }
+    }
+
+    /// Create an observer receiver. Also reset the update flag to false.
+    async fn make_observer(&self) -> ObserverReceiver {
+        // update the flag to false
+        {
+            let mut updated = self.updated.lock().await;
+            *updated = false;
+        }
+
+        // make observer
+        let (sender, receiver) = create_observer_ch();
+        let mut observer_sender = self.observer_sender.lock().await;
+        *observer_sender = Some(sender);
+        receiver
+    }
+
+    async fn is_updated(&self) -> bool {
+        let updated = self.updated.lock().await;
+        *updated
+    }
+}
+
 // MARK: - Component
-pub struct Component<Model: Send + 'static, T: 'static> {
+
+pub struct Component<Model: 'static, Message, T: 'static> {
     label: Option<String>,
-    // id: uuid::Uuid,
 
     // model
-    model: Model,
-    // model_updated: bool,
+    model: Arc<RwLock<Model>>,
+    model_update_flag: Arc<UpdateFlag>,
 
+    // setup function
+    setup_fn: fn(ModelAccessor<Model>),
+    // model update function
+    update_fn: fn(Message, ModelAccessor<Model>),
     // elm view function
     view_fn: fn(&Model) -> Box<dyn Dom<T>>,
 }
 
-// constructor
-impl<Model: Send + 'static, T: 'static> Component<Model, T> {
-    pub fn new(
-        label: Option<&str>,
-        model: Model,
-        view: fn(&Model) -> Box<dyn Dom<T>>,
-    ) -> Self {
+/// constructor
+impl<Model: Send + 'static, Message, T: 'static> Component<Model, Message, T> {
+    pub fn new(label: Option<&str>, model: Model, view: fn(&Model) -> Box<dyn Dom<T>>) -> Self {
         Self {
             label: label.map(|s| s.to_string()),
-            model,
+            model: Arc::new(RwLock::new(model)),
+            model_update_flag: Arc::new(UpdateFlag::new()),
+            setup_fn: |_: ModelAccessor<Model>| {},
+            update_fn: |_: Message, _: ModelAccessor<Model>| {},
             view_fn: view,
         }
     }
-}
 
-// access to the model
-impl<Model: Send + 'static, T: 'static> Component<Model, T> {
-    pub fn model(&self) -> &Model {
-        &self.model
+    pub fn setup_fn(mut self, f: fn(ModelAccessor<Model>)) -> Self {
+        self.setup_fn = f;
+        self
     }
 
-    pub fn model_mut(&mut self) -> &mut Model {
-        // self.model_updated = true;
-        &mut self.model
+    pub fn update_fn(mut self, f: fn(Message, ModelAccessor<Model>)) -> Self {
+        self.update_fn = f;
+        self
     }
 }
 
-// methods
-impl<Model: Send + 'static, T: 'static> Component<Model, T> {
+/// functional methods
+impl<Model: Send + 'static, Message, T: 'static> Component<Model, Message, T> {
     pub fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
 
-    // pub fn view(&mut self) -> Box<dyn Dom<T>> {
-    //     if self.model_updated {
-    //         self.model_updated = false;
-    //         Box::new(ComponentDom::Dom {
-    //             label: self.label.clone(),
-    //             id: self.id,
-    //             dom: (self.view_fn)(&self.model),
-    //         })
-    //     } else {
-    //         Box::new(ComponentDom::NoChange {
-    //             label: self.label.clone(),
-    //             id: self.id,
-    //             dom: (self.view_fn)(&self.model),
-    //         })
-    //     }
-    // }
+    pub fn update(&self, message: Message) {
+        let model_accessor = ModelAccessor {
+            model: Arc::clone(&self.model),
+            update_flag: Arc::clone(&self.model_update_flag),
+        };
+
+        (self.update_fn)(message, model_accessor);
+    }
+
+    pub async fn view(&self) -> Box<dyn Dom<T>> {
+        Box::new(ComponentDom {
+            label: self.label.clone(),
+            update_flag: Arc::clone(&self.model_update_flag),
+            dom: (self.view_fn)(&*self.model.read().await),
+        })
+    }
 }
 
 // MARK: - ComponentDom
 
-pub enum ComponentDom<T: 'static> {
-    Dom {
-        label: Option<String>,
-        id: uuid::Uuid,
-        dom: Box<dyn Dom<T>>,
-    },
-    NoChange {
-        label: Option<String>,
-        id: uuid::Uuid,
-        dom: Box<dyn Dom<T>>,
-    },
+pub struct ComponentDom<T: 'static> {
+    label: Option<String>,
+    update_flag: Arc<UpdateFlag>,
+    dom: Box<dyn Dom<T>>,
 }
 
+#[async_trait::async_trait]
 impl<T: 'static> Dom<T> for ComponentDom<T> {
     fn build_widget_tree(&self) -> Box<dyn Widget<T>> {
-        match self {
-            ComponentDom::Dom { label, id, dom } => Box::new(ComponentWidget {
-                label: label.clone(),
-                id: *id,
-                node: dom.build_widget_tree(),
-            }),
-            ComponentDom::NoChange { label, id, dom } => {
-                let dom = dom.as_ref();
+        todo!()
+    }
 
-                Box::new(ComponentWidget {
-                    label: label.clone(),
-                    id: *id,
-                    node: dom.build_widget_tree(),
-                })
-            }
-        }
+    async fn collect_observer(&self) -> super::observer::Observer {
+        let mut observer = self.dom.collect_observer().await;
+        observer.add_receiver(self.update_flag.make_observer().await);
+        observer
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
@@ -115,59 +182,41 @@ impl<T: 'static> Dom<T> for ComponentDom<T> {
 pub struct ComponentWidget<T: 'static> {
     label: Option<String>,
     id: uuid::Uuid,
-    node: Box<dyn Widget<T>>,
+    widget: Box<dyn Widget<T>>,
 }
 
+#[async_trait::async_trait]
 impl<T> Widget<T> for ComponentWidget<T> {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
 
-    fn update_widget_tree(&mut self, dom: &dyn Dom<T>) -> Result<(), UpdateWidgetError> {
-        let Some(dom) = dom.as_any().downcast_ref::<ComponentDom<T>>() else {
+    async fn update_widget_tree(
+        &mut self,
+        _: bool,
+        dom: &dyn Dom<T>,
+    ) -> Result<(), UpdateWidgetError> {
+        if let Some(component_dom) = dom.as_any().downcast_ref::<ComponentDom<T>>() {
+            let is_component_updated = component_dom.update_flag.is_updated().await;
+
+            self.widget
+                .update_widget_tree(is_component_updated, component_dom.dom.as_ref())
+                .await
+        } else {
             return Err(UpdateWidgetError::TypeMismatch);
-        };
-
-        match dom {
-            ComponentDom::Dom { label, id, dom } => {
-                // update the label
-                self.label = label.clone();
-
-                // update the id
-                self.id = *id;
-
-                // Update the widget tree
-                self.node.update_widget_tree(dom.as_ref())
-            }
-            ComponentDom::NoChange { label, id, dom } => {
-                if self.label == *label && self.id == *id {
-                    Ok(())
-                } else {
-                    // update the label
-                    self.label = label.clone();
-
-                    // update the id
-                    self.id = *id;
-
-                    // Update the widget tree
-                    self.node.update_widget_tree(dom.as_ref())
-                }
-            }
         }
     }
 
     fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult {
-        let Some(dom) = dom.as_any().downcast_ref::<ComponentDom<T>>() else {
-            return DomComPareResult::Different;
-        };
-
-        match dom {
-            ComponentDom::Dom { dom, .. } => match self.node.compare(dom.as_ref()) {
-                DomComPareResult::Same => DomComPareResult::Same,
-                DomComPareResult::Different => DomComPareResult::Different,
-                DomComPareResult::Changed(x) => DomComPareResult::Changed(x),
-            },
-            ComponentDom::NoChange { .. } => DomComPareResult::Same,
+        // todo: optimize
+        if let Some(component_dom) = dom.as_any().downcast_ref::<ComponentDom<T>>() {
+            if self.label == component_dom.label {
+                DomComPareResult::Same
+            } else {
+                DomComPareResult::Different
+            }
+        } else {
+            DomComPareResult::Different
         }
     }
 
@@ -176,48 +225,57 @@ impl<T> Widget<T> for ComponentWidget<T> {
         event: &super::events::UiEvent,
         parent_size: [Option<f32>; 2],
         context: &SharedContext,
-        tag: u64,
-        frame: u64,
     ) -> UiEventResult<T> {
-        self.node
-            .widget_event(event, parent_size, context, tag, frame)
+        self.widget.widget_event(event, parent_size, context)
     }
 
-    fn px_size(
+    fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &SharedContext) -> [f32; 2] {
+        self.widget.px_size(parent_size, context)
+    }
+
+    fn is_inside(
         &mut self,
+        position: [f32; 2],
         parent_size: [Option<f32>; 2],
         context: &SharedContext,
-        tag: u64,
-        frame: u64,
-    ) -> [f32; 2] {
-        self.node.px_size(parent_size, context, tag, frame)
+    ) -> bool {
+        self.widget.is_inside(position, parent_size, context)
     }
 
     fn draw_range(
         &mut self,
         parent_size: [Option<f32>; 2],
         context: &SharedContext,
-        tag: u64,
-        frame: u64,
     ) -> Option<Range2D<f32>> {
-        self.node.draw_range(parent_size, context, tag, frame)
+        self.widget.draw_range(parent_size, context)
     }
 
     fn cover_area(
         &mut self,
         parent_size: [Option<f32>; 2],
         context: &SharedContext,
-        tag: u64,
-        frame: u64,
     ) -> Option<Range2D<f32>> {
-        self.node.cover_area(parent_size, context, tag, frame)
+        self.widget.cover_area(parent_size, context)
     }
 
     fn redraw(&self) -> bool {
-        self.node.redraw()
+        self.widget.redraw()
     }
 
-    fn render(&mut self, ui_background: UiBackground, ui_context: UiContext) -> Vec<Object> {
-        self.node.render(ui_background, ui_context)
+    fn render(
+        &mut self,
+        parent_size: [Option<f32>; 2],
+        background_view: &wgpu::TextureView,
+        background_range: Range2D<f32>,
+        context: &SharedContext,
+        renderer: &super::renderer::Renderer,
+    ) -> Vec<Object> {
+        self.widget.render(
+            parent_size,
+            background_view,
+            background_range,
+            context,
+            renderer,
+        )
     }
 }

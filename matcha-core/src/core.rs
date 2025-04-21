@@ -5,6 +5,7 @@ pub mod events;
 pub mod window;
 
 pub mod component;
+pub mod observer;
 pub mod ui;
 
 pub mod types;

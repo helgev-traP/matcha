@@ -1,4 +1,4 @@
-use super::{component::Component, types::color::Color, window::Window};
+use super::{component::Component, types::color::Color, window_old::Window};
 
 pub struct App<'a, Model: Send + 'static, Message: 'static> {
     window: Window<'a, Model, Message>,
