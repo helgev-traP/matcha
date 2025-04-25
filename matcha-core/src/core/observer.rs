@@ -50,6 +50,8 @@ impl Future for ObserverReceiver {
     }
 }
 
+// MARK: observer
+
 pub struct Observer {
     receivers: Vec<ObserverReceiver>,
 }
@@ -67,6 +69,18 @@ impl Observer {
         }
     }
 
+    pub fn new_render_trigger() -> Self {
+        let (mut sender, receiver) = create_observer_ch();
+        sender.send_update();
+        Self {
+            receivers: vec![receiver],
+        }
+    }
+
+    pub fn add_receiver(&mut self, receiver: ObserverReceiver) {
+        self.receivers.push(receiver);
+    }
+
     pub fn extend(&mut self, other: Observer) {
         self.receivers.extend(other.receivers);
     }
@@ -74,10 +88,6 @@ impl Observer {
     pub fn join(mut self, other: Observer) -> Self {
         self.extend(other);
         self
-    }
-
-    pub fn add_receiver(&mut self, receiver: ObserverReceiver) {
-        self.receivers.push(receiver);
     }
 
     pub fn is_updated(&mut self) -> bool {

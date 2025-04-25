@@ -2,7 +2,7 @@ use std::{any::Any, sync::Arc};
 
 use super::{
     context::SharedContext,
-    events::{UiEvent, UiEventResult},
+    events::UiEvent,
     observer::Observer,
     renderer::Renderer,
     types::range::Range2D,
@@ -48,7 +48,7 @@ pub trait Widget<T>: Send {
         event: &UiEvent,
         parent_size: [Option<f32>; 2],
         context: &SharedContext,
-    ) -> UiEventResult<T>;
+    ) -> Option<T>;
 
     // inside / outside check
     fn is_inside(
