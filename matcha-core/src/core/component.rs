@@ -4,7 +4,6 @@ use tokio::sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use super::{
     context::SharedContext,
-    events::UiEventResult,
     observer::{ObserverReceiver, ObserverSender, create_observer_ch},
     types::range::Range2D,
     ui::{Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
@@ -89,7 +88,12 @@ impl UpdateFlag {
 
 // MARK: - Component
 
-pub struct Component<Model: 'static, Message, T: 'static> {
+pub struct Component<
+    Model: Send + Sync + 'static,
+    Message,
+    Response: 'static,
+    InnerResponse: 'static = Response,
+> {
     label: Option<String>,
 
     // model
@@ -100,19 +104,28 @@ pub struct Component<Model: 'static, Message, T: 'static> {
     setup_fn: fn(ModelAccessor<Model>),
     // model update function
     update_fn: fn(Message, ModelAccessor<Model>),
+    // react function
+    react_fn: fn(InnerResponse, ModelAccessor<Model>) -> Option<Response>,
     // elm view function
-    view_fn: fn(&Model) -> Box<dyn Dom<T>>,
+    view_fn: fn(&Model) -> Box<dyn Dom<InnerResponse>>,
 }
 
 /// constructor
-impl<Model: Send + 'static, Message, T: 'static> Component<Model, Message, T> {
-    pub fn new(label: Option<&str>, model: Model, view: fn(&Model) -> Box<dyn Dom<T>>) -> Self {
+impl<Model: Send + Sync + 'static, Message, Response: 'static, InnerResponse: 'static>
+    Component<Model, Message, Response, InnerResponse>
+{
+    pub fn new(
+        label: Option<&str>,
+        model: Model,
+        view: fn(&Model) -> Box<dyn Dom<InnerResponse>>,
+    ) -> Self {
         Self {
             label: label.map(|s| s.to_string()),
             model: Arc::new(RwLock::new(model)),
             model_update_flag: Arc::new(UpdateFlag::new()),
             setup_fn: |_: ModelAccessor<Model>| {},
             update_fn: |_: Message, _: ModelAccessor<Model>| {},
+            react_fn: |_: InnerResponse, _: ModelAccessor<Model>| None,
             view_fn: view,
         }
     }
@@ -126,10 +139,27 @@ impl<Model: Send + 'static, Message, T: 'static> Component<Model, Message, T> {
         self.update_fn = f;
         self
     }
+
+    pub fn react_fn<NewResponse: 'static>(
+        self,
+        f: fn(InnerResponse, ModelAccessor<Model>) -> Option<NewResponse>,
+    ) -> Component<Model, Message, NewResponse, InnerResponse> {
+        Component {
+            label: self.label,
+            model: self.model,
+            model_update_flag: self.model_update_flag,
+            setup_fn: self.setup_fn,
+            update_fn: self.update_fn,
+            react_fn: f,
+            view_fn: self.view_fn,
+        }
+    }
 }
 
 /// functional methods
-impl<Model: Send + 'static, Message, T: 'static> Component<Model, Message, T> {
+impl<Model: Send + Sync + 'static, Message, Response: 'static, InnerResponse: 'static>
+    Component<Model, Message, Response, InnerResponse>
+{
     pub fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
@@ -143,10 +173,15 @@ impl<Model: Send + 'static, Message, T: 'static> Component<Model, Message, T> {
         (self.update_fn)(message, model_accessor);
     }
 
-    pub async fn view(&self) -> Box<dyn Dom<T>> {
+    pub async fn view(&self) -> Box<dyn Dom<Response>> {
         Box::new(ComponentDom {
             label: self.label.clone(),
             update_flag: Arc::clone(&self.model_update_flag),
+            model_accessor: ModelAccessor {
+                model: Arc::clone(&self.model),
+                update_flag: Arc::clone(&self.model_update_flag),
+            },
+            react_fn: self.react_fn,
             dom: (self.view_fn)(&*self.model.read().await),
         })
     }
@@ -154,16 +189,28 @@ impl<Model: Send + 'static, Message, T: 'static> Component<Model, Message, T> {
 
 // MARK: - ComponentDom
 
-pub struct ComponentDom<T: 'static> {
+pub struct ComponentDom<Model: Sync + 'static, Response: 'static, InnerResponse: 'static> {
     label: Option<String>,
+
     update_flag: Arc<UpdateFlag>,
-    dom: Box<dyn Dom<T>>,
+    model_accessor: ModelAccessor<Model>,
+    react_fn: fn(InnerResponse, ModelAccessor<Model>) -> Option<Response>,
+
+    dom: Box<dyn Dom<InnerResponse>>,
 }
 
 #[async_trait::async_trait]
-impl<T: 'static> Dom<T> for ComponentDom<T> {
-    fn build_widget_tree(&self) -> Box<dyn Widget<T>> {
-        todo!()
+impl<Model: Sync + Send + 'static, Response: 'static, InnerResponse: 'static> Dom<Response>
+    for ComponentDom<Model, Response, InnerResponse>
+{
+    fn build_widget_tree(&self) -> Box<dyn Widget<Response>> {
+        Box::new(ComponentWidget {
+            label: self.label.clone(),
+            update_flag: Arc::clone(&self.update_flag),
+            model_accessor: self.model_accessor.clone(),
+            react_fn: self.react_fn,
+            widget: self.dom.build_widget_tree(),
+        })
     }
 
     async fn collect_observer(&self) -> super::observer::Observer {
@@ -179,14 +226,20 @@ impl<T: 'static> Dom<T> for ComponentDom<T> {
 
 // MARK: - ComponentWidget
 
-pub struct ComponentWidget<T: 'static> {
+pub struct ComponentWidget<Model: Sync + 'static, Response: 'static, InnerResponse: 'static> {
     label: Option<String>,
-    id: uuid::Uuid,
-    widget: Box<dyn Widget<T>>,
+
+    update_flag: Arc<UpdateFlag>,
+    model_accessor: ModelAccessor<Model>,
+    react_fn: fn(InnerResponse, ModelAccessor<Model>) -> Option<Response>,
+
+    widget: Box<dyn Widget<InnerResponse>>,
 }
 
 #[async_trait::async_trait]
-impl<T> Widget<T> for ComponentWidget<T> {
+impl<Model: Sync + Send + 'static, Response: 'static, InnerResponse: 'static> Widget<Response>
+    for ComponentWidget<Model, Response, InnerResponse>
+{
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
@@ -194,9 +247,12 @@ impl<T> Widget<T> for ComponentWidget<T> {
     async fn update_widget_tree(
         &mut self,
         _: bool,
-        dom: &dyn Dom<T>,
+        dom: &dyn Dom<Response>,
     ) -> Result<(), UpdateWidgetError> {
-        if let Some(component_dom) = dom.as_any().downcast_ref::<ComponentDom<T>>() {
+        if let Some(component_dom) = dom
+            .as_any()
+            .downcast_ref::<ComponentDom<Model, Response, InnerResponse>>()
+        {
             let is_component_updated = component_dom.update_flag.is_updated().await;
 
             self.widget
@@ -207,9 +263,12 @@ impl<T> Widget<T> for ComponentWidget<T> {
         }
     }
 
-    fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult {
+    fn compare(&self, dom: &dyn Dom<Response>) -> DomComPareResult {
         // todo: optimize
-        if let Some(component_dom) = dom.as_any().downcast_ref::<ComponentDom<T>>() {
+        if let Some(component_dom) = dom
+            .as_any()
+            .downcast_ref::<ComponentDom<Model, Response, InnerResponse>>()
+        {
             if self.label == component_dom.label {
                 DomComPareResult::Same
             } else {
@@ -225,8 +284,10 @@ impl<T> Widget<T> for ComponentWidget<T> {
         event: &super::events::UiEvent,
         parent_size: [Option<f32>; 2],
         context: &SharedContext,
-    ) -> UiEventResult<T> {
-        self.widget.widget_event(event, parent_size, context)
+    ) -> Option<Response> {
+        self.widget
+            .widget_event(event, parent_size, context)
+            .and_then(|inner_response| (self.react_fn)(inner_response, self.model_accessor.clone()))
     }
 
     fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &SharedContext) -> [f32; 2] {

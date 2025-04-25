@@ -127,8 +127,8 @@ impl GpuState<'_> {
         }
     }
 
-    pub fn get_app_context(&self) -> SharedContext {
-        self.app_context.clone()
+    pub fn get_app_context(&self) -> &SharedContext {
+        &self.app_context
     }
 
     pub fn get_current_texture(&self) -> wgpu::SurfaceTexture {
