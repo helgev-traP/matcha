@@ -1,11 +1,23 @@
-use super::{component::Component, types::color::Color, window_old::Window};
+use super::{component::Component, types::color::Color, window::Window};
 
-pub struct App<'a, Model: Send + 'static, Message: 'static> {
-    window: Window<'a, Model, Message>,
+pub struct App<'a, Model, Message, Response, IR = Response>
+where
+    Model: Send + Sync + 'static,
+    Message: 'static,
+    Response: 'static,
+    IR: 'static,
+{
+    window: Window<'a, Model, Message, Response, IR>,
 }
 
-impl<Model: Send + 'static, Message: 'static> App<'_, Model, Message> {
-    pub fn new(component: Component<Model, Message>) -> Self {
+impl<Model, Message, Response, IR> App<'_, Model, Message, Response, IR>
+where
+    Model: Send + Sync + 'static,
+    Message: 'static,
+    Response: std::fmt::Debug + 'static,
+    IR: 'static,
+{
+    pub fn new(component: Component<Model, Message, Response, IR>) -> Self {
         Self {
             window: Window::new(component),
         }
@@ -22,7 +34,9 @@ impl<Model: Send + 'static, Message: 'static> App<'_, Model, Message> {
     }
 
     pub fn run(&mut self) {
-        let event_loop = winit::event_loop::EventLoop::with_user_event().build().unwrap();
+        let event_loop = winit::event_loop::EventLoop::with_user_event()
+            .build()
+            .unwrap();
         event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
         let _ = event_loop.run_app(&mut self.window);
     }
