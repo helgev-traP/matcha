@@ -60,7 +60,7 @@ pub struct Window<
 impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'static>
     Window<'_, Model, Message, Response, IR>
 {
-    pub fn new(component: Component<Model, Message, Response>) -> Self {
+    pub fn new(component: Component<Model, Message, Response, IR>) -> Self {
         todo!()
     }
 
