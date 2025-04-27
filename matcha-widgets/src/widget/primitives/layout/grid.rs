@@ -1,8 +1,10 @@
 use matcha_core::{
     context::SharedContext,
-    events::{UiEvent, UiEventResult},
-    types::{double_cache_set::DoubleSetCache, range::Range2D},
-    ui::{Dom, DomComPareResult, Object, UiBackground, UiContext, UpdateWidgetError, Widget},
+    events::UiEvent,
+    observer::Observer,
+    renderer::Renderer,
+    types::range::Range2D,
+    ui::{Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
 };
 
 mod property;
@@ -98,6 +100,7 @@ impl<T: Send + 'static> Grid<T> {
     }
 }
 
+#[async_trait::async_trait]
 impl<T: Send + 'static> Dom<T> for Grid<T> {
     fn build_widget_tree(&self) -> Box<dyn Widget<T>> {
         todo!()
@@ -105,6 +108,10 @@ impl<T: Send + 'static> Dom<T> for Grid<T> {
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
+    }
+
+    async fn collect_observer(&self) -> Observer {
+        todo!()
     }
 }
 
@@ -127,7 +134,7 @@ pub struct GridNode<T: Send + 'static> {
     redraw: bool,
 
     // render cache
-    context_cache: DoubleSetCache<CacheKey, GridCache>,
+    cache: Option<(CacheKey, GridCache)>,
 }
 
 // MARK: GridNodeItem
@@ -144,18 +151,20 @@ struct GridNodeItem<T: Send + 'static> {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct CacheKey {
     size: [Option<u32>; 2],
-    tag: u64,
 }
 
 impl CacheKey {
-    fn new(size: [Option<f32>; 2], tag: u64) -> Self {
+    fn new(size: [Option<f32>; 2]) -> Self {
         Self {
             size: [
                 size[0].map(|f| (f * 10.0) as u32),
                 size[1].map(|f| (f * 10.0) as u32),
             ],
-            tag,
         }
+    }
+
+    fn equals(&self, other: &Self) -> bool {
+        self.size[0] == other.size[0] && self.size[1] == other.size[1]
     }
 }
 
@@ -181,12 +190,17 @@ impl GridCache {
 
 // MARK: Widget impl
 
+#[async_trait::async_trait]
 impl<T: Send + 'static> Widget<T> for GridNode<T> {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
 
-    fn update_widget_tree(&mut self, dom: &dyn Dom<T>) -> Result<(), UpdateWidgetError> {
+    async fn update_widget_tree(
+        &mut self,
+        component_updated: bool,
+        dom: &dyn Dom<T>,
+    ) -> Result<(), UpdateWidgetError> {
         // todo: be sure to update redraw flag
 
         if let Some(dom) = dom.as_any().downcast_ref::<Grid<T>>() {
@@ -209,50 +223,54 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
         event: &UiEvent,
         parent_size: [Option<f32>; 2],
         context: &SharedContext,
-        tag: u64,
-        frame: u64,
-    ) -> UiEventResult<T> {
+    ) -> Option<T> {
         // todo !
-        UiEventResult::default()
+        None
     }
 
-    fn px_size(
-        &mut self,
-        parent_size: [Option<f32>; 2],
-        context: &SharedContext,
-        tag: u64,
-        frame: u64,
-    ) -> [f32; 2] {
-        let cache =
-            self.context_cache
-                .get_or_insert_with(CacheKey::new(parent_size, tag), frame, || {
-                    let (column_range, row_range) = calc_px_siz(
-                        parent_size,
-                        &self.template_columns,
-                        self.gap_columns,
-                        &self.template_rows,
-                        self.gap_rows,
-                        context,
-                    );
+    fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &SharedContext) -> [f32; 2] {
+        let current_key = CacheKey::new(parent_size);
 
-                    GridCache {
-                        column_range,
-                        row_range,
-                    }
-                });
+        // get cache or delete if key mismatch.
 
-        cache.get_actual_size()
+        if let Some((key, cache)) = self.cache.as_ref() {
+            if key.equals(&current_key) {
+                return cache.get_actual_size();
+            } else {
+                self.cache = None;
+            }
+        }
+
+        // now, self.cache == None
+
+        let (column_range, row_range) = calc_px_siz(
+            parent_size,
+            &self.template_columns,
+            self.gap_columns,
+            &self.template_rows,
+            self.gap_rows,
+            context,
+        );
+
+        let grid_cache = GridCache {
+            column_range,
+            row_range,
+        };
+
+        let actual_size = grid_cache.get_actual_size();
+
+        self.cache = Some((current_key, grid_cache));
+
+        actual_size
     }
 
     fn draw_range(
         &mut self,
         parent_size: [Option<f32>; 2],
         context: &SharedContext,
-        tag: u64,
-        frame: u64,
     ) -> Option<Range2D<f32>> {
         // todo: optimize
-        let [width, height] = self.px_size(parent_size, context, tag, frame);
+        let [width, height] = self.px_size(parent_size, context);
 
         Some(Range2D::new([0.0, width], [0.0, height]).unwrap())
     }
@@ -261,11 +279,9 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
         &mut self,
         parent_size: [Option<f32>; 2],
         context: &SharedContext,
-        tag: u64,
-        frame: u64,
     ) -> Option<Range2D<f32>> {
         // todo: optimize
-        let [width, height] = self.px_size(parent_size, context, tag, frame);
+        let [width, height] = self.px_size(parent_size, context);
 
         Some(Range2D::new([0.0, width], [0.0, height]).unwrap())
     }
@@ -274,30 +290,57 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
         self.redraw || self.items.iter().any(|item| item.item.redraw())
     }
 
-    fn render(&mut self, ui_background: UiBackground, ui_context: UiContext) -> Vec<Object> {
-        let grid_cache = self.context_cache.get_or_insert_with(
-            CacheKey::new(ui_background.parent_size, ui_context.tag),
-            ui_context.frame,
-            || {
-                let (column_range, row_range) = calc_px_siz(
-                    ui_background.parent_size,
-                    &self.template_columns,
-                    self.gap_columns,
-                    &self.template_rows,
-                    self.gap_rows,
-                    ui_context.context,
-                );
+    fn render(
+        &mut self,
+        parent_size: [Option<f32>; 2],
+        background_view: &wgpu::TextureView,
+        background_range: Range2D<f32>,
+        context: &SharedContext,
+        renderer: &Renderer,
+    ) -> Vec<Object> {
+        let current_key = CacheKey::new(parent_size);
 
+        // delete cache if key mismatch.
+
+        if let Some((key, _)) = self.cache.as_ref() {
+            if key.equals(&current_key) {
+                self.cache = None;
+            }
+        }
+
+        let (_, cache) = self.cache.get_or_insert_with(|| {
+            let (column_range, row_range) = calc_px_siz(
+                parent_size,
+                &self.template_columns,
+                self.gap_columns,
+                &self.template_rows,
+                self.gap_rows,
+                context,
+            );
+
+            (
+                current_key,
                 GridCache {
                     column_range,
                     row_range,
-                }
-            },
-        );
+                },
+            )
+        });
+
+        // cache is ready
 
         self.items
             .iter_mut()
-            .flat_map(|item| render_item(item, grid_cache, ui_background, ui_context))
+            .flat_map(|item| {
+                render_item(
+                    item,
+                    cache,
+                    background_view,
+                    background_range,
+                    context,
+                    renderer,
+                )
+            })
             .collect()
     }
 }
@@ -307,17 +350,10 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
 fn render_item<T: Send + 'static>(
     item: &mut GridNodeItem<T>,
     grid_cache: &GridCache,
-    UiBackground {
-        background_view,
-        background_range,
-        ..
-    }: UiBackground,
-    UiContext {
-        context,
-        renderer,
-        tag,
-        frame,
-    }: UiContext,
+    background_view: &wgpu::TextureView,
+    background_range: Range2D<f32>,
+    context: &SharedContext,
+    renderer: &Renderer,
 ) -> Vec<Object> {
     // calculate range
     let actual_size = grid_cache.get_actual_size();
@@ -341,17 +377,11 @@ fn render_item<T: Send + 'static>(
     // render
     item.item
         .render(
-            UiBackground {
-                parent_size: [Some(item_range.width()), Some(item_range.height())],
-                background_view,
-                background_range,
-            },
-            UiContext {
-                context,
-                renderer,
-                tag,
-                frame,
-            },
+            [Some(item_range.width()), Some(item_range.height())],
+            background_view,
+            background_range,
+            context,
+            renderer,
         )
         .into_iter()
         .map(|mut object| {

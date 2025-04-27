@@ -1,5 +1,7 @@
 use std::{fmt::Debug, sync::Arc};
 
+use wgpu::util::DeviceExt;
+
 use super::{
     component::Component,
     context,
@@ -13,6 +15,7 @@ use super::{
 // MARK: modules
 
 mod benchmark;
+mod error;
 mod gpu_state;
 mod keyboard_state;
 mod mouse_state;
@@ -36,12 +39,13 @@ pub struct Window<
     maximized: bool,
     full_screen: bool,
     font_context: Option<crate::cosmic::FontContext>,
-    // base_color: Color,
+    base_color: Color,
 
     // --- rendering context ---
     winit_window: Option<Arc<winit::window::Window>>,
     gpu_state: Option<gpu_state::GpuState<'a>>,
-    // renderer ?
+    background_texture: Option<wgpu::Texture>,
+    renderer: Option<Renderer>,
 
     // --- UI context ---
     root_component: Component<Model, Message, Response, IR>,
@@ -52,8 +56,11 @@ pub struct Window<
     mouse_state: Option<mouse_state::MouseState>,
     keyboard_state: Option<keyboard_state::KeyboardState>,
 
+    // frame
+    frame: u64,
+
     // --- benchmark / monitoring ---
-    benchmark: Option<benchmark::Benchmark>,
+    benchmarker: Option<benchmark::Benchmark>,
 }
 
 // build chain
@@ -92,7 +99,101 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
 impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'static>
     Window<'_, Model, Message, Response, IR>
 {
-    fn render(&mut self) {}
+    fn render(&mut self) -> Result<(), error::RenderError> {
+        // ensure that rendering context is available.
+        let Some(gpu_state) = self.gpu_state.as_ref() else {
+            return Err(error::RenderError::Gpu);
+        };
+
+        let Some(root_widget) = self.root_widget.as_mut() else {
+            return Err(error::RenderError::RootWidget);
+        };
+
+        let Some(renderer) = self.renderer.as_mut() else {
+            return Err(error::RenderError::Renderer);
+        };
+
+        let Some(benchmarker) = self.benchmarker.as_mut() else {
+            return Err(error::RenderError::Benchmarker);
+        };
+
+        // rendering
+
+        // get surface texture
+        let surface_texture = gpu_state.get_current_texture();
+        let surface_view = surface_texture
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+
+        // viewport size
+        let viewport_size = gpu_state.get_viewport_size();
+
+        // prepare background texture
+        let background_texture = self.background_texture.get_or_insert_with(|| {
+            let device = gpu_state.get_app_context().get_wgpu_device();
+            let queue = gpu_state.get_app_context().get_wgpu_queue();
+
+            device.create_texture_with_data(
+                queue,
+                &wgpu::TextureDescriptor {
+                    size: wgpu::Extent3d {
+                        width: 1,
+                        height: 1,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST,
+                    label: None,
+                    view_formats: &[],
+                },
+                wgpu::util::TextureDataOrder::MipMajor,
+                &self.base_color.to_rgba_u8(),
+            )
+        });
+        let background_view =
+            background_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let background_range = Range2D::new([0.0, 1.0], [0.0, 1.0]).unwrap();
+
+        // start benchmark
+        benchmarker.with_benchmark(|| {
+            let render_result = root_widget.render(
+                [Some(viewport_size[0]), Some(viewport_size[1])],
+                &background_view,
+                background_range,
+                gpu_state.get_app_context(),
+                renderer,
+            );
+
+            // project to screen
+            renderer.render_to_surface(&surface_view, viewport_size, render_result);
+
+            todo!();
+        });
+
+        // present
+        surface_texture.present();
+
+        // print frame (debug)
+        {
+            print!(
+                "\rframe rendering time: {}, average: {}, max in second: {} | frame: {}",
+                benchmarker.last_time(),
+                benchmarker.average_time(),
+                benchmarker.max_time(),
+                self.frame,
+            );
+            // flush
+            std::io::Write::flush(&mut std::io::stdout()).unwrap();
+        }
+
+        self.frame += 1;
+
+        // return
+        Ok(())
+    }
 }
 
 // MARK: process_raw_event
@@ -106,7 +207,8 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
         window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) -> UiEvent {
-        todo!()
+        // todo !
+        UiEvent::default()
     }
 }
 
@@ -176,7 +278,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, 
                 .refresh_rate_millihertz()
                 .unwrap();
             println!("Monitor refresh rate: {}.{} Hz", rate / 1000, rate % 1000);
-            self.benchmark = Some(benchmark::Benchmark::new((rate / 1000) as usize));
+            self.benchmarker = Some(benchmark::Benchmark::new((rate / 1000) as usize));
         }
 
         // --- trigger first frame rendering ---
@@ -194,6 +296,8 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, 
         window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
+        // todo: remove early return.
+
         if self.root_widget.is_none() {
             return;
         }
@@ -213,7 +317,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, 
             .widget_event(
                 &event,
                 [Some(window_size[0]), Some(window_size[1])],
-                &self.gpu_state.as_ref().unwrap().get_app_context(),
+                self.gpu_state.as_ref().unwrap().get_app_context(),
             );
 
         if let Some(user_event) = response {

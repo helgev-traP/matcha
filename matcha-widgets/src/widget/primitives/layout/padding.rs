@@ -1,10 +1,7 @@
 use std::any::Any;
 
 use matcha_core::{
-    context::SharedContext,
-    events::{UiEvent, UiEventResult},
-    types::range::Range2D,
-    ui::{Dom, DomComPareResult, UiBackground, UiContext, UpdateWidgetError, Widget},
+    context::SharedContext, events::UiEvent, observer::Observer, renderer::Renderer, types::range::Range2D, ui::{Dom, DomComPareResult, UpdateWidgetError, Widget}
 };
 
 pub struct Padding<T>
@@ -92,6 +89,7 @@ where
     }
 }
 
+#[async_trait::async_trait]
 impl<T> Dom<T> for Padding<T>
 where
     T: Send + 'static,
@@ -108,6 +106,10 @@ where
                 .as_ref()
                 .map(|content| content.build_widget_tree()),
         })
+    }
+
+    async fn collect_observer(&self) -> Observer {
+        todo!()
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -132,6 +134,7 @@ where
     content: Option<Box<dyn Widget<T>>>,
 }
 
+#[async_trait::async_trait]
 impl<T> Widget<T> for PaddingNode<T>
 where
     T: Send + 'static,
@@ -140,8 +143,9 @@ where
         self.label.as_deref()
     }
 
-    fn update_widget_tree(
+    async fn update_widget_tree(
         &mut self,
+        component_updated: bool,
         dom: &dyn Dom<T>,
     ) -> Result<(), UpdateWidgetError> {
         if let Some(dom) = dom.as_any().downcast_ref::<Padding<T>>() {
@@ -155,7 +159,9 @@ where
             // update content
             if let Some(dom_content) = &dom.content {
                 if let Some(self_content) = self.content.as_mut() {
-                    self_content.update_widget_tree(dom_content.as_ref())?;
+                    self_content
+                        .update_widget_tree(component_updated, dom_content.as_ref())
+                        .await?;
                 } else {
                     self.content = Some(dom_content.build_widget_tree());
                 }
@@ -182,20 +188,12 @@ where
         event: &UiEvent,
         parent_size: [Option<f32>; 2],
         context: &SharedContext,
-        tag: u64,
-        frame: u64,
-    ) -> UiEventResult<T> {
+    ) -> Option<T> {
         // todo !
-        UiEventResult::default()
+        None
     }
 
-    fn px_size(
-        &mut self,
-        parent_size: [Option<f32>; 2],
-        context: &SharedContext,
-        tag: u64,
-        frame: u64,
-    ) -> [f32; 2] {
+    fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &SharedContext) -> [f32; 2] {
         match parent_size {
             [Some(width), Some(height)] => [width, height],
             _ => {
@@ -207,7 +205,7 @@ where
                 let content_size = self
                     .content
                     .as_mut()
-                    .map(|content| content.px_size(content_op_size, context, tag, frame))
+                    .map(|content| content.px_size(content_op_size, context))
                     .unwrap_or([0.0, 0.0]);
 
                 // todo: witch is better?
@@ -230,8 +228,6 @@ where
         &mut self,
         parent_size: [Option<f32>; 2],
         context: &SharedContext,
-        tag: u64,
-        frame: u64,
     ) -> Option<Range2D<f32>> {
         let content_op_size = [
             parent_size[0].map(|v| v - self.left - self.right),
@@ -241,7 +237,7 @@ where
         let draw_range = self
             .content
             .as_mut()
-            .and_then(|content| content.draw_range(content_op_size, context, tag, frame));
+            .and_then(|content| content.draw_range(content_op_size, context));
 
         draw_range.map(|draw_range| draw_range.slide([self.left, self.top]))
     }
@@ -250,8 +246,6 @@ where
         &mut self,
         parent_size: [Option<f32>; 2],
         context: &SharedContext,
-        tag: u64,
-        frame: u64,
     ) -> Option<Range2D<f32>> {
         let content_op_size = [
             parent_size[0].map(|v| v - self.left - self.right),
@@ -261,7 +255,7 @@ where
         let cover_area = self
             .content
             .as_mut()
-            .and_then(|content| content.cover_area(content_op_size, context, tag, frame));
+            .and_then(|content| content.cover_area(content_op_size, context));
 
         cover_area.map(|cover_area| cover_area.slide([self.left, self.top]))
     }
@@ -275,12 +269,15 @@ where
 
     fn render(
         &mut self,
-        ui_background: UiBackground,
-        ui_context: UiContext,
+        parent_size: [Option<f32>; 2],
+        background_view: &wgpu::TextureView,
+        background_range: Range2D<f32>,
+        context: &SharedContext,
+        renderer: &Renderer,
     ) -> Vec<matcha_core::ui::Object> {
         self.content
             .as_mut()
-            .map(|content| content.render(ui_background, ui_context))
+            .map(|content| content.render(parent_size, background_view, background_range, context, renderer))
             .unwrap_or_default()
             .into_iter()
             .map(|mut object| {
