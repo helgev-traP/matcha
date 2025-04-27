@@ -367,7 +367,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, 
                 }
 
                 // re-rendering
-                self.render();
+                self.render().unwrap();
             }
         }
     }

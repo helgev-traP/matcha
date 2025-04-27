@@ -11,7 +11,7 @@ use super::{
 
 // MARK: - ModelAccessor
 
-struct ModelAccessor<Model: 'static> {
+pub struct ModelAccessor<Model: 'static> {
     model: Arc<RwLock<Model>>,
     update_flag: Arc<UpdateFlag>,
 }
@@ -206,7 +206,6 @@ impl<Model: Sync + Send + 'static, Response: 'static, InnerResponse: 'static> Do
     fn build_widget_tree(&self) -> Box<dyn Widget<Response>> {
         Box::new(ComponentWidget {
             label: self.label.clone(),
-            update_flag: Arc::clone(&self.update_flag),
             model_accessor: self.model_accessor.clone(),
             react_fn: self.react_fn,
             widget: self.dom.build_widget_tree(),
@@ -229,7 +228,6 @@ impl<Model: Sync + Send + 'static, Response: 'static, InnerResponse: 'static> Do
 pub struct ComponentWidget<Model: Sync + 'static, Response: 'static, InnerResponse: 'static> {
     label: Option<String>,
 
-    update_flag: Arc<UpdateFlag>,
     model_accessor: ModelAccessor<Model>,
     react_fn: fn(InnerResponse, ModelAccessor<Model>) -> Option<Response>,
 
@@ -249,6 +247,7 @@ impl<Model: Sync + Send + 'static, Response: 'static, InnerResponse: 'static> Wi
         _: bool,
         dom: &dyn Dom<Response>,
     ) -> Result<(), UpdateWidgetError> {
+        // todo: optimize
         if let Some(component_dom) = dom
             .as_any()
             .downcast_ref::<ComponentDom<Model, Response, InnerResponse>>()
