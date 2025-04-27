@@ -1,32 +1,31 @@
-use std::{collections::VecDeque, time::{Duration, Instant}};
+use std::{
+    collections::VecDeque,
+    time::{Duration, Instant},
+};
 
 pub struct Benchmark {
     ring: Vec<Duration>,
     reading: usize,
-
-    timer: Option<Instant>,
 }
 
 impl Benchmark {
-    pub fn new(fps: usize) -> Self {
+    pub fn new(samples: usize) -> Self {
         Self {
-            ring: vec![Duration::from_secs(0); fps],
+            ring: vec![Duration::from_secs(0); samples],
             reading: 0,
-            timer: None,
         }
     }
 
-    pub fn start(&mut self) {
-        self.timer.replace(Instant::now());
-    }
+    pub fn with_benchmark<F>(&mut self, mut f: F)
+    where
+        F: FnMut(),
+    {
+        let timer = Instant::now();
+        f();
+        let time = timer.elapsed();
 
-    pub fn stop(&mut self) {
-        if let Some(timer) = self.timer {
-            self.reading = (self.reading + 1) % self.ring.capacity();
-            self.ring[self.reading] = timer.elapsed();
-
-            self.timer = None;
-        }
+        self.reading = (self.reading + 1) % self.ring.capacity();
+        self.ring[self.reading] = time;
     }
 
     pub fn last_time(&self) -> Time {

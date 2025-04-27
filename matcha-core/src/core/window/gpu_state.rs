@@ -5,13 +5,11 @@ use crate::cosmic::FontContext;
 use super::context::SharedContext;
 
 pub struct GpuState<'a> {
-    instance: wgpu::Instance,
-    adapter: wgpu::Adapter,
+    _instance: wgpu::Instance,
+    _adapter: wgpu::Adapter,
     app_context: SharedContext,
     config: wgpu::SurfaceConfiguration,
     surface: wgpu::Surface<'a>,
-    multisampled_texture: wgpu::Texture,
-    depth_texture: wgpu::Texture,
 }
 
 impl GpuState<'_> {
@@ -76,36 +74,6 @@ impl GpuState<'_> {
             view_formats: vec![],
         };
 
-        let multisampled_texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: None,
-            size: wgpu::Extent3d {
-                width: size.width,
-                height: size.height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 4,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            view_formats: &[],
-        });
-
-        let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: None,
-            size: wgpu::Extent3d {
-                width: size.width,
-                height: size.height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 4,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Depth32Float,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            view_formats: &[],
-        });
-
         surface.configure(&device, &config);
 
         let app_context = SharedContext::new(
@@ -117,13 +85,11 @@ impl GpuState<'_> {
         );
 
         Self {
-            instance,
-            adapter,
+            _instance: instance,
+            _adapter: adapter,
             app_context,
             config,
             surface,
-            multisampled_texture,
-            depth_texture,
         }
     }
 
@@ -133,14 +99,6 @@ impl GpuState<'_> {
 
     pub fn get_current_texture(&self) -> wgpu::SurfaceTexture {
         self.surface.get_current_texture().unwrap()
-    }
-
-    pub fn get_depth_texture(&self) -> &wgpu::Texture {
-        &self.depth_texture
-    }
-
-    pub fn get_multisampled_texture(&self) -> &wgpu::Texture {
-        &self.multisampled_texture
     }
 
     pub fn get_config(&self) -> &wgpu::SurfaceConfiguration {
@@ -157,45 +115,7 @@ impl GpuState<'_> {
             self.config.width = size.width;
             self.config.height = size.height;
             self.surface
-                .configure(&self.app_context.get_wgpu_device(), &self.config);
-
-            // Update the depth texture
-            self.depth_texture =
-                self.app_context
-                    .get_wgpu_device()
-                    .create_texture(&wgpu::TextureDescriptor {
-                        label: None,
-                        size: wgpu::Extent3d {
-                            width: size.width,
-                            height: size.height,
-                            depth_or_array_layers: 1,
-                        },
-                        mip_level_count: 1,
-                        sample_count: 4,
-                        dimension: wgpu::TextureDimension::D2,
-                        format: wgpu::TextureFormat::Depth32Float,
-                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                        view_formats: &[],
-                    });
-
-            // Update the multisampled texture
-            self.multisampled_texture =
-                self.app_context
-                    .get_wgpu_device()
-                    .create_texture(&wgpu::TextureDescriptor {
-                        label: None,
-                        size: wgpu::Extent3d {
-                            width: size.width,
-                            height: size.height,
-                            depth_or_array_layers: 1,
-                        },
-                        mip_level_count: 1,
-                        sample_count: 4,
-                        dimension: wgpu::TextureDimension::D2,
-                        format: self.config.format,
-                        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                        view_formats: &[self.config.format],
-                    });
+                .configure(self.app_context.get_wgpu_device(), &self.config);
         }
     }
 }

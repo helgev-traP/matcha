@@ -1,10 +1,7 @@
 use std::any::Any;
 
 use matcha_core::{
-    context::SharedContext,
-    events::{UiEvent, UiEventResult},
-    types::range::Range2D,
-    ui::{Dom, DomComPareResult, UiBackground, UiContext, UpdateWidgetError, Widget},
+    context::SharedContext, events::{UiEvent, UiEventResult}, observer::Observer, renderer::Renderer, types::range::Range2D, ui::{Dom, DomComPareResult, Object, UpdateWidgetError, Widget}
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -76,6 +73,7 @@ where
     }
 }
 
+#[async_trait::async_trait]
 impl<T> Dom<T> for Visibility<T>
 where
     T: Send + 'static,
@@ -89,6 +87,15 @@ where
                 .as_ref()
                 .map(|content| content.build_widget_tree()),
         })
+    }
+
+    async fn collect_observer(&self) -> Observer {
+        // todo: optimize
+        if let Some(content) = &self.content {
+            content.collect_observer().await
+        } else {
+            Observer::default()
+        }
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -110,6 +117,7 @@ where
     content: Option<Box<dyn Widget<T>>>,
 }
 
+#[async_trait::async_trait]
 impl<T> Widget<T> for VisibilityNode<T>
 where
     T: Send + 'static,
@@ -118,7 +126,11 @@ where
         self.label.as_deref()
     }
 
-    fn update_widget_tree(&mut self, dom: &dyn Dom<T>) -> Result<(), UpdateWidgetError> {
+    async fn update_widget_tree(
+        &mut self,
+        component_updated: bool,
+        dom: &dyn Dom<T>,
+    ) -> Result<(), UpdateWidgetError> {
         if let Some(dom) = dom.as_any().downcast_ref::<Visibility<T>>() {
             // update properties
             self.label = dom.label.clone();
@@ -126,7 +138,9 @@ where
             // update content
             if let Some(dom_content) = &dom.content {
                 if let Some(self_content) = self.content.as_mut() {
-                    self_content.update_widget_tree(dom_content.as_ref())?;
+                    self_content
+                        .update_widget_tree(component_updated, dom_content.as_ref())
+                        .await?;
                 } else {
                     self.content = Some(dom_content.build_widget_tree());
                 }
@@ -153,31 +167,23 @@ where
         event: &UiEvent,
         parent_size: [Option<f32>; 2],
         context: &SharedContext,
-        tag: u64,
-        frame: u64,
-    ) -> UiEventResult<T> {
+    ) -> Option<T> {
         match self.visible {
             VisibilityState::Visible => self
                 .content
                 .as_mut()
-                .map(|content| content.widget_event(event, parent_size, context, tag, frame))
+                .map(|content| content.widget_event(event, parent_size, context))
                 .unwrap_or_default(),
-            VisibilityState::Hidden | VisibilityState::None => UiEventResult::default(),
+            VisibilityState::Hidden | VisibilityState::None => None,
         }
     }
 
-    fn px_size(
-        &mut self,
-        parent_size: [Option<f32>; 2],
-        context: &SharedContext,
-        tag: u64,
-        frame: u64,
-    ) -> [f32; 2] {
+    fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &SharedContext) -> [f32; 2] {
         match self.visible {
             VisibilityState::Visible | VisibilityState::Hidden => self
                 .content
                 .as_mut()
-                .map(|content| content.px_size(parent_size, context, tag, frame))
+                .map(|content| content.px_size(parent_size, context))
                 .unwrap_or([0.0, 0.0]),
             VisibilityState::None => [0.0, 0.0],
         }
@@ -187,14 +193,12 @@ where
         &mut self,
         parent_size: [Option<f32>; 2],
         context: &SharedContext,
-        tag: u64,
-        frame: u64,
     ) -> Option<Range2D<f32>> {
         match self.visible {
             VisibilityState::Visible => self
                 .content
                 .as_mut()
-                .map(|content| content.draw_range(parent_size, context, tag, frame))
+                .map(|content| content.draw_range(parent_size, context))
                 .unwrap_or(None),
             VisibilityState::Hidden | VisibilityState::None => None,
         }
@@ -204,14 +208,12 @@ where
         &mut self,
         parent_size: [Option<f32>; 2],
         context: &SharedContext,
-        tag: u64,
-        frame: u64,
     ) -> Option<Range2D<f32>> {
         match self.visible {
             VisibilityState::Visible => self
                 .content
                 .as_mut()
-                .map(|content| content.cover_area(parent_size, context, tag, frame))
+                .map(|content| content.cover_area(parent_size, context))
                 .unwrap_or(None),
             VisibilityState::Hidden | VisibilityState::None => None,
         }
@@ -226,14 +228,25 @@ where
 
     fn render(
         &mut self,
-        ui_background: UiBackground,
-        ui_context: UiContext,
-    ) -> Vec<matcha_core::ui::Object> {
+        parent_size: [Option<f32>; 2],
+        background_view: &wgpu::TextureView,
+        background_range: Range2D<f32>,
+        context: &SharedContext,
+        renderer: &Renderer,
+    ) -> Vec<Object> {
         match self.visible {
             VisibilityState::Visible => self
                 .content
                 .as_mut()
-                .map(|content| content.render(ui_background, ui_context))
+                .map(|content| {
+                    content.render(
+                        parent_size,
+                        background_view,
+                        background_range,
+                        context,
+                        renderer,
+                    )
+                })
                 .unwrap_or_default(),
             VisibilityState::Hidden | VisibilityState::None => vec![],
         }

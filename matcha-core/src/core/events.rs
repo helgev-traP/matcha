@@ -1,14 +1,21 @@
 // widget event
-use super::device::{
-    keyboard::Key,
-    mouse::MouseButton,
-};
+use super::device::{keyboard::Key, mouse::MouseButton};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct UiEvent {
     pub frame: u64,
     pub content: UiEventContent,
     pub diff: (), // todo
+}
+
+impl Default for UiEvent {
+    fn default() -> Self {
+        Self {
+            frame: Default::default(),
+            content: UiEventContent::None,
+            diff: Default::default(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
