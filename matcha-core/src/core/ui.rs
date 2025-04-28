@@ -1,12 +1,8 @@
 use std::{any::Any, sync::Arc};
 
 use super::{
-    context::SharedContext,
-    events::UiEvent,
-    observer::Observer,
-    renderer::Renderer,
-    types::range::Range2D,
-    vertex::uv_vertex::UvVertex,
+    context::SharedContext, events::Event, observer::Observer, renderer::Renderer,
+    types::range::Range2D, vertex::uv_vertex::UvVertex,
 };
 
 // dom tree node
@@ -27,7 +23,6 @@ pub enum UpdateWidgetError {
     TypeMismatch,
 }
 
-// todo: consider integrate frame into `SharedContext`.
 #[async_trait::async_trait]
 pub trait Widget<T>: Send {
     // label
@@ -45,7 +40,7 @@ pub trait Widget<T>: Send {
     // widget event
     fn widget_event(
         &mut self,
-        event: &UiEvent,
+        event: &Event,
         parent_size: [Option<f32>; 2],
         context: &SharedContext,
     ) -> Option<T>;
@@ -66,11 +61,7 @@ pub trait Widget<T>: Send {
     }
 
     /// Actual size including its sub widgets with pixel value.
-    fn px_size(
-        &mut self,
-        parent_size: [Option<f32>; 2],
-        context: &SharedContext,
-    ) -> [f32; 2];
+    fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &SharedContext) -> [f32; 2];
 
     // todo: integrate `draw_range` and `cover_area` into `cover_area` use `range::CoverRange` as return value
 

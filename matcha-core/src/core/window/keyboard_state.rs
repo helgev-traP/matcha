@@ -1,10 +1,10 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use winit::keyboard::SmolStr;
 
 use crate::{
     device::keyboard::{Key, Modifiers, NamedKey},
-    events::{ElementState, UiEvent, UiEventContent},
+    events::{ConcreteEvent, ElementState, Event},
 };
 
 // track keyboard state by winit structure.
@@ -23,7 +23,7 @@ impl KeyboardState {
         }
     }
 
-    pub fn key_event(&mut self, frame: u64, event: winit::event::KeyEvent) -> Option<UiEvent> {
+    pub fn key_event(&mut self, frame: u64, event: winit::event::KeyEvent) -> Option<Event> {
         match event.state {
             winit::event::ElementState::Pressed => match event.logical_key {
                 winit::keyboard::Key::Named(named_key) => match named_key {
@@ -69,9 +69,9 @@ impl KeyboardState {
                                 .insert(NamedKey::from_winit_named_key(named_key).unwrap(), 1);
                         }
 
-                        Some(UiEvent {
-                            frame: frame,
-                            content: UiEventContent::KeyboardInput {
+                        Some(Event::new(
+                            frame,
+                            ConcreteEvent::KeyboardInput {
                                 key: Key::Spacial(
                                     NamedKey::from_winit_named_key(named_key).unwrap(),
                                 ),
@@ -81,8 +81,7 @@ impl KeyboardState {
                                         [&NamedKey::from_winit_named_key(named_key).unwrap()],
                                 ),
                             },
-                            diff: (),
-                        })
+                        ))
                     }
                     winit::keyboard::NamedKey::Control
                     | winit::keyboard::NamedKey::Alt
@@ -99,9 +98,9 @@ impl KeyboardState {
                             );
                         }
 
-                        Some(UiEvent {
-                            frame: frame,
-                            content: UiEventContent::KeyboardInput {
+                        Some(Event::new(
+                            frame,
+                            ConcreteEvent::KeyboardInput {
                                 key: Key::Modifiers(
                                     Modifiers::from_winit_named_key(named_key, event.location)
                                         .unwrap(),
@@ -115,8 +114,7 @@ impl KeyboardState {
                                     .unwrap()],
                                 ),
                             },
-                            diff: (),
-                        })
+                        ))
                     }
                     _ => None,
                 },
@@ -128,17 +126,18 @@ impl KeyboardState {
                             self.characters.insert(code, (c, 1));
                         }
 
-                        Some(UiEvent {
-                            frame: frame,
-                            content: UiEventContent::KeyboardInput {
-                                key: Key::Character(self.characters[&code].0.chars().next().unwrap()),
+                        Some(Event::new(
+                            frame,
+                            ConcreteEvent::KeyboardInput {
+                                key: Key::Character(
+                                    self.characters[&code].0.chars().next().unwrap(),
+                                ),
                                 element_state: ElementState::from_winit_state(
                                     event.state,
                                     self.characters[&code].1,
                                 ),
                             },
-                            diff: (),
-                        })
+                        ))
                     } else {
                         None
                     }
@@ -190,16 +189,15 @@ impl KeyboardState {
                         self.named_keys
                             .remove(&NamedKey::from_winit_named_key(named_key).unwrap());
 
-                        Some(UiEvent {
-                            frame: frame,
-                            content: UiEventContent::KeyboardInput {
+                        Some(Event::new(
+                            frame,
+                            ConcreteEvent::KeyboardInput {
                                 key: Key::Spacial(
                                     NamedKey::from_winit_named_key(named_key).unwrap(),
                                 ),
                                 element_state: ElementState::from_winit_state(event.state, count),
                             },
-                            diff: (),
-                        })
+                        ))
                     }
                     winit::keyboard::NamedKey::Control
                     | winit::keyboard::NamedKey::Alt
@@ -218,17 +216,16 @@ impl KeyboardState {
                             &Modifiers::from_winit_named_key(named_key, event.location).unwrap(),
                         );
 
-                        Some(UiEvent {
-                            frame: frame,
-                            content: UiEventContent::KeyboardInput {
+                        Some(Event::new(
+                            frame,
+                            ConcreteEvent::KeyboardInput {
                                 key: Key::Modifiers(
                                     Modifiers::from_winit_named_key(named_key, event.location)
                                         .unwrap(),
                                 ),
                                 element_state: ElementState::from_winit_state(event.state, count),
                             },
-                            diff: (),
-                        })
+                        ))
                     }
                     _ => None,
                 },
@@ -242,14 +239,13 @@ impl KeyboardState {
 
                         self.characters.remove(&code);
 
-                        Some(UiEvent {
-                            frame: frame,
-                            content: UiEventContent::KeyboardInput {
+                        Some(Event::new(
+                            frame,
+                            ConcreteEvent::KeyboardInput {
                                 key: Key::Character(c.chars().next().unwrap()),
                                 element_state: ElementState::from_winit_state(event.state, count),
                             },
-                            diff: (),
-                        })
+                        ))
                     } else {
                         None
                     }

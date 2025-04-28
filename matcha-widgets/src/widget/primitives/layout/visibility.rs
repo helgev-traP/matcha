@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use matcha_core::{
-    context::SharedContext, events::{UiEvent, UiEventResult}, observer::Observer, renderer::Renderer, types::range::Range2D, ui::{Dom, DomComPareResult, Object, UpdateWidgetError, Widget}
+    context::SharedContext, events::{Event, UiEventResult}, observer::Observer, renderer::Renderer, types::range::Range2D, ui::{Dom, DomComPareResult, Object, UpdateWidgetError, Widget}
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -164,7 +164,7 @@ where
 
     fn widget_event(
         &mut self,
-        event: &UiEvent,
+        event: &Event,
         parent_size: [Option<f32>; 2],
         context: &SharedContext,
     ) -> Option<T> {

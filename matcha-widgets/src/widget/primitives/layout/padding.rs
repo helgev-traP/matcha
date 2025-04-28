@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use matcha_core::{
-    context::SharedContext, events::UiEvent, observer::Observer, renderer::Renderer, types::range::Range2D, ui::{Dom, DomComPareResult, UpdateWidgetError, Widget}
+    context::SharedContext, events::Event, observer::Observer, renderer::Renderer, types::range::Range2D, ui::{Dom, DomComPareResult, UpdateWidgetError, Widget}
 };
 
 pub struct Padding<T>
@@ -185,7 +185,7 @@ where
 
     fn widget_event(
         &mut self,
-        event: &UiEvent,
+        event: &Event,
         parent_size: [Option<f32>; 2],
         context: &SharedContext,
     ) -> Option<T> {

@@ -5,7 +5,7 @@ use wgpu::util::DeviceExt;
 use super::{
     component::Component,
     context,
-    events::UiEvent,
+    events::Event,
     observer::Observer,
     renderer::Renderer,
     types::{color::Color, range::Range2D},
@@ -128,7 +128,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
         // viewport size
         let viewport_size = gpu_state.get_viewport_size();
 
-        // prepare background texture
+        // prepare background color (1x1) texture
         let background_texture = self.background_texture.get_or_insert_with(|| {
             let device = gpu_state.get_app_context().get_wgpu_device();
             let queue = gpu_state.get_app_context().get_wgpu_queue();
@@ -169,14 +169,12 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
 
             // project to screen
             renderer.render_to_surface(&surface_view, viewport_size, render_result);
-
-            todo!();
         });
 
-        // present
+        // present to screen
         surface_texture.present();
 
-        // print frame (debug)
+        // print debug info
         {
             print!(
                 "\rframe rendering time: {}, average: {}, max in second: {} | frame: {}",
@@ -189,6 +187,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
             std::io::Write::flush(&mut std::io::stdout()).unwrap();
         }
 
+        // increment frame count for input handling
         self.frame += 1;
 
         // return
@@ -206,9 +205,9 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
         event_loop: &winit::event_loop::ActiveEventLoop,
         window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
-    ) -> UiEvent {
+    ) -> Event {
         // todo !
-        UiEvent::default()
+        Event::default()
     }
 }
 
@@ -296,36 +295,28 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, 
         window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
-        // todo: remove early return.
-
-        if self.root_widget.is_none() {
-            return;
-        }
-
         // process raw event
 
         let event = self.process_raw_event(event_loop, window_id, event);
 
-        // get response from widget tree
+        // when root widget exists
+        if let Some(root_widget) = self.root_widget.as_mut() {
+            // get response from widget tree
+            let window_size = self.gpu_state.as_ref().unwrap().get_viewport_size();
 
-        let window_size = self.gpu_state.as_ref().unwrap().get_viewport_size();
-
-        let response = self
-            .root_widget
-            .as_mut()
-            .expect("never panic")
-            .widget_event(
+            let response = root_widget.widget_event(
                 &event,
                 [Some(window_size[0]), Some(window_size[1])],
                 self.gpu_state.as_ref().unwrap().get_app_context(),
             );
 
-        if let Some(user_event) = response {
-            // send response to backend
-            todo!(
-                "Response to backend: {:?}\nBut sending to backend is not implemented yet",
-                user_event
-            );
+            if let Some(user_event) = response {
+                // send response to backend
+                todo!(
+                    "Response to backend: {:?}\nBut sending to backend is not implemented yet",
+                    user_event
+                );
+            }
         }
     }
 
@@ -355,14 +346,14 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, 
                         self.observer = dom.collect_observer().await;
 
                         // update widget tree
-                        self.root_widget
-                            .as_mut()
-                            // todo
-                            .expect("todo: ensure that the widget tree is not empty")
-                            // todo: try remove `&*`
-                            .update_widget_tree(true, &*dom)
-                            .await
-                            .unwrap();
+
+                        if let Some(root_widget) = self.root_widget.as_mut() {
+                            if (root_widget.update_widget_tree(true, &*dom).await).is_err() {
+                                self.root_widget = Some(dom.build_widget_tree());
+                            }
+                        } else {
+                            self.root_widget = Some(dom.build_widget_tree());
+                        }
                     });
                 }
 

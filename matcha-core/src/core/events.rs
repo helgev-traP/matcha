@@ -1,25 +1,50 @@
 // widget event
 use super::device::{keyboard::Key, mouse::MouseButton};
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct UiEvent {
-    pub frame: u64,
-    pub content: UiEventContent,
-    pub diff: (), // todo
+// MARK: Event
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Event {
+    frame: u64,
+    raw: ConcreteEvent,
+    relative_position: [f32; 2],
 }
 
-impl Default for UiEvent {
-    fn default() -> Self {
+impl Event {
+    pub fn new(frame: u64, event: ConcreteEvent) -> Self {
         Self {
-            frame: Default::default(),
-            content: UiEventContent::None,
-            diff: Default::default(),
+            frame,
+            raw: event,
+            relative_position: [0.0, 0.0],
+        }
+    }
+
+    pub fn frame(&self) -> u64 {
+        self.frame
+    }
+
+    pub fn raw_event(&self) -> ConcreteEvent {
+        self.raw
+    }
+
+    pub fn event(&self) -> ConcreteEvent {
+        todo!()
+    }
+
+    pub fn transition(&self, position: [f32; 2]) -> Self {
+        Self {
+            frame: self.frame,
+            raw: self.raw,
+            relative_position: [
+                self.relative_position[0] + position[0],
+                self.relative_position[1] + position[1],
+            ],
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum UiEventContent {
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ConcreteEvent {
     None,
     // mouse event
     MouseClick {
@@ -47,7 +72,15 @@ pub enum UiEventContent {
     // todo
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+impl Default for ConcreteEvent {
+    fn default() -> Self {
+        ConcreteEvent::None
+    }
+}
+
+// MARK: ElementState
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ElementState {
     Pressed(u32),
     LongPressed(u32),
@@ -60,30 +93,5 @@ impl ElementState {
             winit::event::ElementState::Pressed => ElementState::Pressed(count),
             winit::event::ElementState::Released => ElementState::Released(count),
         }
-    }
-}
-
-// result of widget event
-
-pub struct UiEventResult<UserEvent> {
-    // matcha-ui system event
-
-    // pub system_event: Option<{SystemMessage}>,
-
-    // user event
-    pub user_event: Option<UserEvent>,
-}
-
-impl<UserEvent> UiEventResult<UserEvent> {
-    pub fn swap_user_event<UserEvent2>(self, event: UserEvent2) -> UiEventResult<UserEvent2> {
-        UiEventResult {
-            user_event: Some(event),
-        }
-    }
-}
-
-impl<R> Default for UiEventResult<R> {
-    fn default() -> Self {
-        UiEventResult { user_event: None }
     }
 }

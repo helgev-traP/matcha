@@ -1,6 +1,6 @@
 use matcha_core::{
     context::SharedContext,
-    events::UiEvent,
+    events::Event,
     observer::Observer,
     renderer::Renderer,
     types::range::Range2D,
@@ -220,7 +220,7 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
 
     fn widget_event(
         &mut self,
-        event: &UiEvent,
+        event: &Event,
         parent_size: [Option<f32>; 2],
         context: &SharedContext,
     ) -> Option<T> {
