@@ -1,6 +1,6 @@
 use bitflags::bitflags;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Key {
     Character(char),
     Spacial(NamedKey),

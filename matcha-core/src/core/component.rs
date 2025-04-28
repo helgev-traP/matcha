@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, atomic::AtomicBool};
 
 use tokio::sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
@@ -44,36 +44,34 @@ impl<Model: 'static> ModelAccessor<Model> {
 // MARK: - UpdateFlag
 
 struct UpdateFlag {
-    updated: Mutex<bool>, // todo: consider use `AtomicBool` or std-Mutex
+    updated: AtomicBool,
     observer_sender: Mutex<Option<ObserverSender>>,
 }
 
 impl UpdateFlag {
-    fn new() -> Self {
+    fn new(b: bool) -> Self {
         Self {
-            updated: Mutex::new(true),
+            updated: AtomicBool::new(b),
             observer_sender: Mutex::new(None),
         }
     }
 
     /// When the model is updated, this function should be called to notify the observer.
     async fn set_to_true(&self) {
-        let mut updated = self.updated.lock().await;
-        *updated = true;
+        self.updated
+            .store(true, std::sync::atomic::Ordering::Release);
         if let Some(sender) = &mut *self.observer_sender.lock().await {
             sender.send_update();
         }
     }
 
+    fn set_to_false(&self) {
+        self.updated
+            .store(false, std::sync::atomic::Ordering::Release);
+    }
+
     /// Create an observer receiver. Also reset the update flag to false.
     async fn make_observer(&self) -> ObserverReceiver {
-        // update the flag to false
-        {
-            let mut updated = self.updated.lock().await;
-            *updated = false;
-        }
-
-        // make observer
         let (sender, receiver) = create_observer_ch();
         let mut observer_sender = self.observer_sender.lock().await;
         *observer_sender = Some(sender);
@@ -81,8 +79,7 @@ impl UpdateFlag {
     }
 
     async fn is_updated(&self) -> bool {
-        let updated = self.updated.lock().await;
-        *updated
+        self.updated.load(std::sync::atomic::Ordering::Acquire)
     }
 }
 
@@ -122,7 +119,7 @@ impl<Model: Send + Sync + 'static, Message, Response: 'static, InnerResponse: 's
         Self {
             label: label.map(|s| s.to_string()),
             model: Arc::new(RwLock::new(model)),
-            model_update_flag: Arc::new(UpdateFlag::new()),
+            model_update_flag: Arc::new(UpdateFlag::new(false)),
             setup_fn: |_: ModelAccessor<Model>| {},
             update_fn: |_: Message, _: ModelAccessor<Model>| {},
             react_fn: |_: InnerResponse, _: ModelAccessor<Model>| None,
@@ -203,7 +200,10 @@ pub struct ComponentDom<Model: Sync + 'static, Response: 'static, InnerResponse:
 impl<Model: Sync + Send + 'static, Response: 'static, InnerResponse: 'static> Dom<Response>
     for ComponentDom<Model, Response, InnerResponse>
 {
+    // make update_flag to `false` when `build_widget_tree` or `update_widget_tree` called.
     fn build_widget_tree(&self) -> Box<dyn Widget<Response>> {
+        self.model_accessor.update_flag.set_to_false();
+
         Box::new(ComponentWidget {
             label: self.label.clone(),
             model_accessor: self.model_accessor.clone(),
@@ -242,6 +242,7 @@ impl<Model: Sync + Send + 'static, Response: 'static, InnerResponse: 'static> Wi
         self.label.as_deref()
     }
 
+    // make update_flag to false when `build_widget_tree` or `update_widget_tree` called.
     async fn update_widget_tree(
         &mut self,
         _: bool,
@@ -253,6 +254,8 @@ impl<Model: Sync + Send + 'static, Response: 'static, InnerResponse: 'static> Wi
             .downcast_ref::<ComponentDom<Model, Response, InnerResponse>>()
         {
             let is_component_updated = component_dom.update_flag.is_updated().await;
+
+            self.model_accessor.update_flag.set_to_false();
 
             self.widget
                 .update_widget_tree(is_component_updated, component_dom.dom.as_ref())
@@ -280,7 +283,7 @@ impl<Model: Sync + Send + 'static, Response: 'static, InnerResponse: 'static> Wi
 
     fn widget_event(
         &mut self,
-        event: &super::events::UiEvent,
+        event: &super::events::Event,
         parent_size: [Option<f32>; 2],
         context: &SharedContext,
     ) -> Option<Response> {
