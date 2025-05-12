@@ -73,12 +73,12 @@ impl BoxDescriptor {
 
     pub fn radius(mut self, radius: f32) -> Self {
         self.radius = radius.min(self.range.short_side() / 2.0);
-        self.div = 16.min(radius as u16).max(0);
+        self.div = 16.min(radius as u16);
         self
     }
 
     pub fn division(mut self, div: u16) -> Self {
-        self.div = div.max(0);
+        self.div = div;
         self
     }
 }
@@ -112,7 +112,7 @@ pub fn box_mesh(desc: BoxDescriptor) -> Option<BoxMesh> {
 
 fn single_rect(range: Range2D<f32>, radius: f32, div: u16) -> Option<BoxMesh> {
     if range.short_side() == 0.0 {
-        return None;
+        None
     } else if radius == 0.0 {
         Some(single_rect_no_round(range))
     } else {

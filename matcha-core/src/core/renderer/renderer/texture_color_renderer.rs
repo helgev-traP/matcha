@@ -1,15 +1,18 @@
 use std::sync::Arc;
-
 use wgpu::util::DeviceExt;
 
-use crate::{ui::TextureObject, vertex::uv_vertex::UvVertex};
+use crate::vertex::uv_vertex::UvVertex;
+
+// bind groups:
+// - affine transform
+// - texture
 
 pub struct TextureObjectRenderer {
     texture_bind_group_layout: wgpu::BindGroupLayout,
     affine_bind_group_layout: wgpu::BindGroupLayout,
-    pipeline_layout: wgpu::PipelineLayout,
+    _pipeline_layout: wgpu::PipelineLayout,
     render_pipeline: wgpu::RenderPipeline,
-    render_to_surface_pipeline: wgpu::RenderPipeline,
+    render_pipeline_surface: wgpu::RenderPipeline,
     texture_sampler: wgpu::Sampler,
 }
 
@@ -17,7 +20,7 @@ impl TextureObjectRenderer {
     pub fn new(device: &wgpu::Device, surface_format: wgpu::TextureFormat) -> Self {
         let affine_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Affine Bind Group Layout"),
+                label: Some("TextureObjectRenderer: Affine Bind Group Layout"),
                 entries: &[wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStages::VERTEX,
@@ -32,7 +35,7 @@ impl TextureObjectRenderer {
 
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Texture Bind Group Layout"),
+                label: Some("TextureObjectRenderer: Texture Bind Group Layout"),
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
@@ -54,28 +57,28 @@ impl TextureObjectRenderer {
             });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Texture Object Render Pipeline Layout"),
+            label: Some("TextureObjectRenderer: Pipeline Layout"),
             bind_group_layouts: &[&affine_bind_group_layout, &texture_bind_group_layout],
             push_constant_ranges: &[],
         });
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Texture Object Render Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("texture_object_renderer.wgsl").into()),
+            label: Some("TextureObjectRenderer: Shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("texture_color_renderer.wgsl").into()),
         });
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Texture Object Render Pipeline"),
+            label: Some("TextureObjectRenderer: Render Pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: "vs_main",
+                entry_point: Some("vs_main"),
                 buffers: &[UvVertex::desc()],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
-                entry_point: "fs_main",
+                entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: wgpu::TextureFormat::Rgba8UnormSrgb,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
@@ -102,19 +105,19 @@ impl TextureObjectRenderer {
             cache: None,
         });
 
-        let render_to_surface_pipeline =
+        let render_pipeline_surface =
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("Texture Object Render Pipeline"),
+                label: Some("TextureObjectRenderer: Render Pipeline(Surface)"),
                 layout: Some(&pipeline_layout),
                 vertex: wgpu::VertexState {
                     module: &shader,
-                    entry_point: "vs_main",
+                    entry_point: Some("vs_main"),
                     buffers: &[UvVertex::desc()],
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
                 },
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
-                    entry_point: "fs_main",
+                    entry_point: Some("fs_main"),
                     targets: &[Some(wgpu::ColorTargetState {
                         format: surface_format,
                         blend: Some(wgpu::BlendState::ALPHA_BLENDING),
@@ -142,7 +145,7 @@ impl TextureObjectRenderer {
             });
 
         let texture_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("Texture Sampler"),
+            label: Some("TextureObjectRenderer: Texture Sampler"),
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
@@ -155,43 +158,42 @@ impl TextureObjectRenderer {
         Self {
             texture_bind_group_layout,
             affine_bind_group_layout,
-            pipeline_layout,
+            _pipeline_layout: pipeline_layout,
             render_pipeline,
-            render_to_surface_pipeline,
+            render_pipeline_surface,
             texture_sampler,
         }
     }
 
     /// Use this after mesh integration.
+    #[allow(clippy::too_many_arguments)]
     pub fn render(
         &self,
-        destination_view: &wgpu::TextureView,
-        normalize_matrix: nalgebra::Matrix4<f32>,
-        // object
-        // todo: refactor this
-        texture: Arc<wgpu::Texture>,
-        vertex: Arc<Vec<UvVertex>>,
-        index: Arc<Vec<u16>>,
-        // render to surface or not
-        render_to_surface: bool,
         // gpu
         device: &wgpu::Device,
         queue: &wgpu::Queue,
+        // render target
+        destination_view: &wgpu::TextureView,
+        normalize_matrix: nalgebra::Matrix4<f32>,
+        // object
+        texture: Arc<wgpu::Texture>,
+        vertex: Vec<UvVertex>,
+        index: Vec<u16>,
+        // render to surface or not
+        render_to_surface: bool,
     ) {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some(
-                "Render Command Encoder (src/tea/renderer/renderer/texture_object_renderer.rs)",
-            ),
+            label: Some("TextureObjectRenderer: Render Command Encoder"),
         });
 
         let normalize_affine_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Renderer TexturedVertex Affine Bind Group"),
+            label: Some("TextureObjectRenderer: Affine Bind Group"),
             layout: &self.affine_bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
                 resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                     buffer: &device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Render TexturedVertex Affine Buffer"),
+                        label: Some("TextureObjectRenderer: Affine Buffer"),
                         contents: bytemuck::cast_slice(normalize_matrix.as_slice()),
                         usage: wgpu::BufferUsages::UNIFORM,
                     }),
@@ -206,7 +208,7 @@ impl TextureObjectRenderer {
         let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         let texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Renderer TexturedVertex Texture Bind Group"),
+            label: Some("TextureObjectRenderer: Texture Bind Group"),
             layout: &self.texture_bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
@@ -223,7 +225,7 @@ impl TextureObjectRenderer {
         // vertex
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Renderer TexturedVertex Vertex Buffer"),
+            label: Some("TextureObjectRenderer: Vertex Buffer"),
             contents: bytemuck::cast_slice(&vertex),
             usage: wgpu::BufferUsages::VERTEX,
         });
@@ -231,7 +233,7 @@ impl TextureObjectRenderer {
         // index
 
         let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Renderer TexturedVertex Index Buffer"),
+            label: Some("TextureObjectRenderer: Index Buffer"),
             contents: bytemuck::cast_slice(&index),
             usage: wgpu::BufferUsages::INDEX,
         });
@@ -239,9 +241,9 @@ impl TextureObjectRenderer {
         // render pass
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Renderer TexturedVertex Render Pass"),
+                label: Some("TextureObjectRenderer: Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &destination_view,
+                    view: destination_view,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Load,
@@ -254,7 +256,7 @@ impl TextureObjectRenderer {
             });
 
             render_pass.set_pipeline(if render_to_surface {
-                &self.render_to_surface_pipeline
+                &self.render_pipeline_surface
             } else {
                 &self.render_pipeline
             });

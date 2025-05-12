@@ -9,7 +9,7 @@ use super::{
     observer::Observer,
     renderer::Renderer,
     types::{color::Color, range::Range2D},
-    ui::Widget,
+    ui::{Background, Widget},
 };
 
 // MARK: modules
@@ -155,14 +155,12 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
         });
         let background_view =
             background_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let background_range = Range2D::new([0.0, 1.0], [0.0, 1.0]).unwrap();
 
         // start benchmark
         benchmarker.with_benchmark(|| {
             let render_result = root_widget.render(
                 [Some(viewport_size[0]), Some(viewport_size[1])],
-                &background_view,
-                background_range,
+                Background::new(&background_view, [0.0, 0.0]),
                 gpu_state.get_app_context(),
                 renderer,
             );

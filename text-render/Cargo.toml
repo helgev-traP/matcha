@@ -1,0 +1,14 @@
+[package]
+name = "text-render"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+fontdb = { workspace = true }
+fontdue = { workspace = true }
+wgpu = { workspace = true }
+nalgebra = { workspace = true }
+
+[dev-dependencies]
+pollster = { workspace = true }

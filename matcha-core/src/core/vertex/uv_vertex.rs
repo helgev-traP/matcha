@@ -1,9 +1,6 @@
 use std::sync::Arc;
 
-use crate::types::range::Range2D;
 use nalgebra::{Point2, Point3};
-
-use super::vertex::{Mesh, Vertex};
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
@@ -29,6 +26,18 @@ impl UvVertex {
                     format: wgpu::VertexFormat::Float32x2,
                 },
             ],
+        }
+    }
+}
+
+impl UvVertex {
+    pub fn transform(&self, transform: &nalgebra::Matrix4<f32>) -> Self {
+        let position = transform.transform_point(&self.position);
+        let uv = self.uv;
+
+        UvVertex {
+            position,
+            uv,
         }
     }
 }

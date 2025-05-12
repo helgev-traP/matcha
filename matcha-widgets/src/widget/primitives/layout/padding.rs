@@ -1,7 +1,12 @@
 use std::any::Any;
 
 use matcha_core::{
-    context::SharedContext, events::Event, observer::Observer, renderer::Renderer, types::range::Range2D, ui::{Dom, DomComPareResult, UpdateWidgetError, Widget}
+    context::SharedContext,
+    events::Event,
+    observer::Observer,
+    renderer::Renderer,
+    types::range::{CoverRange, Range2D},
+    ui::{Background, Dom, DomComPareResult, UpdateWidgetError, Widget},
 };
 
 pub struct Padding<T>
@@ -109,7 +114,11 @@ where
     }
 
     async fn collect_observer(&self) -> Observer {
-        todo!()
+        if let Some(content) = &self.content {
+            content.collect_observer().await
+        } else {
+            Observer::default()
+        }
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -208,14 +217,6 @@ where
                     .map(|content| content.px_size(content_op_size, context))
                     .unwrap_or([0.0, 0.0]);
 
-                // todo: witch is better?
-                // [
-                //     self.left + content_size[0] + self.right,
-                //     self.top + content_size[1] + self.bottom,
-                // ]
-
-                // or
-
                 [
                     parent_size[0].unwrap_or(content_size[0] + self.left + self.right),
                     parent_size[1].unwrap_or(content_size[1] + self.top + self.bottom),
@@ -224,40 +225,25 @@ where
         }
     }
 
-    fn draw_range(
+    // The drawing range and the area that the widget always covers.
+    fn cover_range(
         &mut self,
         parent_size: [Option<f32>; 2],
         context: &SharedContext,
-    ) -> Option<Range2D<f32>> {
+    ) -> CoverRange<f32> {
         let content_op_size = [
             parent_size[0].map(|v| v - self.left - self.right),
             parent_size[1].map(|v| v - self.top - self.bottom),
         ];
 
-        let draw_range = self
-            .content
+        self.content
             .as_mut()
-            .and_then(|content| content.draw_range(content_op_size, context));
-
-        draw_range.map(|draw_range| draw_range.slide([self.left, self.top]))
-    }
-
-    fn cover_area(
-        &mut self,
-        parent_size: [Option<f32>; 2],
-        context: &SharedContext,
-    ) -> Option<Range2D<f32>> {
-        let content_op_size = [
-            parent_size[0].map(|v| v - self.left - self.right),
-            parent_size[1].map(|v| v - self.top - self.bottom),
-        ];
-
-        let cover_area = self
-            .content
-            .as_mut()
-            .and_then(|content| content.cover_area(content_op_size, context));
-
-        cover_area.map(|cover_area| cover_area.slide([self.left, self.top]))
+            .map(|content| {
+                content
+                    .cover_range(content_op_size, context)
+                    .slide([self.left, self.top])
+            })
+            .unwrap_or_default()
     }
 
     fn redraw(&self) -> bool {
@@ -270,18 +256,17 @@ where
     fn render(
         &mut self,
         parent_size: [Option<f32>; 2],
-        background_view: &wgpu::TextureView,
-        background_range: Range2D<f32>,
+        background: Background,
         context: &SharedContext,
         renderer: &Renderer,
     ) -> Vec<matcha_core::ui::Object> {
         self.content
             .as_mut()
-            .map(|content| content.render(parent_size, background_view, background_range, context, renderer))
+            .map(|content| content.render(parent_size, background, context, renderer))
             .unwrap_or_default()
             .into_iter()
             .map(|mut object| {
-                object.translate(nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(
+                object.transform(nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(
                     self.left, self.top, 0.0,
                 )));
                 object

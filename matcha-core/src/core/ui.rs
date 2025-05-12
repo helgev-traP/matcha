@@ -1,8 +1,12 @@
 use std::{any::Any, sync::Arc};
 
 use super::{
-    context::SharedContext, events::Event, observer::Observer, renderer::Renderer,
-    types::range::Range2D, vertex::uv_vertex::UvVertex,
+    context::SharedContext,
+    events::Event,
+    observer::Observer,
+    renderer::Renderer,
+    types::range::CoverRange,
+    vertex::uv_vertex::UvVertex,
 };
 
 // dom tree node
@@ -63,32 +67,22 @@ pub trait Widget<T>: Send {
     /// Actual size including its sub widgets with pixel value.
     fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &SharedContext) -> [f32; 2];
 
-    // todo: integrate `draw_range` and `cover_area` into `cover_area` use `range::CoverRange` as return value
-
-    /// The drawing range of the whole widget.
-    fn draw_range(
+    /// The drawing range and the area that the widget always covers.
+    fn cover_range(
         &mut self,
         parent_size: [Option<f32>; 2],
         context: &SharedContext,
-    ) -> Option<Range2D<f32>>;
-
-    /// The area that the widget always covers.
-    fn cover_area(
-        &mut self,
-        parent_size: [Option<f32>; 2],
-        context: &SharedContext,
-    ) -> Option<Range2D<f32>>;
+    ) -> CoverRange<f32>;
 
     fn redraw(&self) -> bool;
 
     fn render(
         &mut self,
         parent_size: [Option<f32>; 2],
-        background_view: &wgpu::TextureView,
-        background_range: Range2D<f32>,
+        background: Background,
         context: &SharedContext,
         renderer: &Renderer,
-    ) -> Vec<Object>;
+    ) -> Object;
 
     // todo
     // fn update_gpu_device(&mut self, device: &wgpu::Device, queue: &wgpu::Queue);
@@ -100,67 +94,108 @@ pub enum DomComPareResult {
     Different,
 }
 
+#[derive(Clone, Copy)]
+pub struct Background<'a> {
+    view: &'a wgpu::TextureView,
+    position: [f32; 2],
+}
+
+impl<'a> Background<'a> {
+    pub fn new(view: &'a wgpu::TextureView, position: [f32; 2]) -> Self {
+        Self { view, position }
+    }
+
+    pub fn view(&self) -> &wgpu::TextureView {
+        self.view
+    }
+
+    pub fn position(&self) -> [f32; 2] {
+        self.position
+    }
+
+    pub fn transition(mut self, position: [f32; 2]) -> Self {
+        self.position = [
+            self.position[0] + position[0],
+            self.position[1] + position[1],
+        ];
+        self
+    }
+}
+
 // todo: add object type when renderer is ready
 // todo: Arcによる共有をObject内に持つべきか検討
 // todo: add re-rendering range to apply scissors test for optimization
 /// `Arc` is not necessary for sharing objects
 /// since `Arc` is already used in this struct.
-#[derive(Clone)]
-pub enum Object {
-    TextureObject(TextureObject),
-    TextureBlur(TextureBlur),
+pub struct Object {
+    pub texture_color: Vec<TextureColor>,
+    pub vertex_color: Vec<VertexColor>,
     // Gradation
     // GradationBlur ?
     // and more ...?
 }
 
-pub struct TextureObject {
-    pub texture: Arc<wgpu::Texture>,
-    pub uv_vertices: Arc<Vec<UvVertex>>,
-    pub indices: Arc<Vec<u16>>,
-    pub transform: nalgebra::Matrix4<f32>,
-}
-
-impl Clone for TextureObject {
-    fn clone(&self) -> Self {
-        TextureObject {
-            texture: Arc::clone(&self.texture),
-            uv_vertices: Arc::clone(&self.uv_vertices),
-            indices: Arc::clone(&self.indices),
-            transform: self.transform,
-        }
-    }
-}
-
-pub struct TextureBlur {
-    pub texture: Arc<wgpu::Texture>,
-    pub uv_vertices: Arc<Vec<UvVertex>>,
-    pub indices: Arc<Vec<u16>>,
-    pub transform: nalgebra::Matrix4<f32>,
-    pub blur: f32,
-}
-
-impl Clone for TextureBlur {
-    fn clone(&self) -> Self {
-        TextureBlur {
-            texture: Arc::clone(&self.texture),
-            uv_vertices: Arc::clone(&self.uv_vertices),
-            indices: Arc::clone(&self.indices),
-            transform: self.transform,
-            blur: self.blur,
-        }
-    }
-}
-
 impl Object {
-    pub fn translate(&mut self, affine: nalgebra::Matrix4<f32>) {
-        match self {
-            Object::TextureObject(texture_object) => {
-                texture_object.transform = affine * texture_object.transform;
-            }
-            Object::TextureBlur(texture_blur) => {
-                texture_blur.transform = affine * texture_blur.transform;
-            }
+    pub fn transform(&mut self, affine: nalgebra::Matrix4<f32>) {
+        for texture_color in &mut self.texture_color {
+            texture_color.transform(affine);
         }
+        for vertex_color in &mut self.vertex_color {
+            vertex_color.transform(affine);
+        }
+    }
+
+    pub fn add_texture_color(&mut self, obj: TextureColor) {
+        self.texture_color.push(obj);
+    }
+
+    pub fn add_vertex_color(&mut self, obj: VertexColor) {
+        self.vertex_color.push(obj);
+    }
+}
+
+pub struct TextureColor {
+    pub texture: Arc<wgpu::Texture>,
+    pub uv_vertices: Vec<UvVertex>,
+    pub indices: Vec<u16>,
+    pub transform: nalgebra::Matrix4<f32>,
+}
+
+impl Clone for TextureColor {
+    fn clone(&self) -> Self {
+        Self {
+            texture: Arc::clone(&self.texture),
+            uv_vertices: self.uv_vertices.clone(),
+            indices: self.indices.clone(),
+            transform: self.transform,
+        }
+    }
+}
+
+impl TextureColor {
+    pub fn transform(&mut self, affine: nalgebra::Matrix4<f32>) {
+        self.transform = affine * self.transform;
+    }
+}
+
+pub struct VertexColor {
+    pub vertices: Vec<()>,
+    pub indices: Vec<u16>,
+    pub transform: nalgebra::Matrix4<f32>,
+}
+
+impl Clone for VertexColor {
+    fn clone(&self) -> Self {
+        Self {
+            vertices: self.vertices.clone(),
+            indices: self.indices.clone(),
+            transform: self.transform,
+        }
+    }
+}
+
+impl VertexColor {
+    pub fn transform(&mut self, affine: nalgebra::Matrix4<f32>) {
+        self.transform = affine * self.transform;
     }
 }

@@ -59,7 +59,7 @@ impl<'a> RenderAttribute<'a> {
     }
 
     pub fn set_weight(&mut self, weight: u16) {
-        self.text_attr.weight(ct::Weight(weight));
+        self.text_attr.weight = ct::Weight(weight);
     }
 }
 
@@ -114,7 +114,7 @@ impl FontContext {
 
             buffer.set_size(Some(texture.width as f32), Some(texture.height as f32));
 
-            buffer.set_text(text, atr.text_attr, ct::Shaping::Advanced);
+            buffer.set_text(text, &atr.text_attr, ct::Shaping::Advanced);
 
             buffer.shape_until_scroll(true);
 

@@ -52,18 +52,13 @@ impl Future for ObserverReceiver {
 
 // MARK: observer
 
+#[derive(Default)]
 pub struct Observer {
     receivers: Vec<ObserverReceiver>,
 }
 
-impl Default for Observer {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl Observer {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             receivers: Vec::new(),
         }

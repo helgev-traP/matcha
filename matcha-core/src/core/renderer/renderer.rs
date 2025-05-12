@@ -1,9 +1,14 @@
 use std::sync::Arc;
+use texture_color_renderer::TextureObjectRenderer;
 use wgpu::util::DeviceExt;
 
-use crate::{context::SharedContext, ui::Object};
+use crate::{
+    context::SharedContext,
+    ui::{Object, TextureColor},
+    vertex::uv_vertex,
+};
 
-mod texture_object_renderer;
+mod texture_color_renderer;
 
 pub struct Renderer {
     // context
@@ -14,7 +19,7 @@ pub struct Renderer {
     vello_renderer: std::sync::Mutex<vello::Renderer>,
 
     // renderers
-    texture_object_renderer: texture_object_renderer::TextureObjectRenderer,
+    texture_object_renderer: Option<TextureObjectRenderer>,
 }
 
 impl Renderer {
@@ -35,7 +40,7 @@ impl Renderer {
 
         // pipelines
 
-        let texture_object_renderer = texture_object_renderer::TextureObjectRenderer::new(
+        let texture_object_renderer = texture_color_renderer::TextureObjectRenderer::new(
             device,
             context.get_surface_format(),
         );
@@ -43,7 +48,7 @@ impl Renderer {
         Self {
             context,
             vello_renderer: std::sync::Mutex::new(vello_renderer),
-            texture_object_renderer,
+            texture_object_renderer: Some(texture_object_renderer),
         }
     }
 
@@ -56,7 +61,7 @@ impl Renderer {
         destination_view: &wgpu::TextureView,
         destination_size: [f32; 2],
         // objects
-        objects: Vec<Object>,
+        objects: Object,
     ) {
         self.render_impl(destination_view, destination_size, objects, false);
     }
@@ -66,7 +71,7 @@ impl Renderer {
         destination_view: &wgpu::TextureView,
         destination_size: [f32; 2],
         // objects
-        objects: Vec<Object>,
+        objects: Object,
     ) {
         self.render_impl(destination_view, destination_size, objects, true);
     }
@@ -76,7 +81,7 @@ impl Renderer {
         destination_view: &wgpu::TextureView,
         destination_size: [f32; 2],
         // objects
-        objects: Vec<Object>,
+        objects: Object,
         // render to surface or not
         render_to_surface: bool,
     ) {
@@ -108,23 +113,31 @@ impl Renderer {
 
         // todo !: try mesh integration
 
-        for object in objects {
-            match object {
-                Object::TextureObject(texture_object) => {
-                    self.texture_object_renderer.render(
-                        destination_view,
-                        normalize_matrix,
-                        texture_object.texture,
-                        texture_object.uv_vertices,
-                        texture_object.indices,
-                        render_to_surface,
-                        device,
-                        queue,
-                    );
-                }
-                Object::TextureBlur(texture_blur) => {
-                    todo!()
-                }
+        if let Some(texture_object_renderer) = &self.texture_object_renderer {
+            for TextureColor {
+                texture,
+                uv_vertices,
+                indices,
+                transform,
+            } in objects.texture_color
+            {
+                // transform
+                let uv_vertices = uv_vertices
+                    .into_iter()
+                    .map(|uv_vertex| uv_vertex.transform(&transform))
+                    .collect::<Vec<_>>();
+
+                // render
+                texture_object_renderer.render(
+                    device,
+                    queue,
+                    destination_view,
+                    normalize_matrix,
+                    texture,
+                    uv_vertices,
+                    indices,
+                    render_to_surface,
+                );
             }
         }
     }

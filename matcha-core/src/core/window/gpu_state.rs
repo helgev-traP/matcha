@@ -41,13 +41,13 @@ impl GpuState<'_> {
 
         let (device, queue) = adapter
             .request_device(
-                &(wgpu::DeviceDescriptor {
+                &wgpu::DeviceDescriptor {
                     label: None,
                     required_features: wgpu::Features::empty(),
                     required_limits: wgpu::Limits::default(),
                     memory_hints: wgpu::MemoryHints::default(),
-                }),
-                None, // Trace path
+                },
+                None,
             )
             .await
             .unwrap();
