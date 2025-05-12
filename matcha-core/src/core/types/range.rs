@@ -18,6 +18,10 @@ impl<T: Float> Range2D<T> {
         }
     }
 
+    pub const fn new_unchecked(x: [T; 2], y: [T; 2]) -> Self {
+        Range2D { x, y }
+    }
+
     pub fn left_side(mut self, x: T) -> Result<Self, Self> {
         if x <= self.x[1] {
             self.x[0] = x;

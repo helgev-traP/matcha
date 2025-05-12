@@ -1,14 +1,10 @@
-use std::sync::Arc;
 use texture_color_renderer::TextureObjectRenderer;
-use wgpu::util::DeviceExt;
+use vertex_color_renderer::VertexColorRenderer;
 
-use crate::{
-    context::SharedContext,
-    ui::{Object, TextureColor},
-    vertex::uv_vertex,
-};
+use crate::{context::SharedContext, ui::Object};
 
 mod texture_color_renderer;
+mod vertex_color_renderer;
 
 pub struct Renderer {
     // context
@@ -20,6 +16,7 @@ pub struct Renderer {
 
     // renderers
     texture_object_renderer: Option<TextureObjectRenderer>,
+    vertex_color_renderer: Option<VertexColorRenderer>,
 }
 
 impl Renderer {
@@ -45,10 +42,14 @@ impl Renderer {
             context.get_surface_format(),
         );
 
+        let vertex_color_renderer =
+            vertex_color_renderer::VertexColorRenderer::new(device, context.get_surface_format());
+
         Self {
             context,
             vello_renderer: std::sync::Mutex::new(vello_renderer),
             texture_object_renderer: Some(texture_object_renderer),
+            vertex_color_renderer: Some(vertex_color_renderer),
         }
     }
 
@@ -61,7 +62,7 @@ impl Renderer {
         destination_view: &wgpu::TextureView,
         destination_size: [f32; 2],
         // objects
-        objects: Object,
+        objects: Vec<Object>,
     ) {
         self.render_impl(destination_view, destination_size, objects, false);
     }
@@ -71,7 +72,7 @@ impl Renderer {
         destination_view: &wgpu::TextureView,
         destination_size: [f32; 2],
         // objects
-        objects: Object,
+        objects: Vec<Object>,
     ) {
         self.render_impl(destination_view, destination_size, objects, true);
     }
@@ -81,64 +82,91 @@ impl Renderer {
         destination_view: &wgpu::TextureView,
         destination_size: [f32; 2],
         // objects
-        objects: Object,
+        objects: Vec<Object>,
         // render to surface or not
         render_to_surface: bool,
     ) {
         let device = self.context.get_wgpu_device();
         let queue = self.context.get_wgpu_queue();
 
-        let normalize_matrix = nalgebra::Matrix4::new(
-            // x
-            2.0 / destination_size[0],
-            0.0,
-            0.0,
-            -1.0,
-            // y
-            0.0,
-            2.0 / destination_size[1],
-            0.0,
-            1.0,
-            // z
-            0.0,
-            0.0,
-            1.0,
-            0.0,
-            // w
-            0.0,
-            0.0,
-            0.0,
-            1.0,
-        );
+        let normalize_matrix = make_normalize_matrix(destination_size);
 
         // todo !: try mesh integration
 
-        if let Some(texture_object_renderer) = &self.texture_object_renderer {
-            for TextureColor {
-                texture,
-                uv_vertices,
-                indices,
-                transform,
-            } in objects.texture_color
-            {
-                // transform
-                let uv_vertices = uv_vertices
-                    .into_iter()
-                    .map(|uv_vertex| uv_vertex.transform(&transform))
-                    .collect::<Vec<_>>();
-
-                // render
-                texture_object_renderer.render(
-                    device,
-                    queue,
-                    destination_view,
-                    normalize_matrix,
+        for obj in objects {
+            match obj {
+                Object::TextureColor {
                     texture,
                     uv_vertices,
                     indices,
-                    render_to_surface,
-                );
+                    transform,
+                } => {
+                    if let Some(renderer) = &self.texture_object_renderer {
+                        let uv_vertices = uv_vertices
+                            .iter()
+                            .map(|vertex| vertex.transform(&transform))
+                            .collect::<Vec<_>>();
+
+                        renderer.render(
+                            device,
+                            queue,
+                            destination_view,
+                            &normalize_matrix,
+                            texture,
+                            &uv_vertices,
+                            &indices,
+                            render_to_surface,
+                        );
+                    }
+                }
+                Object::VertexColor {
+                    vertices,
+                    indices,
+                    transform,
+                } => {
+                    if let Some(renderer) = &self.vertex_color_renderer {
+                        let vertices = vertices
+                            .iter()
+                            .map(|vertex| vertex.transform(&transform))
+                            .collect::<Vec<_>>();
+
+                        renderer.render(
+                            device,
+                            queue,
+                            destination_view,
+                            &normalize_matrix,
+                            &vertices,
+                            &indices,
+                            render_to_surface,
+                        );
+                    }
+                }
             }
         }
     }
+}
+
+fn make_normalize_matrix(destination_size: [f32; 2]) -> nalgebra::Matrix4<f32> {
+    nalgebra::Matrix4::new(
+        // x
+        2.0 / destination_size[0],
+        0.0,
+        0.0,
+        -1.0,
+        // y
+        0.0,
+        2.0 / destination_size[1],
+        0.0,
+        1.0,
+        // z
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        // w
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+    )
 }

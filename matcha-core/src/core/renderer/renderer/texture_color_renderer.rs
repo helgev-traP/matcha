@@ -165,7 +165,7 @@ impl TextureObjectRenderer {
         }
     }
 
-    /// Use this after mesh integration.
+    // Use this after mesh integration.
     #[allow(clippy::too_many_arguments)]
     pub fn render(
         &self,
@@ -174,11 +174,11 @@ impl TextureObjectRenderer {
         queue: &wgpu::Queue,
         // render target
         destination_view: &wgpu::TextureView,
-        normalize_matrix: nalgebra::Matrix4<f32>,
+        normalize_matrix: &nalgebra::Matrix4<f32>,
         // object
         texture: Arc<wgpu::Texture>,
-        vertex: Vec<UvVertex>,
-        index: Vec<u16>,
+        vertex: &[UvVertex],
+        index: &[u16],
         // render to surface or not
         render_to_surface: bool,
     ) {
@@ -226,7 +226,7 @@ impl TextureObjectRenderer {
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("TextureObjectRenderer: Vertex Buffer"),
-            contents: bytemuck::cast_slice(&vertex),
+            contents: bytemuck::cast_slice(vertex),
             usage: wgpu::BufferUsages::VERTEX,
         });
 
@@ -234,7 +234,7 @@ impl TextureObjectRenderer {
 
         let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("TextureObjectRenderer: Index Buffer"),
-            contents: bytemuck::cast_slice(&index),
+            contents: bytemuck::cast_slice(index),
             usage: wgpu::BufferUsages::INDEX,
         });
 
@@ -268,6 +268,6 @@ impl TextureObjectRenderer {
             render_pass.draw_indexed(0..index.len() as u32, 0, 0..1);
         }
 
-        queue.submit(std::iter::once(encoder.finish()));
+        queue.submit([encoder.finish()]);
     }
 }

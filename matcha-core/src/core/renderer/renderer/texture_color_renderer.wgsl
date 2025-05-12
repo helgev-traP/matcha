@@ -9,7 +9,7 @@ struct VertexOutput {
 };
 
 @group(0) @binding(0)
-var<uniform> affine: mat4x4<f32>;
+var<uniform> normalize_affine: mat4x4<f32>;
 
 @group(1) @binding(0)
 var t_diffuse: texture_2d<f32>;
@@ -27,7 +27,7 @@ fn vs_main(
         1.0,
     );
 
-    let out: VertexOutput = VertexOutput(affine * model4, model.tex_coords);
+    let out: VertexOutput = VertexOutput(normalize_affine * model4, model.tex_coords);
     return out;
 }
 

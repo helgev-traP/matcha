@@ -106,7 +106,7 @@ pub struct ImageNode {
 
     // render cache
     texture: Option<Arc<wgpu::Texture>>,
-    polygon: Option<(Arc<Vec<UvVertex>>, Arc<Vec<u16>>)>,
+    polygon: Option<(Vec<UvVertex>, Vec<u16>)>,
 }
 
 impl ImageNode {
@@ -287,10 +287,10 @@ impl<T: Send + 'static> Widget<T> for ImageNode {
             ];
             let indices = vec![3, 2, 1, 3, 1, 0];
 
-            (Arc::new(vertices), Arc::new(indices))
+            (vertices, indices)
         });
 
-        vec![Object::Texture {
+        vec![Object::TextureColor {
             texture: texture.clone(),
             uv_vertices: vertices.clone(),
             indices: indices.clone(),
