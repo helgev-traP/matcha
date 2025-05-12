@@ -3,14 +3,13 @@ use matcha_core::{
     events::Event,
     observer::Observer,
     renderer::Renderer,
-    types::range::Range2D,
-    ui::{Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
+    types::range::{CoverRange, Range2D},
+    ui::{Background, Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
 };
 
-mod property;
 use num::Float;
-pub use property::DivSize;
-use property::StdDivSize;
+
+use crate::widget::primitives::property::div_size::{DivSize, StdDivSize};
 
 // todo: remove this memo
 // ********************************
@@ -201,7 +200,8 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
         component_updated: bool,
         dom: &dyn Dom<T>,
     ) -> Result<(), UpdateWidgetError> {
-        // todo: be sure to update redraw flag
+        // Update the redraw flag if the DOM properties or layout have changed.
+        // For example, if the template_columns, template_rows, gap_columns, or gap_rows differ.
 
         if let Some(dom) = dom.as_any().downcast_ref::<Grid<T>>() {
             todo!()
@@ -264,26 +264,19 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
         actual_size
     }
 
-    fn draw_range(
+    // The drawing range and the area that the widget always covers.
+    fn cover_range(
         &mut self,
         parent_size: [Option<f32>; 2],
         context: &SharedContext,
-    ) -> Option<Range2D<f32>> {
+    ) -> CoverRange<f32> {
         // todo: optimize
         let [width, height] = self.px_size(parent_size, context);
 
-        Some(Range2D::new([0.0, width], [0.0, height]).unwrap())
-    }
-
-    fn cover_area(
-        &mut self,
-        parent_size: [Option<f32>; 2],
-        context: &SharedContext,
-    ) -> Option<Range2D<f32>> {
-        // todo: optimize
-        let [width, height] = self.px_size(parent_size, context);
-
-        Some(Range2D::new([0.0, width], [0.0, height]).unwrap())
+        CoverRange::new(
+            Range2D::new([0.0, width], [0.0, height]),
+            Range2D::new([0.0, width], [0.0, height]),
+        )
     }
 
     fn redraw(&self) -> bool {
@@ -293,8 +286,7 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
     fn render(
         &mut self,
         parent_size: [Option<f32>; 2],
-        background_view: &wgpu::TextureView,
-        background_range: Range2D<f32>,
+        background: Background,
         context: &SharedContext,
         renderer: &Renderer,
     ) -> Vec<Object> {
@@ -303,7 +295,7 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
         // delete cache if key mismatch.
 
         if let Some((key, _)) = self.cache.as_ref() {
-            if key.equals(&current_key) {
+            if !key.equals(&current_key) {
                 self.cache = None;
             }
         }
@@ -331,16 +323,7 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
 
         self.items
             .iter_mut()
-            .flat_map(|item| {
-                render_item(
-                    item,
-                    cache,
-                    background_view,
-                    background_range,
-                    context,
-                    renderer,
-                )
-            })
+            .flat_map(|item| render_item(item, cache, background, context, renderer))
             .collect()
     }
 }
@@ -350,16 +333,11 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
 fn render_item<T: Send + 'static>(
     item: &mut GridNodeItem<T>,
     grid_cache: &GridCache,
-    background_view: &wgpu::TextureView,
-    background_range: Range2D<f32>,
+    background: Background,
     context: &SharedContext,
     renderer: &Renderer,
 ) -> Vec<Object> {
     // calculate range
-    let actual_size = grid_cache.get_actual_size();
-
-    let actual_range = Range2D::new([0.0, actual_size[0]], [0.0, actual_size[1]]).unwrap();
-
     let item_range = Range2D::new(
         [
             grid_cache.column_range[item.column[0]][0], // col start
@@ -372,20 +350,22 @@ fn render_item<T: Send + 'static>(
     )
     .unwrap();
 
-    let background_range = interpolate(actual_range, background_range, item_range);
+    let position = [
+        grid_cache.column_range[item.column[0]][0],
+        grid_cache.row_range[item.row[0]][0],
+    ];
 
     // render
     item.item
         .render(
             [Some(item_range.width()), Some(item_range.height())],
-            background_view,
-            background_range,
+            Background::new(background.view(), position),
             context,
             renderer,
         )
         .into_iter()
         .map(|mut object| {
-            object.translate(nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(
+            object.transform(nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(
                 item_range.left(),
                 item_range.top(),
                 0.0,
@@ -483,9 +463,17 @@ fn calc_px_siz(
 
     // calculate pixel per grow unit
 
-    let column_px_per_grow =
-        ((parent_size[0].unwrap_or(0.0) - column_px_sum) / column_grow_sum).max(0.0);
-    let row_px_per_grow = ((parent_size[1].unwrap_or(0.0) - row_px_sum) / row_grow_sum).max(0.0);
+    let column_px_per_grow = if column_px_sum > parent_size[0].unwrap_or(0.0) {
+        0.0
+    } else {
+        ((parent_size[0].unwrap_or(0.0) - column_px_sum) / column_grow_sum).max(0.0)
+    };
+
+    let row_px_per_grow = if row_px_sum > parent_size[1].unwrap_or(0.0) {
+        0.0
+    } else {
+        ((parent_size[1].unwrap_or(0.0) - row_px_sum) / row_grow_sum).max(0.0)
+    };
 
     // accumulate template
 

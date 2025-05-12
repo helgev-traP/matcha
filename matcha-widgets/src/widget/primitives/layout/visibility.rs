@@ -1,7 +1,12 @@
 use std::any::Any;
 
 use matcha_core::{
-    context::SharedContext, events::{Event, UiEventResult}, observer::Observer, renderer::Renderer, types::range::Range2D, ui::{Dom, DomComPareResult, Object, UpdateWidgetError, Widget}
+    context::SharedContext,
+    events::Event,
+    observer::Observer,
+    renderer::Renderer,
+    types::range::CoverRange,
+    ui::{Background, Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -90,11 +95,15 @@ where
     }
 
     async fn collect_observer(&self) -> Observer {
-        // todo: optimize
-        if let Some(content) = &self.content {
-            content.collect_observer().await
-        } else {
-            Observer::default()
+        match self.visible {
+            VisibilityState::Visible => {
+                if let Some(content) = &self.content {
+                    content.collect_observer().await
+                } else {
+                    Observer::default()
+                }
+            }
+            VisibilityState::Hidden | VisibilityState::None => Observer::default(),
         }
     }
 
@@ -156,6 +165,7 @@ where
 
     fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult {
         if let Some(dom) = dom.as_any().downcast_ref::<Visibility<T>>() {
+            let _ = dom;
             todo!()
         } else {
             DomComPareResult::Different
@@ -189,33 +199,18 @@ where
         }
     }
 
-    fn draw_range(
+    fn cover_range(
         &mut self,
         parent_size: [Option<f32>; 2],
         context: &SharedContext,
-    ) -> Option<Range2D<f32>> {
+    ) -> CoverRange<f32> {
         match self.visible {
             VisibilityState::Visible => self
                 .content
                 .as_mut()
-                .map(|content| content.draw_range(parent_size, context))
-                .unwrap_or(None),
-            VisibilityState::Hidden | VisibilityState::None => None,
-        }
-    }
-
-    fn cover_area(
-        &mut self,
-        parent_size: [Option<f32>; 2],
-        context: &SharedContext,
-    ) -> Option<Range2D<f32>> {
-        match self.visible {
-            VisibilityState::Visible => self
-                .content
-                .as_mut()
-                .map(|content| content.cover_area(parent_size, context))
-                .unwrap_or(None),
-            VisibilityState::Hidden | VisibilityState::None => None,
+                .map(|content| content.cover_range(parent_size, context))
+                .unwrap_or_default(),
+            VisibilityState::Hidden | VisibilityState::None => CoverRange::default(),
         }
     }
 
@@ -229,8 +224,7 @@ where
     fn render(
         &mut self,
         parent_size: [Option<f32>; 2],
-        background_view: &wgpu::TextureView,
-        background_range: Range2D<f32>,
+        background: Background,
         context: &SharedContext,
         renderer: &Renderer,
     ) -> Vec<Object> {
@@ -238,15 +232,7 @@ where
             VisibilityState::Visible => self
                 .content
                 .as_mut()
-                .map(|content| {
-                    content.render(
-                        parent_size,
-                        background_view,
-                        background_range,
-                        context,
-                        renderer,
-                    )
-                })
+                .map(|content| content.render(parent_size, background, context, renderer))
                 .unwrap_or_default(),
             VisibilityState::Hidden | VisibilityState::None => vec![],
         }

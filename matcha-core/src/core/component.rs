@@ -5,8 +5,8 @@ use tokio::sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use super::{
     context::SharedContext,
     observer::{ObserverReceiver, ObserverSender, create_observer_ch},
-    types::range::Range2D,
-    ui::{Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
+    types::range::CoverRange,
+    ui::{Background, Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
 };
 
 // MARK: - ModelAccessor
@@ -257,6 +257,8 @@ impl<Model: Sync + Send + 'static, Response: 'static, InnerResponse: 'static> Wi
 
             self.model_accessor.update_flag.set_to_false();
 
+            // todo: optimize and update label
+
             self.widget
                 .update_widget_tree(is_component_updated, component_dom.dom.as_ref())
                 .await
@@ -305,20 +307,12 @@ impl<Model: Sync + Send + 'static, Response: 'static, InnerResponse: 'static> Wi
         self.widget.is_inside(position, parent_size, context)
     }
 
-    fn draw_range(
+    fn cover_range(
         &mut self,
         parent_size: [Option<f32>; 2],
         context: &SharedContext,
-    ) -> Option<Range2D<f32>> {
-        self.widget.draw_range(parent_size, context)
-    }
-
-    fn cover_area(
-        &mut self,
-        parent_size: [Option<f32>; 2],
-        context: &SharedContext,
-    ) -> Option<Range2D<f32>> {
-        self.widget.cover_area(parent_size, context)
+    ) -> CoverRange<f32> {
+        self.widget.cover_range(parent_size, context)
     }
 
     fn redraw(&self) -> bool {
@@ -328,17 +322,11 @@ impl<Model: Sync + Send + 'static, Response: 'static, InnerResponse: 'static> Wi
     fn render(
         &mut self,
         parent_size: [Option<f32>; 2],
-        background_view: &wgpu::TextureView,
-        background_range: Range2D<f32>,
+        background: Background,
         context: &SharedContext,
         renderer: &super::renderer::Renderer,
-    ) -> Vec<Object> {
-        self.widget.render(
-            parent_size,
-            background_view,
-            background_range,
-            context,
-            renderer,
-        )
+    ) -> Object {
+        self.widget
+            .render(parent_size, background, context, renderer)
     }
 }

@@ -1,22 +1,25 @@
 [workspace]
-members = ["main", "matcha-core", "matcha-widgets"]
+members = ["main", "matcha-core", "matcha-widgets", "text-render"]
 
 [workspace.dependencies]
 # self
 matcha = { path = "main" }
 matcha-core = { path = "matcha-core" }
 matcha-widgets = { path = "matcha-widgets" }
+text-render ={ path = "text-render" }
 
 # async runtime, utilities
 tokio = { version = "1", features = ["full"] }
 async-trait = "0.1.88"
 futures = "0.3.31"
 
-# graphics
-wgpu = "22.1.0"
-bytemuck = { version = "1.17", features = ["derive"] }
-vello = "0.3.0"
+# winit
 winit = "0.30"
+
+# graphics
+wgpu = "23.0.1"
+bytemuck = { version = "1.17", features = ["derive"] }
+vello = "0.4.1"
 
 # math
 nalgebra = { version = "0.33", features = ["bytemuck"] }
@@ -24,16 +27,21 @@ nalgebra = { version = "0.33", features = ["bytemuck"] }
 # image
 image = "0.25"
 
+# font
+fontdb = "0.23.0"
+fontdue = "0.9.3"
+
 # other
 pathfinder_geometry = "0.5.1"
-cosmic-text = "0.12.1"
-rand = "0.8"
+cosmic-text = "0.14.2"
+rand = "0.9.1"
 bitflags = "2.6"
 num = "0.4.3"
 downcast-rs = "2.0.1"
-ahash = "0.8.11"                                 # delete this if not needed
-uuid = { version = "1.16.0", features = ["v4"] } # delete this if not needed
 
 # interpolation crate
 # todo: maybe useful.
 # interpolation = "0.3.0"
+
+# dev-dependencies
+pollster = "0.4.0"

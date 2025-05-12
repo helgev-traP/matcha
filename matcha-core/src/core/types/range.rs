@@ -2,7 +2,7 @@ use num::Float;
 use winit::dpi::Position;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Range2D<T: Float> {
+pub struct Range2D<T: Float = f32> {
     x: [T; 2],
     y: [T; 2],
 }
@@ -168,14 +168,14 @@ impl<T: Float> Range2D<T> {
 
 // MARK: CoverRange
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct CoverRange<T: Float> {
-    pub inscribed: Range2D<T>,
-    pub circumscribed: Range2D<T>,
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
+pub struct CoverRange<T: Float = f32> {
+    pub inscribed: Option<Range2D<T>>,
+    pub circumscribed: Option<Range2D<T>>,
 }
 
-impl<T: Float> From<[Range2D<T>; 2]> for CoverRange<T> {
-    fn from(ranges: [Range2D<T>; 2]) -> Self {
+impl<T: Float> From<[Option<Range2D<T>>; 2]> for CoverRange<T> {
+    fn from(ranges: [Option<Range2D<T>>; 2]) -> Self {
         CoverRange {
             inscribed: ranges[0],
             circumscribed: ranges[1],
@@ -184,11 +184,27 @@ impl<T: Float> From<[Range2D<T>; 2]> for CoverRange<T> {
 }
 
 impl<T: Float> CoverRange<T> {
-    pub fn inscribed(&self) -> Range2D<T> {
+    pub fn new(inscribed: Option<Range2D<T>>, circumscribed: Option<Range2D<T>>) -> Self {
+        CoverRange {
+            inscribed,
+            circumscribed,
+        }
+    }
+
+    pub fn inscribed(&self) -> Option<Range2D<T>> {
         self.inscribed
     }
 
-    pub fn circumscribed(&self) -> Range2D<T> {
+    pub fn circumscribed(&self) -> Option<Range2D<T>> {
         self.circumscribed
+    }
+}
+
+impl<T: Float> CoverRange<T> {
+    pub fn slide(self, s: [T; 2]) -> Self {
+        CoverRange {
+            inscribed: self.inscribed.map(|r| r.slide(s)),
+            circumscribed: self.circumscribed.map(|r| r.slide(s)),
+        }
     }
 }
