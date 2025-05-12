@@ -48,7 +48,7 @@ pub struct BoxDescriptor {
 impl Default for BoxDescriptor {
     fn default() -> Self {
         Self {
-            range: Range2D::new([0.0, 0.0], [0.0, 0.0]).unwrap(),
+            range: Range2D::new_unchecked([0.0, 0.0], [0.0, 0.0]),
             radius: 0.0,
             div: 1,
             border_width: 0.0,

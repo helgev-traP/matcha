@@ -6,7 +6,7 @@ use super::{
     observer::Observer,
     renderer::Renderer,
     types::range::CoverRange,
-    vertex::uv_vertex::UvVertex,
+    vertex::{colored_vertex::ColorVertex, uv_vertex::UvVertex},
 };
 
 // dom tree node
@@ -82,7 +82,7 @@ pub trait Widget<T>: Send {
         background: Background,
         context: &SharedContext,
         renderer: &Renderer,
-    ) -> Object;
+    ) -> Vec<Object>;
 
     // todo
     // fn update_gpu_device(&mut self, device: &wgpu::Device, queue: &wgpu::Queue);
@@ -127,9 +127,18 @@ impl<'a> Background<'a> {
 // todo: add re-rendering range to apply scissors test for optimization
 /// `Arc` is not necessary for sharing objects
 /// since `Arc` is already used in this struct.
-pub struct Object {
-    pub texture_color: Vec<TextureColor>,
-    pub vertex_color: Vec<VertexColor>,
+pub enum Object {
+    TextureColor {
+        texture: Arc<wgpu::Texture>,
+        uv_vertices: Vec<UvVertex>,
+        indices: Vec<u16>,
+        transform: nalgebra::Matrix4<f32>,
+    },
+    VertexColor {
+        vertices: Vec<ColorVertex>,
+        indices: Vec<u16>,
+        transform: nalgebra::Matrix4<f32>,
+    },
     // Gradation
     // GradationBlur ?
     // and more ...?
@@ -137,65 +146,10 @@ pub struct Object {
 
 impl Object {
     pub fn transform(&mut self, affine: nalgebra::Matrix4<f32>) {
-        for texture_color in &mut self.texture_color {
-            texture_color.transform(affine);
+        match self {
+            Object::TextureColor { transform, .. } | Object::VertexColor { transform, .. } => {
+                *transform = affine * (*transform);
+            }
         }
-        for vertex_color in &mut self.vertex_color {
-            vertex_color.transform(affine);
-        }
-    }
-
-    pub fn add_texture_color(&mut self, obj: TextureColor) {
-        self.texture_color.push(obj);
-    }
-
-    pub fn add_vertex_color(&mut self, obj: VertexColor) {
-        self.vertex_color.push(obj);
-    }
-}
-
-pub struct TextureColor {
-    pub texture: Arc<wgpu::Texture>,
-    pub uv_vertices: Vec<UvVertex>,
-    pub indices: Vec<u16>,
-    pub transform: nalgebra::Matrix4<f32>,
-}
-
-impl Clone for TextureColor {
-    fn clone(&self) -> Self {
-        Self {
-            texture: Arc::clone(&self.texture),
-            uv_vertices: self.uv_vertices.clone(),
-            indices: self.indices.clone(),
-            transform: self.transform,
-        }
-    }
-}
-
-impl TextureColor {
-    pub fn transform(&mut self, affine: nalgebra::Matrix4<f32>) {
-        self.transform = affine * self.transform;
-    }
-}
-
-pub struct VertexColor {
-    pub vertices: Vec<()>,
-    pub indices: Vec<u16>,
-    pub transform: nalgebra::Matrix4<f32>,
-}
-
-impl Clone for VertexColor {
-    fn clone(&self) -> Self {
-        Self {
-            vertices: self.vertices.clone(),
-            indices: self.indices.clone(),
-            transform: self.transform,
-        }
-    }
-}
-
-impl VertexColor {
-    pub fn transform(&mut self, affine: nalgebra::Matrix4<f32>) {
-        self.transform = affine * self.transform;
     }
 }
