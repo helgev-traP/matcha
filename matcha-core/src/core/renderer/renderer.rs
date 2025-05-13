@@ -15,12 +15,12 @@ pub struct Renderer {
     vello_renderer: std::sync::Mutex<vello::Renderer>,
 
     // renderers
-    texture_object_renderer: Option<TextureObjectRenderer>,
+    texture_color_renderer: Option<TextureObjectRenderer>,
     vertex_color_renderer: Option<VertexColorRenderer>,
 }
 
 impl Renderer {
-    pub fn new(context: SharedContext) -> Self {
+    pub fn new(context: &SharedContext) -> Self {
         let device = context.get_wgpu_device();
 
         // vello renderer
@@ -46,9 +46,9 @@ impl Renderer {
             vertex_color_renderer::VertexColorRenderer::new(device, context.get_surface_format());
 
         Self {
-            context,
+            context: context.clone(),
             vello_renderer: std::sync::Mutex::new(vello_renderer),
-            texture_object_renderer: Some(texture_object_renderer),
+            texture_color_renderer: Some(texture_object_renderer),
             vertex_color_renderer: Some(vertex_color_renderer),
         }
     }
@@ -101,7 +101,7 @@ impl Renderer {
                     indices,
                     transform,
                 } => {
-                    if let Some(renderer) = &self.texture_object_renderer {
+                    if let Some(renderer) = &self.texture_color_renderer {
                         let uv_vertices = uv_vertices
                             .iter()
                             .map(|vertex| vertex.transform(&transform))

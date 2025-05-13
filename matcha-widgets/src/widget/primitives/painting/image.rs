@@ -263,6 +263,9 @@ impl<T: Send + 'static> Widget<T> for ImageNode {
                 },
             );
 
+            // todo: remove
+            queue.submit([]);
+
             Arc::new(texture)
         });
 
@@ -285,7 +288,7 @@ impl<T: Send + 'static> Widget<T> for ImageNode {
                     uv: [1.0, 0.0].into(),
                 },
             ];
-            let indices = vec![3, 2, 1, 3, 1, 0];
+            let indices = vec![0, 1, 2, 2, 3, 0];
 
             (vertices, indices)
         });
@@ -294,7 +297,7 @@ impl<T: Send + 'static> Widget<T> for ImageNode {
             texture: texture.clone(),
             uv_vertices: vertices.clone(),
             indices: indices.clone(),
-            transform: Default::default(),
+            transform: nalgebra::Matrix4::new_translation(&[0.0, 0.0, 0.0].into()),
         }]
     }
 }
