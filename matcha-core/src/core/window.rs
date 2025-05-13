@@ -8,7 +8,7 @@ use super::{
     events::Event,
     observer::Observer,
     renderer::Renderer,
-    types::{color::Color, range::Range2D},
+    types::color::Color,
     ui::{Background, Widget},
 };
 
@@ -56,6 +56,9 @@ pub struct Window<
     mouse_state: Option<mouse_state::MouseState>,
     keyboard_state: Option<keyboard_state::KeyboardState>,
 
+    // --- event handling settings ---
+    scroll_pixel_per_line: f32,
+
     // frame
     frame: u64,
 
@@ -68,7 +71,34 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
     Window<'_, Model, Message, Response, IR>
 {
     pub fn new(component: Component<Model, Message, Response, IR>) -> Self {
-        todo!()
+        let tokio_runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(4)
+            .enable_all()
+            .build()
+            .unwrap();
+
+        Self {
+            tokio_runtime,
+            performance: wgpu::PowerPreference::HighPerformance,
+            window_title: String::from("matcha"),
+            init_size: [800, 600],
+            maximized: false,
+            full_screen: false,
+            font_context: None,
+            base_color: Color::default(),
+            winit_window: None,
+            gpu_state: None,
+            background_texture: None,
+            renderer: None,
+            root_component: component,
+            root_widget: None,
+            observer: Observer::default(),
+            mouse_state: None,
+            keyboard_state: None,
+            scroll_pixel_per_line: 40.0,
+            frame: 0,
+            benchmarker: None,
+        }
     }
 
     // design
@@ -204,8 +234,135 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
         window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) -> Event {
-        // todo !
-        Event::default()
+        let _ = event_loop;
+        let _ = window_id;
+
+        match event {
+            // window
+            winit::event::WindowEvent::CloseRequested => {
+                event_loop.exit();
+                Event::default()
+            }
+            winit::event::WindowEvent::Resized(size) => {
+                self.gpu_state.as_mut().unwrap().resize(size);
+                Event::default()
+            }
+            // mouse
+            winit::event::WindowEvent::CursorMoved {
+                device_id,
+                position,
+            } => self
+                .mouse_state
+                .as_mut()
+                .unwrap()
+                .mouse_move(self.frame, position.into()),
+            winit::event::WindowEvent::CursorEntered { device_id } => self
+                .mouse_state
+                .as_mut()
+                .unwrap()
+                .cursor_entered(self.frame),
+            winit::event::WindowEvent::CursorLeft { device_id } => {
+                self.mouse_state.as_mut().unwrap().cursor_left(self.frame)
+            }
+            winit::event::WindowEvent::MouseWheel {
+                device_id,
+                delta,
+                phase,
+            } => match delta {
+                winit::event::MouseScrollDelta::LineDelta(x, y) => {
+                    self.mouse_state.as_mut().unwrap().mouse_scroll(
+                        self.frame,
+                        [
+                            x * self.scroll_pixel_per_line,
+                            y * self.scroll_pixel_per_line,
+                        ],
+                    )
+                }
+                winit::event::MouseScrollDelta::PixelDelta(position) => self
+                    .mouse_state
+                    .as_mut()
+                    .unwrap()
+                    .mouse_scroll(self.frame, [position.x as f32, position.y as f32]),
+            },
+            winit::event::WindowEvent::MouseInput {
+                device_id,
+                state,
+                button,
+            } => {
+                let button = match button {
+                    winit::event::MouseButton::Left => crate::device::mouse::MouseButton::Primary,
+                    winit::event::MouseButton::Right => {
+                        crate::device::mouse::MouseButton::Secondary
+                    }
+                    winit::event::MouseButton::Middle => crate::device::mouse::MouseButton::Middle,
+                    winit::event::MouseButton::Back => return Event::default(),
+                    winit::event::MouseButton::Forward => return Event::default(),
+                    winit::event::MouseButton::Other(_) => return Event::default(),
+                };
+                match state {
+                    winit::event::ElementState::Pressed => self
+                        .mouse_state
+                        .as_mut()
+                        .unwrap()
+                        .button_pressed(self.frame, button),
+                    winit::event::ElementState::Released => self
+                        .mouse_state
+                        .as_mut()
+                        .unwrap()
+                        .button_released(self.frame, button),
+                }
+            }
+            // keyboard
+            winit::event::WindowEvent::KeyboardInput {
+                device_id,
+                event,
+                is_synthetic,
+            } => self
+                .keyboard_state
+                .as_mut()
+                .unwrap()
+                .key_event(self.frame, event)
+                .unwrap_or_default(),
+            _ => {
+                // ignore other events
+                Event::default()
+            }
+        }
+    }
+}
+
+// MARK: polling to render
+
+impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'static>
+    Window<'_, Model, Message, Response, IR>
+{
+    pub fn poll(&mut self) {
+        // DOM and Widget updates, as well as re-rendering, will only execute in this function
+        // as a result of observers catching component updates.
+
+        // check observer
+        if self.observer.is_updated() {
+            self.tokio_runtime.block_on(async {
+                // rebuild dom tree
+                let dom = self.root_component.view().await;
+
+                // re-collect observers
+                self.observer = dom.collect_observer().await;
+
+                // update widget tree
+
+                if let Some(root_widget) = self.root_widget.as_mut() {
+                    if (root_widget.update_widget_tree(true, &*dom).await).is_err() {
+                        self.root_widget = Some(dom.build_widget_tree());
+                    }
+                } else {
+                    self.root_widget = Some(dom.build_widget_tree());
+                }
+            });
+        }
+
+        // re-rendering
+        self.render().unwrap();
     }
 }
 
@@ -253,7 +410,10 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, 
             font_context,
         ));
         self.gpu_state = Some(gpu_state);
+
         // renderer preparation.
+        let renderer = Renderer::new(self.gpu_state.as_ref().unwrap().get_app_context());
+        self.renderer = Some(renderer);
 
         // --- init input context ---
         {
@@ -316,6 +476,9 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, 
                 );
             }
         }
+
+        // polling
+        self.poll();
     }
 
     // MARK: new_events
@@ -331,32 +494,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, 
             winit::event::StartCause::Init => {}
             winit::event::StartCause::WaitCancelled { .. } => {}
             winit::event::StartCause::ResumeTimeReached { .. } | winit::event::StartCause::Poll => {
-                // DOM and Widget updates, as well as re-rendering, will only execute in this function
-                // as a result of observers catching component updates.
-
-                // check observer
-                if self.observer.is_updated() {
-                    self.tokio_runtime.block_on(async {
-                        // rebuild dom tree
-                        let dom = self.root_component.view().await;
-
-                        // re-collect observers
-                        self.observer = dom.collect_observer().await;
-
-                        // update widget tree
-
-                        if let Some(root_widget) = self.root_widget.as_mut() {
-                            if (root_widget.update_widget_tree(true, &*dom).await).is_err() {
-                                self.root_widget = Some(dom.build_widget_tree());
-                            }
-                        } else {
-                            self.root_widget = Some(dom.build_widget_tree());
-                        }
-                    });
-                }
-
-                // re-rendering
-                self.render().unwrap();
+                self.poll()
             }
         }
     }
