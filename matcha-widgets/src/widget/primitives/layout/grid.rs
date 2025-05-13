@@ -1,5 +1,5 @@
 use matcha_core::{
-    context::SharedContext,
+    context::WidgetContext,
     events::Event,
     observer::Observer,
     renderer::Renderer,
@@ -222,13 +222,13 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
         &mut self,
         event: &Event,
         parent_size: [Option<f32>; 2],
-        context: &SharedContext,
+        context: &WidgetContext,
     ) -> Option<T> {
         // todo !
         None
     }
 
-    fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &SharedContext) -> [f32; 2] {
+    fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &WidgetContext) -> [f32; 2] {
         let current_key = CacheKey::new(parent_size);
 
         // get cache or delete if key mismatch.
@@ -268,7 +268,7 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
     fn cover_range(
         &mut self,
         parent_size: [Option<f32>; 2],
-        context: &SharedContext,
+        context: &WidgetContext,
     ) -> CoverRange<f32> {
         // todo: optimize
         let [width, height] = self.px_size(parent_size, context);
@@ -287,7 +287,7 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
         &mut self,
         parent_size: [Option<f32>; 2],
         background: Background,
-        context: &SharedContext,
+        context: &WidgetContext,
         renderer: &Renderer,
     ) -> Vec<Object> {
         let current_key = CacheKey::new(parent_size);
@@ -334,7 +334,7 @@ fn render_item<T: Send + 'static>(
     item: &mut GridNodeItem<T>,
     grid_cache: &GridCache,
     background: Background,
-    context: &SharedContext,
+    context: &WidgetContext,
     renderer: &Renderer,
 ) -> Vec<Object> {
     // calculate range
@@ -426,7 +426,7 @@ fn calc_px_siz(
     column_gap: DivSize,
     template_rows: &[DivSize],
     row_gap: DivSize,
-    context: &SharedContext,
+    context: &WidgetContext,
 ) -> (Vec<[f32; 2]>, Vec<[f32; 2]>) {
     // convert to standard size
 

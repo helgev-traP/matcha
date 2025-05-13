@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use matcha_core::{
-    context::SharedContext,
+    context::WidgetContext,
     device,
     events::Event,
     observer::Observer,
@@ -16,7 +16,7 @@ use matcha_core::{
 
 // todo: more documentation
 
-type SizeFn = dyn for<'a> Fn([Option<f32>; 2], [f32; 2], &'a SharedContext) -> [f32; 2]
+type SizeFn = dyn for<'a> Fn([Option<f32>; 2], [f32; 2], &'a WidgetContext) -> [f32; 2]
     + Send
     + Sync
     + 'static;
@@ -57,7 +57,7 @@ impl Image {
 
     pub fn size<F>(mut self, size: F) -> Self
     where
-        F: Fn([Option<f32>; 2], [f32; 2], &SharedContext) -> [f32; 2] + Send + Sync + 'static,
+        F: Fn([Option<f32>; 2], [f32; 2], &WidgetContext) -> [f32; 2] + Send + Sync + 'static,
     {
         self.size = Arc::new(size);
         self
@@ -159,14 +159,14 @@ impl<T: Send + 'static> Widget<T> for ImageNode {
         &mut self,
         event: &Event,
         parent_size: [Option<f32>; 2],
-        context: &SharedContext,
+        context: &WidgetContext,
     ) -> Option<T> {
         let _ = (event, parent_size, context);
         None
     }
 
     // Actual size including its sub widgets with pixel value.
-    fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &SharedContext) -> [f32; 2] {
+    fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &WidgetContext) -> [f32; 2] {
         *self.size_cache.get_data_or_insert_with(&parent_size, || {
             let image = self
                 .image
@@ -184,7 +184,7 @@ impl<T: Send + 'static> Widget<T> for ImageNode {
     fn cover_range(
         &mut self,
         parent_size: [Option<f32>; 2],
-        context: &SharedContext,
+        context: &WidgetContext,
     ) -> CoverRange<f32> {
         let px_size = Widget::<T>::px_size(self, parent_size, context);
 
@@ -204,7 +204,7 @@ impl<T: Send + 'static> Widget<T> for ImageNode {
         parent_size: [Option<f32>; 2],
         _: Background,
         // context
-        context: &SharedContext,
+        context: &WidgetContext,
         _: &Renderer,
     ) -> Vec<Object> {
         let image = self
@@ -223,8 +223,8 @@ impl<T: Send + 'static> Widget<T> for ImageNode {
 
         // prepare texture
         let texture = self.texture.get_or_insert_with(|| {
-            let device = context.get_wgpu_device();
-            let queue = context.get_wgpu_queue();
+            let device = context.device();
+            let queue = context.queue();
 
             let image_rgba = image.to_rgba8();
 

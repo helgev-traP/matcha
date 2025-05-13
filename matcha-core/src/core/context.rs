@@ -1,120 +1,67 @@
-use std::sync::Arc;
-
-use crate::cosmic::{FontContext, RenderAttribute, TextureAttribute, TextureAttributeGpu};
-
-pub struct SharedContext {
-    winit_window: Arc<winit::window::Window>,
-    device: Arc<wgpu::Device>,
-    queue: Arc<wgpu::Queue>,
-    surface_format: wgpu::TextureFormat,
-
-    cosmic_text: FontContext,
+#[derive(Clone)]
+pub struct WidgetContext<'a> {
+    global_context: &'a super::window::gpu_state::GlobalContext<'a>,
+    root_font_size: f32,
+    font_size: f32,
 }
 
-impl Clone for SharedContext {
-    fn clone(&self) -> Self {
-        Self {
-            device: self.device.clone(),
-            queue: self.queue.clone(),
-            surface_format: self.surface_format,
-            winit_window: self.winit_window.clone(),
-            cosmic_text: self.cosmic_text.clone(),
-        }
-    }
-}
-
-impl SharedContext {
-    pub fn new(
-        winit_window: Arc<winit::window::Window>,
-        device: Arc<wgpu::Device>,
-        queue: Arc<wgpu::Queue>,
-        surface_format: wgpu::TextureFormat,
-        cosmic_text: Option<FontContext>,
+impl<'a> WidgetContext<'a> {
+    pub(crate) fn new(
+        global_context: &'a super::window::gpu_state::GlobalContext,
+        font_size: f32,
     ) -> Self {
         Self {
-            winit_window,
-            device,
-            queue,
-            surface_format,
-            cosmic_text: if let Some(cosmic_text) = cosmic_text {
-                cosmic_text
-            } else {
-                FontContext::new()
-            },
+            global_context,
+            root_font_size: font_size,
+            font_size,
         }
     }
 
-    pub fn get_wgpu_device(&self) -> &Arc<wgpu::Device> {
-        &self.device
+    pub fn device(&self) -> &wgpu::Device {
+        self.global_context.device()
     }
 
-    pub fn get_wgpu_queue(&self) -> &Arc<wgpu::Queue> {
-        &self.queue
+    pub fn queue(&self) -> &wgpu::Queue {
+        self.global_context.queue()
     }
 
-    pub fn get_wgpu_encoder(&self) -> wgpu::CommandEncoder {
-        self.device
+    pub fn make_encoder(&self) -> wgpu::CommandEncoder {
+        self.global_context
+            .device()
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("App Context Command Encoder"),
+                label: Some("Widget Context Command Encoder"),
             })
     }
 
-    pub fn get_surface_format(&self) -> wgpu::TextureFormat {
-        self.surface_format
+    pub fn surface_format(&self) -> wgpu::TextureFormat {
+        self.global_context.surface_format()
     }
 
-    pub fn get_dpi(&self) -> f64 {
-        self.winit_window.scale_factor()
+    pub fn dpi(&self) -> f64 {
+        self.global_context.dpi()
     }
 
-    pub fn get_viewport_size(&self) -> (u32, u32) {
-        let size = self.winit_window.inner_size();
-        (size.width, size.height)
+    pub fn viewport_size(&self) -> [u32; 2] {
+        self.global_context.viewport_size()
+    }
+}
+
+impl WidgetContext<'_> {
+    pub fn font_size(&self) -> f32 {
+        self.font_size
     }
 
-    pub fn get_cosmic_text(&self) -> &FontContext {
-        &self.cosmic_text
+    pub fn root_font_size(&self) -> f32 {
+        self.root_font_size
     }
+}
 
-    pub fn text_render(
-        &self,
-        text: &str,
-        atr: RenderAttribute,
-        texture: TextureAttribute,
-    ) -> [i32; 2] {
-        self.cosmic_text.render(
-            text,
-            atr,
-            &TextureAttributeGpu {
-                queue: &self.queue,
-                width: texture.width,
-                height: texture.height,
-                texture: texture.texture,
-            },
-        )
-    }
-
-    /// Create a new Rgba8UnormSrgb texture
-    pub fn create_texture(
-        &self,
-        width: u32,
-        height: u32,
-        format: wgpu::TextureFormat,
-        usage: wgpu::TextureUsages,
-    ) -> wgpu::Texture {
-        self.device.create_texture(&wgpu::TextureDescriptor {
-            size: wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format,
-            usage,
-            label: None,
-            view_formats: &[],
-        })
+impl WidgetContext<'_> {
+    pub fn with_font_size(&self, font_size: f32) -> Self {
+        Self {
+            global_context: self.global_context,
+            root_font_size: self.root_font_size,
+            font_size,
+        }
     }
 }

@@ -3,7 +3,7 @@ use std::sync::{Arc, atomic::AtomicBool};
 use tokio::sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use super::{
-    context::SharedContext,
+    context::WidgetContext,
     observer::{ObserverReceiver, ObserverSender, create_observer_ch},
     types::range::CoverRange,
     ui::{Background, Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
@@ -287,14 +287,14 @@ impl<Model: Sync + Send + 'static, Response: 'static, InnerResponse: 'static> Wi
         &mut self,
         event: &super::events::Event,
         parent_size: [Option<f32>; 2],
-        context: &SharedContext,
+        context: &WidgetContext,
     ) -> Option<Response> {
         self.widget
             .widget_event(event, parent_size, context)
             .and_then(|inner_response| (self.react_fn)(inner_response, self.model_accessor.clone()))
     }
 
-    fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &SharedContext) -> [f32; 2] {
+    fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &WidgetContext) -> [f32; 2] {
         self.widget.px_size(parent_size, context)
     }
 
@@ -302,7 +302,7 @@ impl<Model: Sync + Send + 'static, Response: 'static, InnerResponse: 'static> Wi
         &mut self,
         position: [f32; 2],
         parent_size: [Option<f32>; 2],
-        context: &SharedContext,
+        context: &WidgetContext,
     ) -> bool {
         self.widget.is_inside(position, parent_size, context)
     }
@@ -310,7 +310,7 @@ impl<Model: Sync + Send + 'static, Response: 'static, InnerResponse: 'static> Wi
     fn cover_range(
         &mut self,
         parent_size: [Option<f32>; 2],
-        context: &SharedContext,
+        context: &WidgetContext,
     ) -> CoverRange<f32> {
         self.widget.cover_range(parent_size, context)
     }
@@ -323,7 +323,7 @@ impl<Model: Sync + Send + 'static, Response: 'static, InnerResponse: 'static> Wi
         &mut self,
         parent_size: [Option<f32>; 2],
         background: Background,
-        context: &SharedContext,
+        context: &WidgetContext,
         renderer: &super::renderer::Renderer,
     ) -> Vec<Object> {
         self.widget

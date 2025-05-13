@@ -1,5 +1,5 @@
 use matcha_core::{
-    context::SharedContext,
+    context::WidgetContext,
     events::Event,
     observer::Observer,
     renderer::Renderer,
@@ -77,7 +77,7 @@ impl<T: Send + 'static> Widget<T> for PositionNode {
         &mut self,
         event: &Event,
         parent_size: [Option<f32>; 2],
-        context: &SharedContext,
+        context: &WidgetContext,
     ) -> Option<T> {
         let _ = (event, parent_size, context);
         todo!()
@@ -102,7 +102,7 @@ impl<T: Send + 'static> Widget<T> for PositionNode {
     */
 
     // Actual size including its sub widgets with pixel value.
-    fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &SharedContext) -> [f32; 2] {
+    fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &WidgetContext) -> [f32; 2] {
         let _ = (parent_size, context);
         todo!()
     }
@@ -111,7 +111,7 @@ impl<T: Send + 'static> Widget<T> for PositionNode {
     fn cover_range(
         &mut self,
         parent_size: [Option<f32>; 2],
-        context: &SharedContext,
+        context: &WidgetContext,
     ) -> CoverRange<f32> {
         todo!()
     }
@@ -128,7 +128,7 @@ impl<T: Send + 'static> Widget<T> for PositionNode {
         parent_size: [Option<f32>; 2],
         background: Background,
         // context
-        context: &SharedContext,
+        context: &WidgetContext,
         renderer: &Renderer,
     ) -> Vec<Object> {
         todo!()

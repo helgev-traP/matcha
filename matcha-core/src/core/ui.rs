@@ -1,7 +1,7 @@
 use std::{any::Any, sync::Arc};
 
 use super::{
-    context::SharedContext,
+    context::WidgetContext,
     events::Event,
     observer::Observer,
     renderer::Renderer,
@@ -46,7 +46,7 @@ pub trait Widget<T>: Send {
         &mut self,
         event: &Event,
         parent_size: [Option<f32>; 2],
-        context: &SharedContext,
+        context: &WidgetContext,
     ) -> Option<T>;
 
     // inside / outside check
@@ -54,7 +54,7 @@ pub trait Widget<T>: Send {
         &mut self,
         position: [f32; 2],
         parent_size: [Option<f32>; 2],
-        context: &SharedContext,
+        context: &WidgetContext,
     ) -> bool {
         let px_size = self.px_size(parent_size, context);
 
@@ -65,13 +65,13 @@ pub trait Widget<T>: Send {
     }
 
     /// Actual size including its sub widgets with pixel value.
-    fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &SharedContext) -> [f32; 2];
+    fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &WidgetContext) -> [f32; 2];
 
     /// The drawing range and the area that the widget always covers.
     fn cover_range(
         &mut self,
         parent_size: [Option<f32>; 2],
-        context: &SharedContext,
+        context: &WidgetContext,
     ) -> CoverRange<f32>;
 
     fn redraw(&self) -> bool;
@@ -80,7 +80,7 @@ pub trait Widget<T>: Send {
         &mut self,
         parent_size: [Option<f32>; 2],
         background: Background,
-        context: &SharedContext,
+        context: &WidgetContext,
         renderer: &Renderer,
     ) -> Vec<Object>;
 

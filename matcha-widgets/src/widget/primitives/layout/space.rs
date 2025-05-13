@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use matcha_core::{
-    context::SharedContext,
+    context::WidgetContext,
     events::Event,
     observer::Observer,
     renderer::Renderer,
@@ -14,7 +14,7 @@ use matcha_core::{
 // MARK: DOM
 
 type SizeFn =
-    dyn for<'a> Fn([Option<f32>; 2], &'a SharedContext) -> [f32; 2] + Send + Sync + 'static;
+    dyn for<'a> Fn([Option<f32>; 2], &'a WidgetContext) -> [f32; 2] + Send + Sync + 'static;
 
 pub struct Space {
     label: Option<String>,
@@ -32,7 +32,7 @@ impl Space {
 
     pub fn size<F>(mut self, size: F) -> Self
     where
-        F: Fn([Option<f32>; 2], &SharedContext) -> [f32; 2] + Send + Sync + 'static,
+        F: Fn([Option<f32>; 2], &WidgetContext) -> [f32; 2] + Send + Sync + 'static,
     {
         self.size = Arc::new(size);
         self
@@ -109,19 +109,19 @@ impl<T: Send + 'static> Widget<T> for SpaceNode {
     }
 
     // widget event
-    fn widget_event(&mut self, _: &Event, _: [Option<f32>; 2], _: &SharedContext) -> Option<T> {
+    fn widget_event(&mut self, _: &Event, _: [Option<f32>; 2], _: &WidgetContext) -> Option<T> {
         None
     }
 
     // Actual size including its sub widgets with pixel value.
-    fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &SharedContext) -> [f32; 2] {
+    fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &WidgetContext) -> [f32; 2] {
         *self
             .size_cache
             .get_data_or_insert_with(&parent_size, || (self.size)(parent_size, context))
     }
 
     // The drawing range and the area that the widget always covers.
-    fn cover_range(&mut self, _: [Option<f32>; 2], _: &SharedContext) -> CoverRange<f32> {
+    fn cover_range(&mut self, _: [Option<f32>; 2], _: &WidgetContext) -> CoverRange<f32> {
         Default::default()
     }
 
@@ -137,7 +137,7 @@ impl<T: Send + 'static> Widget<T> for SpaceNode {
         _: [Option<f32>; 2],
         _: Background,
         // context
-        _: &SharedContext,
+        _: &WidgetContext,
         _: &Renderer,
     ) -> Vec<Object> {
         vec![]
