@@ -2,17 +2,24 @@ use std::sync::Arc;
 
 use crate::cosmic::FontContext;
 
-use super::context::SharedContext;
+use super::context::WidgetContext;
 
-pub struct GpuState<'a> {
+pub struct GlobalContext<'a> {
     _instance: wgpu::Instance,
     _adapter: wgpu::Adapter,
-    app_context: SharedContext,
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+
+    winit_window: Arc<winit::window::Window>,
+
     config: wgpu::SurfaceConfiguration,
     surface: wgpu::Surface<'a>,
+    surface_format: wgpu::TextureFormat,
+
+    cosmic_text: FontContext,
 }
 
-impl GpuState<'_> {
+impl GlobalContext<'_> {
     pub async fn new(
         winit_window: Arc<winit::window::Window>,
         power_preference: wgpu::PowerPreference,
@@ -76,37 +83,25 @@ impl GpuState<'_> {
 
         surface.configure(&device, &config);
 
-        let app_context = SharedContext::new(
-            winit_window,
-            Arc::new(device),
-            Arc::new(queue),
-            surface_format,
-            cosmic_context,
-        );
-
         Self {
             _instance: instance,
             _adapter: adapter,
-            app_context,
+            device,
+            queue,
+            winit_window,
             config,
             surface,
+            surface_format,
+            cosmic_text: if let Some(cosmic_text) = cosmic_context {
+                cosmic_text
+            } else {
+                FontContext::new()
+            },
         }
-    }
-
-    pub fn get_app_context(&self) -> &SharedContext {
-        &self.app_context
     }
 
     pub fn get_current_texture(&self) -> wgpu::SurfaceTexture {
         self.surface.get_current_texture().unwrap()
-    }
-
-    pub fn get_config(&self) -> &wgpu::SurfaceConfiguration {
-        &self.config
-    }
-
-    pub fn get_viewport_size(&self) -> [f32; 2] {
-        [self.config.width as f32, self.config.height as f32]
     }
 
     pub fn resize(&mut self, size: winit::dpi::PhysicalSize<u32>) {
@@ -114,8 +109,38 @@ impl GpuState<'_> {
             // Update the surface configuration
             self.config.width = size.width;
             self.config.height = size.height;
-            self.surface
-                .configure(self.app_context.get_wgpu_device(), &self.config);
+            self.surface.configure(&self.device, &self.config);
         }
+    }
+}
+
+impl GlobalContext<'_> {
+    pub fn widget_context(&self, font_size: f32) -> WidgetContext {
+        WidgetContext::new(self, font_size)
+    }
+
+    pub fn device(&self) -> &wgpu::Device {
+        &self.device
+    }
+
+    pub fn queue(&self) -> &wgpu::Queue {
+        &self.queue
+    }
+
+    pub fn get_config(&self) -> &wgpu::SurfaceConfiguration {
+        &self.config
+    }
+
+    pub fn surface_format(&self) -> wgpu::TextureFormat {
+        self.surface_format
+    }
+
+    pub fn dpi(&self) -> f64 {
+        self.winit_window.scale_factor()
+    }
+
+    pub fn viewport_size(&self) -> [u32; 2] {
+        // let size = self.winit_window.inner_size();
+        [self.config.width, self.config.height]
     }
 }

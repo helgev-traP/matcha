@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use matcha_core::{
-    context::SharedContext,
+    context::WidgetContext,
     events::Event,
     observer::Observer,
     renderer::Renderer,
@@ -176,7 +176,7 @@ where
         &mut self,
         event: &Event,
         parent_size: [Option<f32>; 2],
-        context: &SharedContext,
+        context: &WidgetContext,
     ) -> Option<T> {
         match self.visible {
             VisibilityState::Visible => self
@@ -188,7 +188,7 @@ where
         }
     }
 
-    fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &SharedContext) -> [f32; 2] {
+    fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &WidgetContext) -> [f32; 2] {
         match self.visible {
             VisibilityState::Visible | VisibilityState::Hidden => self
                 .content
@@ -202,7 +202,7 @@ where
     fn cover_range(
         &mut self,
         parent_size: [Option<f32>; 2],
-        context: &SharedContext,
+        context: &WidgetContext,
     ) -> CoverRange<f32> {
         match self.visible {
             VisibilityState::Visible => self
@@ -225,7 +225,7 @@ where
         &mut self,
         parent_size: [Option<f32>; 2],
         background: Background,
-        context: &SharedContext,
+        context: &WidgetContext,
         renderer: &Renderer,
     ) -> Vec<Object> {
         match self.visible {

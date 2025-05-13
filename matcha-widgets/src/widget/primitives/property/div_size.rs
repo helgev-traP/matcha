@@ -1,4 +1,4 @@
-use matcha_core::context::SharedContext;
+use matcha_core::context::WidgetContext;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DivSize {
@@ -24,31 +24,25 @@ impl DivSize {
     pub fn to_std_div_size(
         &self,
         parent_px_size: Option<f32>,
-        context: &SharedContext,
+        context: &WidgetContext,
     ) -> StdDivSize {
         match self {
             DivSize::Pixel(x) => StdDivSize::Pixel(*x),
-            DivSize::Inch(x) => StdDivSize::Pixel(*x * context.get_dpi() as f32),
-            DivSize::Point(x) => StdDivSize::Pixel(*x * context.get_dpi() as f32 / 72.0),
+            DivSize::Inch(x) => StdDivSize::Pixel(*x * context.dpi() as f32),
+            DivSize::Point(x) => StdDivSize::Pixel(*x * context.dpi() as f32 / 72.0),
             DivSize::Parent(x) => match parent_px_size {
                 Some(px) => StdDivSize::Pixel(px * x),
                 None => StdDivSize::Pixel(0.0),
             },
             DivSize::Em(_) => todo!(),
             DivSize::Rem(_) => todo!(),
-            DivSize::Vw(x) => StdDivSize::Pixel(*x * context.get_viewport_size().0 as f32),
-            DivSize::Vh(x) => StdDivSize::Pixel(*x * context.get_viewport_size().1 as f32),
+            DivSize::Vw(x) => StdDivSize::Pixel(*x * context.viewport_size()[0] as f32),
+            DivSize::Vh(x) => StdDivSize::Pixel(*x * context.viewport_size()[1] as f32),
             DivSize::VMin(x) => StdDivSize::Pixel(
-                *x * context
-                    .get_viewport_size()
-                    .0
-                    .min(context.get_viewport_size().1) as f32,
+                *x * context.viewport_size()[0].min(context.viewport_size()[1]) as f32,
             ),
             DivSize::VMax(x) => StdDivSize::Pixel(
-                *x * context
-                    .get_viewport_size()
-                    .0
-                    .max(context.get_viewport_size().1) as f32,
+                *x * context.viewport_size()[0].max(context.viewport_size()[1]) as f32,
             ),
             DivSize::Grow(x) => StdDivSize::Grow(*x),
         }

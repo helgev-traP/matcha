@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use matcha_core::context::SharedContext;
+use matcha_core::context::WidgetContext;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FlexWrap {
@@ -20,7 +20,7 @@ pub enum JustifyContent {
     SpaceEvenly,
 }
 
-type GapFn = dyn Fn(Option<f32>, &SharedContext) -> f32 + Sync + Send;
+type GapFn = dyn Fn(Option<f32>, &WidgetContext) -> f32 + Sync + Send;
 
 /// control the alignment of children on the **cross axis**
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

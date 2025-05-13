@@ -16,7 +16,7 @@ use super::{
 
 mod benchmark;
 mod error;
-mod gpu_state;
+pub(crate) mod gpu_state;
 mod keyboard_state;
 mod mouse_state;
 
@@ -43,7 +43,7 @@ pub struct Window<
 
     // --- rendering context ---
     winit_window: Option<Arc<winit::window::Window>>,
-    gpu_state: Option<gpu_state::GpuState<'a>>,
+    gpu_state: Option<gpu_state::GlobalContext<'a>>,
     background_texture: Option<wgpu::Texture>,
     renderer: Option<Renderer>,
 
@@ -58,6 +58,9 @@ pub struct Window<
 
     // --- event handling settings ---
     scroll_pixel_per_line: f32,
+
+    // --- widget context ---
+    default_font_size: f32,
 
     // frame
     frame: u64,
@@ -96,6 +99,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
             mouse_state: None,
             keyboard_state: None,
             scroll_pixel_per_line: 40.0,
+            default_font_size: 16.0,
             frame: 0,
             benchmarker: None,
         }
@@ -156,12 +160,13 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
             .create_view(&wgpu::TextureViewDescriptor::default());
 
         // viewport size
-        let viewport_size = gpu_state.get_viewport_size();
+        let viewport_size = gpu_state.viewport_size();
+        let viewport_size = [viewport_size[0] as f32, viewport_size[1] as f32];
 
         // prepare background color (1x1) texture
         let background_texture = self.background_texture.get_or_insert_with(|| {
-            let device = gpu_state.get_app_context().get_wgpu_device();
-            let queue = gpu_state.get_app_context().get_wgpu_queue();
+            let device = gpu_state.device();
+            let queue = gpu_state.queue();
 
             device.create_texture_with_data(
                 queue,
@@ -191,12 +196,18 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
             let render_result = root_widget.render(
                 [Some(viewport_size[0]), Some(viewport_size[1])],
                 Background::new(&background_view, [0.0, 0.0]),
-                gpu_state.get_app_context(),
+                &gpu_state.widget_context(self.default_font_size),
                 renderer,
             );
 
             // project to screen
-            renderer.render_to_surface(&surface_view, viewport_size, render_result);
+            renderer.render_to_surface(
+                gpu_state.device(),
+                gpu_state.queue(),
+                &surface_view,
+                viewport_size,
+                render_result,
+            );
         });
 
         // present to screen
@@ -404,7 +415,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, 
         // separate font_context from the gpu state
 
         let font_context = self.font_context.take();
-        let gpu_state = self.tokio_runtime.block_on(gpu_state::GpuState::new(
+        let gpu_state = self.tokio_runtime.block_on(gpu_state::GlobalContext::new(
             self.winit_window.as_ref().unwrap().clone(),
             self.performance,
             font_context,
@@ -412,7 +423,10 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, 
         self.gpu_state = Some(gpu_state);
 
         // renderer preparation.
-        let renderer = Renderer::new(self.gpu_state.as_ref().unwrap().get_app_context());
+        let renderer = Renderer::new(
+            self.gpu_state.as_ref().unwrap().device(),
+            self.gpu_state.as_ref().unwrap().surface_format(),
+        );
         self.renderer = Some(renderer);
 
         // --- init input context ---
@@ -460,12 +474,17 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, 
         // when root widget exists
         if let Some(root_widget) = self.root_widget.as_mut() {
             // get response from widget tree
-            let window_size = self.gpu_state.as_ref().unwrap().get_viewport_size();
+            let window_size = self.gpu_state.as_ref().unwrap().viewport_size();
+            let window_size = [window_size[0] as f32, window_size[1] as f32];
 
             let response = root_widget.widget_event(
                 &event,
                 [Some(window_size[0]), Some(window_size[1])],
-                self.gpu_state.as_ref().unwrap().get_app_context(),
+                &self
+                    .gpu_state
+                    .as_ref()
+                    .unwrap()
+                    .widget_context(self.default_font_size),
             );
 
             if let Some(user_event) = response {

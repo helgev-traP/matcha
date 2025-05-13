@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use matcha_core::{
-    context::SharedContext,
+    context::WidgetContext,
     events::Event,
     observer::Observer,
     renderer::Renderer,
@@ -196,13 +196,13 @@ where
         &mut self,
         event: &Event,
         parent_size: [Option<f32>; 2],
-        context: &SharedContext,
+        context: &WidgetContext,
     ) -> Option<T> {
         // todo !
         None
     }
 
-    fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &SharedContext) -> [f32; 2] {
+    fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &WidgetContext) -> [f32; 2] {
         match parent_size {
             [Some(width), Some(height)] => [width, height],
             _ => {
@@ -229,7 +229,7 @@ where
     fn cover_range(
         &mut self,
         parent_size: [Option<f32>; 2],
-        context: &SharedContext,
+        context: &WidgetContext,
     ) -> CoverRange<f32> {
         let content_op_size = [
             parent_size[0].map(|v| v - self.left - self.right),
@@ -257,7 +257,7 @@ where
         &mut self,
         parent_size: [Option<f32>; 2],
         background: Background,
-        context: &SharedContext,
+        context: &WidgetContext,
         renderer: &Renderer,
     ) -> Vec<matcha_core::ui::Object> {
         self.content

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use matcha_core::{
-    context::SharedContext,
+    context::WidgetContext,
     events::Event,
     observer::Observer,
     renderer::Renderer,
@@ -122,7 +122,7 @@ impl<T> ColumnNode<T> {
         self.cache = None;
     }
 
-    fn prepare_cache(&mut self, parent_size: [Option<f32>; 2], context: &SharedContext) {
+    fn prepare_cache(&mut self, parent_size: [Option<f32>; 2], context: &WidgetContext) {
         self.invalidate_cache(parent_size);
 
         if self.cache.is_some() {
@@ -217,7 +217,7 @@ fn justify_content_horizontal_fold_fn(
     items_len: f32,
     justify_content: &JustifyContent,
     parent_size: [Option<f32>; 2],
-    context: &SharedContext,
+    context: &WidgetContext,
 ) -> Box<dyn StateClosureTrait> {
     match justify_content {
         JustifyContent::FlexStart { gap } => {
@@ -326,7 +326,7 @@ impl<T: Send + 'static> Widget<T> for ColumnNode<T> {
         &mut self,
         event: &Event,
         parent_size: [Option<f32>; 2],
-        context: &SharedContext,
+        context: &WidgetContext,
     ) -> Option<T> {
         let _ = (event, parent_size, context);
         todo!()
@@ -351,7 +351,7 @@ impl<T: Send + 'static> Widget<T> for ColumnNode<T> {
     */
 
     // Actual size including its sub widgets with pixel value.
-    fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &SharedContext) -> [f32; 2] {
+    fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &WidgetContext) -> [f32; 2] {
         // prepare cache
         self.prepare_cache(parent_size, context);
         // get cache
@@ -365,7 +365,7 @@ impl<T: Send + 'static> Widget<T> for ColumnNode<T> {
     fn cover_range(
         &mut self,
         parent_size: [Option<f32>; 2],
-        context: &SharedContext,
+        context: &WidgetContext,
     ) -> CoverRange<f32> {
         todo!()
     }
@@ -382,7 +382,7 @@ impl<T: Send + 'static> Widget<T> for ColumnNode<T> {
         parent_size: [Option<f32>; 2],
         background: Background,
         // context
-        context: &SharedContext,
+        context: &WidgetContext,
         renderer: &Renderer,
     ) -> Vec<Object> {
         // prepare cache

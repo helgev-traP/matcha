@@ -1,15 +1,12 @@
 use texture_color_renderer::TextureObjectRenderer;
 use vertex_color_renderer::VertexColorRenderer;
 
-use crate::{context::SharedContext, ui::Object};
+use crate::ui::Object;
 
 mod texture_color_renderer;
 mod vertex_color_renderer;
 
 pub struct Renderer {
-    // context
-    context: SharedContext,
-
     // vello renderer
     // todo: remove
     vello_renderer: std::sync::Mutex<vello::Renderer>,
@@ -20,9 +17,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(context: &SharedContext) -> Self {
-        let device = context.get_wgpu_device();
-
+    pub fn new(device: &wgpu::Device, surface_format: wgpu::TextureFormat) -> Self {
         // vello renderer
         let vello_renderer = vello::Renderer::new(
             device,
@@ -37,16 +32,13 @@ impl Renderer {
 
         // pipelines
 
-        let texture_object_renderer = texture_color_renderer::TextureObjectRenderer::new(
-            device,
-            context.get_surface_format(),
-        );
+        let texture_object_renderer =
+            texture_color_renderer::TextureObjectRenderer::new(device, surface_format);
 
         let vertex_color_renderer =
-            vertex_color_renderer::VertexColorRenderer::new(device, context.get_surface_format());
+            vertex_color_renderer::VertexColorRenderer::new(device, surface_format);
 
         Self {
-            context: context.clone(),
             vello_renderer: std::sync::Mutex::new(vello_renderer),
             texture_color_renderer: Some(texture_object_renderer),
             vertex_color_renderer: Some(vertex_color_renderer),
@@ -59,26 +51,52 @@ impl Renderer {
 
     pub fn render(
         &self,
+        // gpu
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        // destination
         destination_view: &wgpu::TextureView,
         destination_size: [f32; 2],
         // objects
         objects: Vec<Object>,
     ) {
-        self.render_impl(destination_view, destination_size, objects, false);
+        self.render_impl(
+            device,
+            queue,
+            destination_view,
+            destination_size,
+            objects,
+            false,
+        );
     }
 
     pub(crate) fn render_to_surface(
         &self,
+        // gpu
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        // destination
         destination_view: &wgpu::TextureView,
         destination_size: [f32; 2],
         // objects
         objects: Vec<Object>,
     ) {
-        self.render_impl(destination_view, destination_size, objects, true);
+        self.render_impl(
+            device,
+            queue,
+            destination_view,
+            destination_size,
+            objects,
+            true,
+        );
     }
 
     fn render_impl(
         &self,
+        // gpu
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        // destination
         destination_view: &wgpu::TextureView,
         destination_size: [f32; 2],
         // objects
@@ -86,9 +104,6 @@ impl Renderer {
         // render to surface or not
         render_to_surface: bool,
     ) {
-        let device = self.context.get_wgpu_device();
-        let queue = self.context.get_wgpu_queue();
-
         let normalize_matrix = make_normalize_matrix(destination_size);
 
         // todo !: try mesh integration
