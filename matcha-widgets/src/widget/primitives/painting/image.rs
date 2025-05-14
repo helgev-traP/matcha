@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use matcha_core::{
     context::WidgetContext,
-    device,
     events::Event,
     observer::Observer,
     renderer::Renderer,
@@ -295,8 +294,8 @@ impl<T: Send + 'static> Widget<T> for ImageNode {
 
         vec![Object::TextureColor {
             texture: texture.clone(),
-            uv_vertices: vertices.clone(),
-            indices: indices.clone(),
+            uv_vertices: vertices,
+            indices,
             transform: nalgebra::Matrix4::new_translation(&[0.0, 0.0, 0.0].into()),
         }]
     }
