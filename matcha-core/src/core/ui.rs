@@ -127,16 +127,17 @@ impl<'a> Background<'a> {
 // todo: add re-rendering range to apply scissors test for optimization
 /// `Arc` is not necessary for sharing objects
 /// since `Arc` is already used in this struct.
-pub enum Object {
+#[derive(Clone)]
+pub enum Object<'a> {
     TextureColor {
         texture: Arc<wgpu::Texture>,
-        uv_vertices: Vec<UvVertex>,
-        indices: Vec<u16>,
+        uv_vertices: &'a [UvVertex],
+        indices: &'a [u16],
         transform: nalgebra::Matrix4<f32>,
     },
     VertexColor {
-        vertices: Vec<ColorVertex>,
-        indices: Vec<u16>,
+        vertices: &'a [ColorVertex],
+        indices: &'a [u16],
         transform: nalgebra::Matrix4<f32>,
     },
     // Gradation
@@ -144,7 +145,7 @@ pub enum Object {
     // and more ...?
 }
 
-impl Object {
+impl Object<'_> {
     pub fn transform(&mut self, affine: nalgebra::Matrix4<f32>) {
         match self {
             Object::TextureColor { transform, .. } | Object::VertexColor { transform, .. } => {
