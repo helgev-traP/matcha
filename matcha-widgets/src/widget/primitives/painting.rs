@@ -1,5 +1,3 @@
-pub mod border;
+pub mod solid_box;
 pub mod image;
-pub mod n_polygon;
-pub mod solid;
-pub mod vertices;
+pub mod polygon;
