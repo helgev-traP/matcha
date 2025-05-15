@@ -10,7 +10,7 @@ use matcha_core::{
         range::{CoverRange, Range2D},
     },
     ui::{Background, Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
-    vertex::uv_vertex::UvVertex,
+    vertex::UvVertex,
 };
 
 // todo: more documentation
@@ -192,7 +192,7 @@ impl<T: Send + 'static> Widget<T> for ImageNode {
     }
 
     // if redraw is needed
-    fn redraw(&self) -> bool {
+    fn updated(&self) -> bool {
         self.redraw
     }
 

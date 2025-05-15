@@ -6,7 +6,7 @@ use super::{
     observer::Observer,
     renderer::Renderer,
     types::range::CoverRange,
-    vertex::{colored_vertex::ColorVertex, uv_vertex::UvVertex},
+    vertex::{ColorVertex, UvVertex},
 };
 
 // dom tree node
@@ -74,7 +74,7 @@ pub trait Widget<T>: Send {
         context: &WidgetContext,
     ) -> CoverRange<f32>;
 
-    fn redraw(&self) -> bool;
+    fn updated(&self) -> bool;
 
     fn render(
         &mut self,
@@ -84,8 +84,12 @@ pub trait Widget<T>: Send {
         renderer: &Renderer,
     ) -> Vec<Object>;
 
-    // todo
-    // fn update_gpu_device(&mut self, device: &wgpu::Device, queue: &wgpu::Queue);
+    /// Updates the GPU device and queue for rendering purposes.
+    /// This method is a placeholder and should be implemented to handle GPU resource updates.
+    fn update_gpu_device(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+        // TODO: Implement GPU device and queue updates.
+        // This might involve updating buffers, textures, or other GPU resources.
+    }
 }
 
 pub enum DomComPareResult {

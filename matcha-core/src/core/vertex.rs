@@ -1,3 +1,6 @@
-pub mod colored_vertex;
-pub mod uv_vertex;
-pub mod vertex;
+mod colored_vertex;
+pub use colored_vertex::*;
+mod uv_vertex;
+pub use uv_vertex::*;
+mod vertex;
+pub use vertex::*;

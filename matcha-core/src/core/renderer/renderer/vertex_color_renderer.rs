@@ -1,6 +1,6 @@
 use wgpu::util::DeviceExt;
 
-use crate::vertex::{colored_vertex::ColorVertex, uv_vertex::UvVertex};
+use crate::vertex::{ColorVertex, UvVertex};
 
 // bind groups:
 // - affine transform

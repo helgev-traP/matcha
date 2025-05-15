@@ -371,7 +371,7 @@ impl<T: Send + 'static> Widget<T> for RowNode<T> {
     }
 
     // if redraw is needed
-    fn redraw(&self) -> bool {
+    fn updated(&self) -> bool {
         todo!()
     }
 
