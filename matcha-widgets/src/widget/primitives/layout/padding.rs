@@ -246,10 +246,10 @@ where
             .unwrap_or_default()
     }
 
-    fn redraw(&self) -> bool {
+    fn updated(&self) -> bool {
         self.content
             .as_ref()
-            .map(|content| content.redraw())
+            .map(|content| content.updated())
             .unwrap_or(false)
     }
 

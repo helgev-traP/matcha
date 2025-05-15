@@ -126,7 +126,7 @@ impl<T: Send + 'static> Widget<T> for SpaceNode {
     }
 
     // if redraw is needed
-    fn redraw(&self) -> bool {
+    fn updated(&self) -> bool {
         false
     }
 

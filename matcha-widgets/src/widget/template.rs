@@ -127,7 +127,7 @@ impl<T: Send + 'static> Widget<T> for TemplateNode {
     }
 
     // if redraw is needed
-    fn redraw(&self) -> bool {
+    fn updated(&self) -> bool {
         todo!()
     }
 

@@ -1,5 +1,7 @@
 use matcha_core::{
-    context::WidgetContext, renderer::Renderer, vertex::colored_vertex::ColorVertex
+    context::WidgetContext,
+    renderer::Renderer,
+    vertex::{self, BoxDescriptor, BoxMesh, ColorVertex, box_mesh},
 };
 
 // todo: more documentation
@@ -22,8 +24,13 @@ pub struct SolidBox {
     border_blur: f32,
 
     // render context
+    resources: Option<RenderResource>,
+}
+
+struct RenderResource {
     vertices: Option<Vec<ColorVertex>>,
-    indices: Option<Vec<u16>>,
+    rect_indices: Option<Vec<u16>>,
+    border_indices: Option<Vec<u16>>,
 }
 
 impl SolidBox {
@@ -36,8 +43,7 @@ impl SolidBox {
             border_width: 0.0,
             border_color: [0.0, 0.0, 0.0, 0.0],
             border_blur: 0.0,
-            vertices: None,
-            indices: None,
+            resources: None,
         })
     }
 
@@ -73,10 +79,35 @@ impl SolidBox {
 }
 
 impl SolidBox {
-    pub fn render(target: wgpu::TextureView, renderer: &Renderer) {
-        todo!()
+    pub fn render(&mut self, size: [f32; 2], target: wgpu::TextureView, renderer: &Renderer) {
+        let resource = self.resources.get_or_insert_with(|| {
+            // make vertices and indices
+            let box_desc = BoxDescriptor::new(size[0], size[1], self.border_width).unwrap();
+
+            match box_mesh(&box_desc) {
+                Some(BoxMesh {
+                    vertices,
+                    rect_indices,
+                    border_indices,
+                }) => {
+                    // let vertices = vertices
+                    //     .into_iter()
+                    //     .map(|v| ColorVertex {
+                    //         position: v.position,
+                    //         color: self.background_color,
+                    //     })
+                    //     .collect::<Vec<_>>();
+
+                    // RenderResource {
+                    //     vertices: Some(vertices),
+                    //     rect_indices: Some(rect_indices),
+                    //     border_indices: Some(border_indices),
+                    // }
+
+                    todo!()
+                }
+                None => todo!(),
+            }
+        });
     }
 }
-
-
-

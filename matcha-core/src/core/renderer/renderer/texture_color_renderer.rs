@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
 
-use crate::vertex::uv_vertex::UvVertex;
+use crate::vertex::UvVertex;
 
 // bind groups:
 // - affine transform

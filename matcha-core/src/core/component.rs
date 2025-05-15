@@ -315,8 +315,8 @@ impl<Model: Sync + Send + 'static, Response: 'static, InnerResponse: 'static> Wi
         self.widget.cover_range(parent_size, context)
     }
 
-    fn redraw(&self) -> bool {
-        self.widget.redraw()
+    fn updated(&self) -> bool {
+        self.widget.updated()
     }
 
     fn render(

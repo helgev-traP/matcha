@@ -23,10 +23,10 @@ impl Vertex {
 
 // MARK: Mesh
 
-pub struct Mesh {
-    pub vertices: Vec<Vertex>,
-    pub indices: Vec<u16>,
-}
+// pub struct Mesh {
+//     pub vertices: Vec<Vertex>,
+//     pub indices: Vec<u16>,
+// }
 
 // MARK: BoxMesh
 
@@ -85,7 +85,7 @@ impl BoxDescriptor {
 
 // MARK: box_mesh
 
-pub fn box_mesh(desc: BoxDescriptor) -> Option<BoxMesh> {
+pub fn box_mesh(desc: &BoxDescriptor) -> Option<BoxMesh> {
     if desc.border_width == 0.0 {
         // draw a simple rectangle
         single_rect(desc.range, desc.radius, desc.div)

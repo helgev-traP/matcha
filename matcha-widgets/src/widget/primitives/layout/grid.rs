@@ -279,8 +279,8 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
         )
     }
 
-    fn redraw(&self) -> bool {
-        self.redraw || self.items.iter().any(|item| item.item.redraw())
+    fn updated(&self) -> bool {
+        self.redraw || self.items.iter().any(|item| item.item.updated())
     }
 
     fn render(
