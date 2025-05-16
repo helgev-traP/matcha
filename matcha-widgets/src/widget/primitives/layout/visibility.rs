@@ -4,7 +4,7 @@ use matcha_core::{
     context::WidgetContext,
     events::Event,
     observer::Observer,
-    renderer::Renderer,
+    renderer::{Renderer, RendererMap},
     types::range::CoverRange,
     ui::{Background, Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
 };
@@ -226,7 +226,7 @@ where
         parent_size: [Option<f32>; 2],
         background: Background,
         context: &WidgetContext,
-        renderer: &Renderer,
+        renderer: &RendererMap,
     ) -> Vec<Object> {
         match self.visible {
             VisibilityState::Visible => self

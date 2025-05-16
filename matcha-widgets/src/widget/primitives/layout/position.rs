@@ -2,7 +2,7 @@ use matcha_core::{
     context::WidgetContext,
     events::Event,
     observer::Observer,
-    renderer::Renderer,
+    renderer::{Renderer, RendererMap},
     types::range::{CoverRange, Range2D},
     ui::{Background, Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
 };
@@ -129,7 +129,7 @@ impl<T: Send + 'static> Widget<T> for PositionNode {
         background: Background,
         // context
         context: &WidgetContext,
-        renderer: &Renderer,
+        renderer: &RendererMap,
     ) -> Vec<Object> {
         todo!()
     }

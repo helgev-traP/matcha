@@ -31,3 +31,4 @@ rand = { workspace = true }
 bitflags = { workspace = true }
 num = { workspace = true }
 downcast-rs = { workspace = true }
+fxhash = "0.2.1"
