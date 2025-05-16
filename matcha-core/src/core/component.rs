@@ -5,6 +5,7 @@ use tokio::sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use super::{
     context::WidgetContext,
     observer::{ObserverReceiver, ObserverSender, create_observer_ch},
+    renderer::RendererMap,
     types::range::CoverRange,
     ui::{Background, Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
 };
@@ -324,7 +325,7 @@ impl<Model: Sync + Send + 'static, Response: 'static, InnerResponse: 'static> Wi
         parent_size: [Option<f32>; 2],
         background: Background,
         context: &WidgetContext,
-        renderer: &super::renderer::Renderer,
+        renderer: &RendererMap,
     ) -> Vec<Object> {
         self.widget
             .render(parent_size, background, context, renderer)

@@ -8,6 +8,7 @@ use super::{
     events::Event,
     observer::Observer,
     renderer::Renderer,
+    system_renderer,
     types::color::Color,
     ui::{Background, Widget},
 };
@@ -45,7 +46,7 @@ pub struct Window<
     winit_window: Option<Arc<winit::window::Window>>,
     gpu_state: Option<gpu_state::GlobalContext<'a>>,
     background_texture: Option<wgpu::Texture>,
-    renderer: Option<Renderer>,
+    window_renderer: Option<system_renderer::Renderer>,
 
     // --- UI context ---
     root_component: Component<Model, Message, Response, IR>,
@@ -92,7 +93,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
             winit_window: None,
             gpu_state: None,
             background_texture: None,
-            renderer: None,
+            window_renderer: None,
             root_component: component,
             root_widget: None,
             observer: Observer::default(),
@@ -143,7 +144,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
             return Err(error::RenderError::RootWidget);
         };
 
-        let Some(renderer) = self.renderer.as_mut() else {
+        let Some(window_renderer) = self.window_renderer.as_mut() else {
             return Err(error::RenderError::Renderer);
         };
 
@@ -197,11 +198,11 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
                 [Some(viewport_size[0]), Some(viewport_size[1])],
                 Background::new(&background_view, [0.0, 0.0]),
                 &gpu_state.widget_context(self.default_font_size),
-                renderer,
+                gpu_state.renderer_map(),
             );
 
             // project to screen
-            renderer.render_to_surface(
+            window_renderer.render_to_surface(
                 gpu_state.device(),
                 gpu_state.queue(),
                 &surface_view,
@@ -418,16 +419,13 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, 
         let gpu_state = self.tokio_runtime.block_on(gpu_state::GlobalContext::new(
             self.winit_window.as_ref().unwrap().clone(),
             self.performance,
-            font_context,
+            wgpu::TextureFormat::Rgba8UnormSrgb,
         ));
         self.gpu_state = Some(gpu_state);
 
         // renderer preparation.
-        let renderer = Renderer::new(
-            self.gpu_state.as_ref().unwrap().device(),
-            self.gpu_state.as_ref().unwrap().surface_format(),
-        );
-        self.renderer = Some(renderer);
+        let renderer = system_renderer::Renderer::new();
+        self.gpu_state.as_mut().unwrap().add_renderer(renderer);
 
         // --- init input context ---
         {

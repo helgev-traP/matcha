@@ -1,29 +1,35 @@
 use std::sync::Arc;
 
-use crate::cosmic::FontContext;
+use crate::renderer::{Renderer, RendererMap};
 
 use super::context::WidgetContext;
 
 pub struct GlobalContext<'a> {
+    texture_format: wgpu::TextureFormat,
+
+    // gpu device
     _instance: wgpu::Instance,
     _adapter: wgpu::Adapter,
     device: wgpu::Device,
     queue: wgpu::Queue,
 
+    // winit window
     winit_window: Arc<winit::window::Window>,
 
+    // wgpu surface
     config: wgpu::SurfaceConfiguration,
     surface: wgpu::Surface<'a>,
     surface_format: wgpu::TextureFormat,
 
-    cosmic_text: FontContext,
+    // custom renderers
+    renderer_map: RendererMap,
 }
 
 impl GlobalContext<'_> {
     pub async fn new(
         winit_window: Arc<winit::window::Window>,
         power_preference: wgpu::PowerPreference,
-        cosmic_context: Option<FontContext>,
+        texture_format: wgpu::TextureFormat,
     ) -> Self {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             #[cfg(not(target_arch = "wasm32"))]
@@ -84,6 +90,7 @@ impl GlobalContext<'_> {
         surface.configure(&device, &config);
 
         Self {
+            texture_format,
             _instance: instance,
             _adapter: adapter,
             device,
@@ -92,11 +99,7 @@ impl GlobalContext<'_> {
             config,
             surface,
             surface_format,
-            cosmic_text: if let Some(cosmic_text) = cosmic_context {
-                cosmic_text
-            } else {
-                FontContext::new()
-            },
+            renderer_map: RendererMap::new(),
         }
     }
 
@@ -112,11 +115,24 @@ impl GlobalContext<'_> {
             self.surface.configure(&self.device, &self.config);
         }
     }
+
+    pub fn add_renderer<T: Renderer>(&mut self, renderer: T) {
+        self.renderer_map.add(renderer);
+    }
+
+    pub fn renderer_setup(&mut self) {
+        self.renderer_map
+            .setup(&self.device, &self.queue, self.surface_format);
+    }
 }
 
 impl GlobalContext<'_> {
     pub fn widget_context(&self, font_size: f32) -> WidgetContext {
         WidgetContext::new(self, font_size)
+    }
+
+    pub fn renderer_map(&self) -> &RendererMap {
+        &self.renderer_map
     }
 
     pub fn device(&self) -> &wgpu::Device {

@@ -1,52 +1,31 @@
-use texture_color_renderer::TextureObjectRenderer;
-use vertex_color_renderer::VertexColorRenderer;
-
 use crate::ui::Object;
 
 mod texture_color_renderer;
+use texture_color_renderer::TextureObjectRenderer;
 mod vertex_color_renderer;
+use vertex_color_renderer::VertexColorRenderer;
 
+#[derive(Default)]
 pub struct Renderer {
-    // vello renderer
-    // todo: remove
-    vello_renderer: std::sync::Mutex<vello::Renderer>,
-
     // renderers
     texture_color_renderer: Option<TextureObjectRenderer>,
     vertex_color_renderer: Option<VertexColorRenderer>,
 }
 
-impl Renderer {
-    pub fn new(device: &wgpu::Device, surface_format: wgpu::TextureFormat) -> Self {
-        // vello renderer
-        let vello_renderer = vello::Renderer::new(
-            device,
-            vello::RendererOptions {
-                surface_format: Some(wgpu::TextureFormat::Rgba8Unorm),
-                use_cpu: false,
-                antialiasing_support: vello::AaSupport::all(),
-                num_init_threads: None,
-            },
-        )
-        .unwrap();
-
-        // pipelines
-
+impl crate::renderer::Renderer for Renderer {
+    fn setup(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat) {
         let texture_object_renderer =
-            texture_color_renderer::TextureObjectRenderer::new(device, surface_format);
+            texture_color_renderer::TextureObjectRenderer::new(device, format);
+        let vertex_color_renderer = vertex_color_renderer::VertexColorRenderer::new(device, format);
 
-        let vertex_color_renderer =
-            vertex_color_renderer::VertexColorRenderer::new(device, surface_format);
-
-        Self {
-            vello_renderer: std::sync::Mutex::new(vello_renderer),
-            texture_color_renderer: Some(texture_object_renderer),
-            vertex_color_renderer: Some(vertex_color_renderer),
-        }
+        self.texture_color_renderer = Some(texture_object_renderer);
+        self.vertex_color_renderer = Some(vertex_color_renderer);
     }
+}
 
-    pub fn vello_renderer(&self) -> std::sync::MutexGuard<vello::Renderer> {
-        self.vello_renderer.lock().unwrap()
+impl Renderer {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn render(
