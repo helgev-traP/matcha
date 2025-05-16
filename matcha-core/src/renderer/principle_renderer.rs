@@ -108,7 +108,7 @@ impl ObjectRenderer {
                             &normalize_matrix,
                             texture,
                             &uv_vertices,
-                            &indices,
+                            indices,
                             render_to_surface,
                         );
                     }
@@ -130,7 +130,7 @@ impl ObjectRenderer {
                             destination_view,
                             &normalize_matrix,
                             &vertices,
-                            &indices,
+                            indices,
                             render_to_surface,
                         );
                     }
