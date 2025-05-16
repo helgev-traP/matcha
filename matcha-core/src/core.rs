@@ -9,7 +9,6 @@ pub mod window;
 pub mod context;
 pub mod observer;
 pub mod renderer;
-pub mod system_renderer;
 pub mod ui;
 
 // types

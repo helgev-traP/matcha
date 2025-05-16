@@ -1,23 +1,35 @@
-use std::{
-    any::{Any, TypeId},
-    collections::HashMap,
-};
+use std::any::{Any, TypeId};
+
+use fxhash::FxHashMap;
+
+use super::context::WidgetContext;
+
+pub mod principle_renderer;
 
 // MARK: RendererMap
 
 #[derive(Default)]
 pub struct RendererMap {
-    set: HashMap<TypeId, Box<dyn Renderer>>,
+    set: FxHashMap<TypeId, Box<dyn Renderer>>,
 }
 
 impl RendererMap {
     pub fn new() -> Self {
         Self {
-            set: HashMap::new(),
+            set: FxHashMap::default(),
         }
     }
 
-    pub fn add<T: Renderer>(&mut self, renderer: T) {
+    pub fn add_only<T: Renderer>(&mut self, renderer: T) {
+        self.set.insert(TypeId::of::<T>(), Box::new(renderer));
+    }
+
+    pub fn add<T: Renderer>(&mut self, ctx: &WidgetContext, mut renderer: T) {
+        let device = ctx.device();
+        let queue = ctx.queue();
+        let format = ctx.texture_format();
+        renderer.setup(device, queue, format);
+
         self.set.insert(TypeId::of::<T>(), Box::new(renderer));
     }
 

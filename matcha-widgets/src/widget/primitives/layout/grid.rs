@@ -2,7 +2,7 @@ use matcha_core::{
     context::WidgetContext,
     events::Event,
     observer::Observer,
-    renderer::Renderer,
+    renderer::{Renderer, RendererMap},
     types::range::{CoverRange, Range2D},
     ui::{Background, Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
 };
@@ -288,7 +288,7 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
         parent_size: [Option<f32>; 2],
         background: Background,
         context: &WidgetContext,
-        renderer: &Renderer,
+        renderer: &RendererMap,
     ) -> Vec<Object> {
         let current_key = CacheKey::new(parent_size);
 
@@ -335,7 +335,7 @@ fn render_item<'a, T: Send + 'static>(
     grid_cache: &GridCache,
     background: Background,
     context: &WidgetContext,
-    renderer: &Renderer,
+    renderer: &RendererMap,
 ) -> Vec<Object<'a>> {
     // calculate range
     let item_range = Range2D::new(

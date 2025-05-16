@@ -7,8 +7,10 @@ use super::{
     context,
     events::Event,
     observer::Observer,
-    renderer::Renderer,
-    system_renderer,
+    renderer::{
+        self, Renderer,
+        principle_renderer::{self, ObjectRenderer},
+    },
     types::color::Color,
     ui::{Background, Widget},
 };
@@ -17,7 +19,7 @@ use super::{
 
 mod benchmark;
 mod error;
-pub(crate) mod gpu_state;
+pub(crate) mod global_context;
 mod keyboard_state;
 mod mouse_state;
 
@@ -44,9 +46,8 @@ pub struct Window<
 
     // --- rendering context ---
     winit_window: Option<Arc<winit::window::Window>>,
-    gpu_state: Option<gpu_state::GlobalContext<'a>>,
+    gpu_state: Option<global_context::GlobalContext<'a>>,
     background_texture: Option<wgpu::Texture>,
-    window_renderer: Option<system_renderer::Renderer>,
 
     // --- UI context ---
     root_component: Component<Model, Message, Response, IR>,
@@ -93,7 +94,6 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
             winit_window: None,
             gpu_state: None,
             background_texture: None,
-            window_renderer: None,
             root_component: component,
             root_widget: None,
             observer: Observer::default(),
@@ -144,9 +144,9 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
             return Err(error::RenderError::RootWidget);
         };
 
-        let Some(window_renderer) = self.window_renderer.as_mut() else {
-            return Err(error::RenderError::Renderer);
-        };
+        // let Some(window_renderer) = self.window_renderer.as_mut() else {
+        //     return Err(error::RenderError::Renderer);
+        // };
 
         let Some(benchmarker) = self.benchmarker.as_mut() else {
             return Err(error::RenderError::Benchmarker);
@@ -201,14 +201,16 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
                 gpu_state.renderer_map(),
             );
 
-            // project to screen
-            window_renderer.render_to_surface(
-                gpu_state.device(),
-                gpu_state.queue(),
-                &surface_view,
-                viewport_size,
-                render_result,
-            );
+            if let Some(renderer) = gpu_state.renderer_map().get::<ObjectRenderer>() {
+                // project to screen
+                renderer.render_to_surface(
+                    gpu_state.device(),
+                    gpu_state.queue(),
+                    &surface_view,
+                    viewport_size,
+                    render_result,
+                );
+            };
         });
 
         // present to screen
@@ -416,16 +418,19 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, 
         // separate font_context from the gpu state
 
         let font_context = self.font_context.take();
-        let gpu_state = self.tokio_runtime.block_on(gpu_state::GlobalContext::new(
-            self.winit_window.as_ref().unwrap().clone(),
-            self.performance,
-            wgpu::TextureFormat::Rgba8UnormSrgb,
-        ));
+        let gpu_state = self
+            .tokio_runtime
+            .block_on(global_context::GlobalContext::new(
+                self.winit_window.as_ref().unwrap().clone(),
+                self.performance,
+                wgpu::TextureFormat::Rgba8UnormSrgb,
+            ));
         self.gpu_state = Some(gpu_state);
 
         // renderer preparation.
-        let renderer = system_renderer::Renderer::new();
+        let renderer = ObjectRenderer::new();
         self.gpu_state.as_mut().unwrap().add_renderer(renderer);
+        self.gpu_state.as_mut().unwrap().renderer_setup();
 
         // --- init input context ---
         {

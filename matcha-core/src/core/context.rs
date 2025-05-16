@@ -1,13 +1,13 @@
 #[derive(Clone)]
 pub struct WidgetContext<'a> {
-    global_context: &'a super::window::gpu_state::GlobalContext<'a>,
+    global_context: &'a super::window::global_context::GlobalContext<'a>,
     root_font_size: f32,
     font_size: f32,
 }
 
 impl<'a> WidgetContext<'a> {
     pub(crate) fn new(
-        global_context: &'a super::window::gpu_state::GlobalContext,
+        global_context: &'a super::window::global_context::GlobalContext,
         font_size: f32,
     ) -> Self {
         Self {
@@ -33,8 +33,16 @@ impl<'a> WidgetContext<'a> {
             })
     }
 
+    pub fn renderer_map(&self) -> &super::renderer::RendererMap {
+        self.global_context.renderer_map()
+    }
+
     pub fn surface_format(&self) -> wgpu::TextureFormat {
         self.global_context.surface_format()
+    }
+
+    pub fn texture_format(&self) -> wgpu::TextureFormat {
+        self.global_context.texture_format()
     }
 
     pub fn dpi(&self) -> f64 {

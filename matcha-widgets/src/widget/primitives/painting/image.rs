@@ -4,7 +4,7 @@ use matcha_core::{
     context::WidgetContext,
     events::Event,
     observer::Observer,
-    renderer::Renderer,
+    renderer::{Renderer, RendererMap},
     types::{
         cache::Cache,
         range::{CoverRange, Range2D},
@@ -204,7 +204,7 @@ impl<T: Send + 'static> Widget<T> for ImageNode {
         _: Background,
         // context
         context: &WidgetContext,
-        _: &Renderer,
+        _: &RendererMap,
     ) -> Vec<Object> {
         let image = self
             .image

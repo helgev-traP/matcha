@@ -5,8 +5,6 @@ use crate::renderer::{Renderer, RendererMap};
 use super::context::WidgetContext;
 
 pub struct GlobalContext<'a> {
-    texture_format: wgpu::TextureFormat,
-
     // gpu device
     _instance: wgpu::Instance,
     _adapter: wgpu::Adapter,
@@ -20,6 +18,9 @@ pub struct GlobalContext<'a> {
     config: wgpu::SurfaceConfiguration,
     surface: wgpu::Surface<'a>,
     surface_format: wgpu::TextureFormat,
+
+    // common texture format
+    texture_format: wgpu::TextureFormat,
 
     // custom renderers
     renderer_map: RendererMap,
@@ -90,7 +91,6 @@ impl GlobalContext<'_> {
         surface.configure(&device, &config);
 
         Self {
-            texture_format,
             _instance: instance,
             _adapter: adapter,
             device,
@@ -99,6 +99,7 @@ impl GlobalContext<'_> {
             config,
             surface,
             surface_format,
+            texture_format,
             renderer_map: RendererMap::new(),
         }
     }
@@ -117,7 +118,7 @@ impl GlobalContext<'_> {
     }
 
     pub fn add_renderer<T: Renderer>(&mut self, renderer: T) {
-        self.renderer_map.add(renderer);
+        self.renderer_map.add_only(renderer);
     }
 
     pub fn renderer_setup(&mut self) {
@@ -149,6 +150,10 @@ impl GlobalContext<'_> {
 
     pub fn surface_format(&self) -> wgpu::TextureFormat {
         self.surface_format
+    }
+
+    pub fn texture_format(&self) -> wgpu::TextureFormat {
+        self.texture_format
     }
 
     pub fn dpi(&self) -> f64 {
