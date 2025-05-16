@@ -9,7 +9,7 @@ use matcha_core::{
     ui::{Background, Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
 };
 
-use crate::widget::primitives::property::flex::{AlignItems, JustifyContent};
+use crate::primitives::property::flex::{AlignItems, JustifyContent};
 
 // MARK: DOM
 

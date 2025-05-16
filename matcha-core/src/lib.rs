@@ -1,5 +1,16 @@
-mod core;
-pub use core::*;
+// api
+pub mod app;
+pub mod component;
+pub mod device;
+pub mod events;
+pub mod window;
 
-mod text;
-pub use text::*;
+// core modules
+pub mod context;
+pub mod observer;
+pub mod renderer;
+pub mod ui;
+
+// types
+pub mod types;
+pub mod vertex;

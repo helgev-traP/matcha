@@ -7,10 +7,7 @@ use super::{
     context,
     events::Event,
     observer::Observer,
-    renderer::{
-        self, Renderer,
-        principle_renderer::{self, ObjectRenderer},
-    },
+    renderer::principle_renderer::ObjectRenderer,
     types::color::Color,
     ui::{Background, Widget},
 };
@@ -41,7 +38,6 @@ pub struct Window<
     init_size: [u32; 2],
     maximized: bool,
     full_screen: bool,
-    font_context: Option<crate::cosmic::FontContext>,
     base_color: Color,
 
     // --- rendering context ---
@@ -89,7 +85,6 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
             init_size: [800, 600],
             maximized: false,
             full_screen: false,
-            font_context: None,
             base_color: Color::default(),
             winit_window: None,
             gpu_state: None,
@@ -119,8 +114,6 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
     pub fn maximized(&mut self, maximized: bool) {}
 
     pub fn full_screen(&mut self, full_screen: bool) {}
-
-    pub fn font_context(&mut self, font_context: crate::cosmic::FontContext) {}
 
     // input
 
@@ -417,7 +410,6 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, 
         // todo: refactor.
         // separate font_context from the gpu state
 
-        let font_context = self.font_context.take();
         let gpu_state = self
             .tokio_runtime
             .block_on(global_context::GlobalContext::new(

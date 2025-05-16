@@ -9,7 +9,7 @@ use matcha_core::{
 
 use num::Float;
 
-use crate::widget::primitives::property::div_size::{DivSize, StdDivSize};
+use crate::primitives::property::div_size::{DivSize, StdDivSize};
 
 // todo: remove this memo
 // ********************************
