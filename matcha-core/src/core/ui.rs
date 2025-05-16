@@ -4,7 +4,7 @@ use super::{
     context::WidgetContext,
     events::Event,
     observer::Observer,
-    renderer::Renderer,
+    renderer::{Renderer, RendererMap},
     types::range::CoverRange,
     vertex::{ColorVertex, UvVertex},
 };
@@ -81,7 +81,7 @@ pub trait Widget<T>: Send {
         parent_size: [Option<f32>; 2],
         background: Background,
         context: &WidgetContext,
-        renderer: &Renderer,
+        renderer: &RendererMap,
     ) -> Vec<Object>;
 
     /// Updates the GPU device and queue for rendering purposes.

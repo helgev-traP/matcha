@@ -1,13 +1,17 @@
+// api
 pub mod app;
-pub mod context;
+pub mod component;
 pub mod device;
 pub mod events;
 pub mod window;
 
-pub mod component;
+// core modules
+pub mod context;
 pub mod observer;
+pub mod renderer;
+pub mod system_renderer;
 pub mod ui;
 
+// types
 pub mod types;
-pub mod renderer;
 pub mod vertex;
