@@ -120,10 +120,6 @@ where
             Observer::default()
         }
     }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
 }
 
 pub struct PaddingNode<T>
@@ -157,7 +153,7 @@ where
         component_updated: bool,
         dom: &dyn Dom<T>,
     ) -> Result<(), UpdateWidgetError> {
-        if let Some(dom) = dom.as_any().downcast_ref::<Padding<T>>() {
+        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Padding<T>>() {
             // update properties
             self.label = dom.label.clone();
             self.top = dom.top;
@@ -185,7 +181,7 @@ where
     }
 
     fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult {
-        if let Some(dom) = dom.as_any().downcast_ref::<Padding<T>>() {
+        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Padding<T>>() {
             todo!()
         } else {
             DomComPareResult::Different

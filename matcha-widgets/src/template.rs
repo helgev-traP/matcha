@@ -1,3 +1,5 @@
+use std::any::Any;
+
 use matcha_core::{
     context::WidgetContext,
     events::Event,
@@ -37,11 +39,6 @@ impl<T: Send + 'static> Dom<T> for Template {
 
         Observer::default()
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        // Do not change this.
-        self
-    }
 }
 
 // MARK: Widget
@@ -66,7 +63,7 @@ impl<T: Send + 'static> Widget<T> for TemplateNode {
         component_updated: bool,
         dom: &dyn Dom<T>,
     ) -> Result<(), UpdateWidgetError> {
-        if let Some(dom) = dom.as_any().downcast_ref::<Template>() {
+        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Template>() {
             todo!()
         } else {
             return Err(UpdateWidgetError::TypeMismatch);
@@ -75,7 +72,7 @@ impl<T: Send + 'static> Widget<T> for TemplateNode {
 
     // comparing dom
     fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult {
-        if let Some(dom) = dom.as_any().downcast_ref::<Template>() {
+        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Template>() {
             todo!()
         } else {
             DomComPareResult::Different

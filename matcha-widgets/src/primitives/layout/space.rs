@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{any::Any, sync::Arc};
 
 use matcha_core::{
     context::WidgetContext,
@@ -55,11 +55,6 @@ impl<T: Send + 'static> Dom<T> for Space {
 
         Observer::default()
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        // Do not change this.
-        self
-    }
 }
 
 // MARK: Widget
@@ -88,7 +83,7 @@ impl<T: Send + 'static> Widget<T> for SpaceNode {
         _: bool,
         dom: &dyn Dom<T>,
     ) -> Result<(), UpdateWidgetError> {
-        if let Some(dom) = dom.as_any().downcast_ref::<Space>() {
+        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Space>() {
             self.label = dom.label.clone();
             self.size = Arc::clone(&dom.size);
 
@@ -100,7 +95,7 @@ impl<T: Send + 'static> Widget<T> for SpaceNode {
 
     // comparing dom
     fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult {
-        if let Some(dom) = dom.as_any().downcast_ref::<Space>() {
+        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Space>() {
             let _ = dom;
             todo!()
         } else {
