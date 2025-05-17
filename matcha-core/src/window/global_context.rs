@@ -32,7 +32,7 @@ impl GlobalContext<'_> {
         power_preference: wgpu::PowerPreference,
         texture_format: wgpu::TextureFormat,
     ) -> Self {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             #[cfg(not(target_arch = "wasm32"))]
             backends: wgpu::Backends::PRIMARY,
             #[cfg(target_arch = "wasm32")]

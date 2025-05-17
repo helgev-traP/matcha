@@ -153,7 +153,7 @@ impl<const N: u32> CacheAtlas<N> {
         } = *self.store(key, metrics);
 
         self.queue.write_texture(
-            wgpu::ImageCopyTexture {
+            wgpu::TexelCopyTextureInfo {
                 texture: &self.texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d {
@@ -164,7 +164,7 @@ impl<const N: u32> CacheAtlas<N> {
                 aspect: wgpu::TextureAspect::All,
             },
             data,
-            wgpu::ImageDataLayout {
+            wgpu::TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(self.panel_size),
                 rows_per_image: Some(self.panel_size),

@@ -258,7 +258,7 @@ impl<const N: u32> RecursiveAtlas<N> {
         //     },
         // );
         self.queue.write_texture(
-            wgpu::ImageCopyTexture {
+            wgpu::TexelCopyTextureInfo {
                 texture: &self.texture_atlas,
                 mip_level: 0,
                 origin: wgpu::Origin3d {
@@ -269,7 +269,7 @@ impl<const N: u32> RecursiveAtlas<N> {
                 aspect: wgpu::TextureAspect::All,
             },
             data,
-            wgpu::ImageDataLayout {
+            wgpu::TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(size[0]),
                 rows_per_image: Some(size[1]),
@@ -308,7 +308,7 @@ mod tests {
 
     fn get_device_queue() -> (wgpu::Device, wgpu::Queue) {
         // prepare gpu
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
             ..Default::default()
         });

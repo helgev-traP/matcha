@@ -243,14 +243,14 @@ impl<T: Send + 'static> Widget<T> for ImageNode {
             });
 
             queue.write_texture(
-                wgpu::ImageCopyTextureBase {
+                wgpu::TexelCopyTextureInfo {
                     texture: &texture,
                     mip_level: 0,
                     origin: wgpu::Origin3d::ZERO,
                     aspect: wgpu::TextureAspect::All,
                 },
                 image_rgba.as_raw(),
-                wgpu::ImageDataLayout {
+                wgpu::TexelCopyBufferLayout {
                     offset: 0,
                     bytes_per_row: Some(4 * image.width()),
                     rows_per_image: Some(image.height()),

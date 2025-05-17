@@ -17,3 +17,9 @@ impl std::fmt::Display for RenderError {
         }
     }
 }
+
+impl Error for RenderError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        None
+    }
+}
