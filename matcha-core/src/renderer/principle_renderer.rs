@@ -5,14 +5,16 @@ use texture_color_renderer::TextureObjectRenderer;
 mod vertex_color_renderer;
 use vertex_color_renderer::VertexColorRenderer;
 
+use super::Renderer;
+
 #[derive(Default)]
-pub struct ObjectRenderer {
+pub struct PrincipleRenderer {
     // renderers
     texture_color_renderer: Option<TextureObjectRenderer>,
     vertex_color_renderer: Option<VertexColorRenderer>,
 }
 
-impl crate::renderer::Renderer for ObjectRenderer {
+impl Renderer for PrincipleRenderer {
     fn setup(&mut self, device: &wgpu::Device, _: &wgpu::Queue, format: wgpu::TextureFormat) {
         let texture_object_renderer =
             texture_color_renderer::TextureObjectRenderer::new(device, format);
@@ -23,7 +25,7 @@ impl crate::renderer::Renderer for ObjectRenderer {
     }
 }
 
-impl ObjectRenderer {
+impl PrincipleRenderer {
     pub fn new() -> Self {
         Self::default()
     }

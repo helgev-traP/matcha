@@ -7,7 +7,7 @@ use super::{
     context,
     events::Event,
     observer::Observer,
-    renderer::principle_renderer::ObjectRenderer,
+    renderer::principle_renderer::PrincipleRenderer,
     types::color::Color,
     ui::{Background, Widget},
 };
@@ -194,7 +194,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
                 gpu_state.renderer_map(),
             );
 
-            if let Some(renderer) = gpu_state.renderer_map().get::<ObjectRenderer>() {
+            if let Some(renderer) = gpu_state.renderer_map().get::<PrincipleRenderer>() {
                 // project to screen
                 renderer.render_to_surface(
                     gpu_state.device(),
@@ -420,7 +420,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, 
         self.gpu_state = Some(gpu_state);
 
         // renderer preparation.
-        let renderer = ObjectRenderer::new();
+        let renderer = PrincipleRenderer::new();
         self.gpu_state.as_mut().unwrap().add_renderer(renderer);
         self.gpu_state.as_mut().unwrap().renderer_setup();
 
