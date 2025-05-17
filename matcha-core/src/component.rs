@@ -1,4 +1,7 @@
-use std::sync::{Arc, atomic::AtomicBool};
+use std::{
+    any::Any,
+    sync::{Arc, atomic::AtomicBool},
+};
 
 use tokio::sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
@@ -218,10 +221,6 @@ impl<Model: Sync + Send + 'static, Response: 'static, InnerResponse: 'static> Do
         observer.add_receiver(self.update_flag.make_observer().await);
         observer
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
 }
 
 // MARK: - ComponentWidget
@@ -250,9 +249,8 @@ impl<Model: Sync + Send + 'static, Response: 'static, InnerResponse: 'static> Wi
         dom: &dyn Dom<Response>,
     ) -> Result<(), UpdateWidgetError> {
         // todo: optimize
-        if let Some(component_dom) = dom
-            .as_any()
-            .downcast_ref::<ComponentDom<Model, Response, InnerResponse>>()
+        if let Some(component_dom) =
+            (dom as &dyn Any).downcast_ref::<ComponentDom<Model, Response, InnerResponse>>()
         {
             let is_component_updated = component_dom.update_flag.is_updated().await;
 
@@ -270,9 +268,8 @@ impl<Model: Sync + Send + 'static, Response: 'static, InnerResponse: 'static> Wi
 
     fn compare(&self, dom: &dyn Dom<Response>) -> DomComPareResult {
         // todo: optimize
-        if let Some(component_dom) = dom
-            .as_any()
-            .downcast_ref::<ComponentDom<Model, Response, InnerResponse>>()
+        if let Some(component_dom) =
+            (dom as &dyn Any).downcast_ref::<ComponentDom<Model, Response, InnerResponse>>()
         {
             if self.label == component_dom.label {
                 DomComPareResult::Same

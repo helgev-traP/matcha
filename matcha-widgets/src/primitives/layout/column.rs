@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{any::Any, sync::Arc};
 
 use matcha_core::{
     context::WidgetContext,
@@ -58,11 +58,6 @@ impl<T: Send + 'static> Dom<T> for Column<T> {
         observers
             .into_iter()
             .fold(Observer::default(), |obs, o| obs.join(o))
-    }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        // Do not change this.
-        self
     }
 }
 
@@ -305,7 +300,7 @@ impl<T: Send + 'static> Widget<T> for ColumnNode<T> {
         component_updated: bool,
         dom: &dyn Dom<T>,
     ) -> Result<(), UpdateWidgetError> {
-        if let Some(dom) = dom.as_any().downcast_ref::<Column<T>>() {
+        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Column<T>>() {
             todo!()
         } else {
             return Err(UpdateWidgetError::TypeMismatch);
@@ -314,7 +309,7 @@ impl<T: Send + 'static> Widget<T> for ColumnNode<T> {
 
     // comparing dom
     fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult {
-        if let Some(dom) = dom.as_any().downcast_ref::<Column<T>>() {
+        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Column<T>>() {
             todo!()
         } else {
             DomComPareResult::Different

@@ -1,3 +1,5 @@
+use std::any::Any;
+
 use matcha_core::{
     context::WidgetContext,
     events::Event,
@@ -105,10 +107,6 @@ impl<T: Send + 'static> Dom<T> for Grid<T> {
         todo!()
     }
 
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
     async fn collect_observer(&self) -> Observer {
         todo!()
     }
@@ -203,7 +201,7 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
         // Update the redraw flag if the DOM properties or layout have changed.
         // For example, if the template_columns, template_rows, gap_columns, or gap_rows differ.
 
-        if let Some(dom) = dom.as_any().downcast_ref::<Grid<T>>() {
+        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Grid<T>>() {
             todo!()
         } else {
             Err(UpdateWidgetError::TypeMismatch)
@@ -211,7 +209,7 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
     }
 
     fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult {
-        if let Some(dom) = dom.as_any().downcast_ref::<Grid<T>>() {
+        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Grid<T>>() {
             todo!()
         } else {
             DomComPareResult::Different

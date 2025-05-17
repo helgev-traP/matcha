@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{any::Any, sync::Arc};
 
 use matcha_core::{
     context::WidgetContext,
@@ -83,11 +83,6 @@ impl<T: Send + 'static> Dom<T> for Image {
         // you should collect their observers for matcha ui system to catch child component updates.
         Observer::default()
     }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        // Do not change this.
-        self
-    }
 }
 
 // MARK: Widget
@@ -137,7 +132,7 @@ impl<T: Send + 'static> Widget<T> for ImageNode {
         component_updated: bool,
         dom: &dyn Dom<T>,
     ) -> Result<(), UpdateWidgetError> {
-        if let Some(dom) = dom.as_any().downcast_ref::<Image>() {
+        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Image>() {
             todo!()
         } else {
             return Err(UpdateWidgetError::TypeMismatch);
@@ -146,7 +141,7 @@ impl<T: Send + 'static> Widget<T> for ImageNode {
 
     // comparing dom
     fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult {
-        if let Some(dom) = dom.as_any().downcast_ref::<Image>() {
+        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Image>() {
             todo!()
         } else {
             DomComPareResult::Different

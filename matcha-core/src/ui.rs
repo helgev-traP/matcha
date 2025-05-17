@@ -16,8 +16,6 @@ pub trait Dom<T>: Sync + Any {
     // if any dynamic widget is included in the widget tree, the second value is true.
     fn build_widget_tree(&self) -> Box<dyn Widget<T>>;
     async fn collect_observer(&self) -> Observer;
-    // todo: consider use downcast-rs crate
-    fn as_any(&self) -> &dyn Any;
 }
 
 // render tree node
