@@ -196,20 +196,16 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
                 gpu_state.renderer_map(),
             );
 
-            let renderer = self.tokio_runtime.block_on(
-                gpu_state
-                    .renderer_map()
-                    .get_or_setup::<PrincipleRenderer>(&ctx),
-            );
-
-            // project to screen
-            renderer.render_to_surface(
-                gpu_state.device(),
-                gpu_state.queue(),
-                &surface_view,
-                viewport_size,
-                render_result,
-            );
+            gpu_state
+                .renderer_map()
+                .get_or_setup::<PrincipleRenderer>(&ctx)
+                .render_to_surface(
+                    gpu_state.device(),
+                    gpu_state.queue(),
+                    &surface_view,
+                    viewport_size,
+                    render_result,
+                );
         });
 
         // present to screen

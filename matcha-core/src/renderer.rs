@@ -1,10 +1,9 @@
 use std::{
     any::{Any, TypeId},
-    sync::Arc,
+    sync::{Arc, Mutex},
 };
 
 use fxhash::FxHashMap;
-use tokio::sync::RwLock;
 
 use super::context::WidgetContext;
 
@@ -14,13 +13,13 @@ pub mod principle_renderer;
 
 #[derive(Default)]
 pub struct RendererMap {
-    set: RwLock<FxHashMap<TypeId, Arc<dyn RendererSetup>>>,
+    set: Mutex<FxHashMap<TypeId, Arc<dyn RendererSetup>>>,
 }
 
 impl RendererMap {
     pub fn new() -> Self {
         Self {
-            set: RwLock::new(FxHashMap::default()),
+            set: Mutex::new(FxHashMap::default()),
         }
     }
 
@@ -36,12 +35,12 @@ impl RendererMap {
     //         .insert(TypeId::of::<T>(), Arc::new(renderer));
     // }
 
-    pub async fn get_or_setup<T>(&self, ctx: &WidgetContext<'_>) -> Arc<T>
+    pub fn get_or_setup<T>(&self, ctx: &WidgetContext<'_>) -> Arc<T>
     where
         T: RendererSetup + Default,
     {
         // Early return if already exists
-        if let Some(renderer) = self.set.read().await.get(&TypeId::of::<T>()) {
+        if let Some(renderer) = self.set.lock().unwrap().get(&TypeId::of::<T>()) {
             let renderer = Arc::clone(renderer);
             let arc_any = renderer as Arc<dyn Any + Send + Sync>;
 
@@ -58,13 +57,13 @@ impl RendererMap {
         let renderer = Arc::new(renderer);
         let return_value = Arc::clone(&renderer);
 
-        self.set.write().await.insert(TypeId::of::<T>(), renderer);
+        self.set.lock().unwrap().insert(TypeId::of::<T>(), renderer);
 
         return_value
     }
 
-    pub async fn get<T: RendererSetup>(&self) -> Option<Arc<T>> {
-        if let Some(renderer) = self.set.read().await.get(&TypeId::of::<T>()) {
+    pub fn get<T: RendererSetup>(&self) -> Option<Arc<T>> {
+        if let Some(renderer) = self.set.lock().unwrap().get(&TypeId::of::<T>()) {
             let renderer = Arc::clone(renderer);
             let arc_any = renderer as Arc<dyn Any + Send + Sync>;
 

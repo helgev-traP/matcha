@@ -1,11 +1,13 @@
+use std::sync::{Arc, Mutex};
+
 #[derive(Default)]
 pub struct Renderer {
-    vello_renderer: Option<vello::Renderer>,
+    vello_renderer: Option<Arc<Mutex<vello::Renderer>>>,
 }
 
 impl matcha_core::renderer::RendererSetup for Renderer {
     fn setup(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat) {
-        self.vello_renderer = Some(self.setup_vello(device));
+        self.vello_renderer = Some(Arc::new(Mutex::new(self.setup_vello(device))));
     }
 }
 
