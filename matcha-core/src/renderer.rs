@@ -10,7 +10,7 @@ pub mod principle_renderer;
 
 #[derive(Default)]
 pub struct RendererMap {
-    set: FxHashMap<TypeId, Box<dyn Renderer>>,
+    set: FxHashMap<TypeId, Box<dyn RendererSetup>>,
 }
 
 impl RendererMap {
@@ -20,11 +20,11 @@ impl RendererMap {
         }
     }
 
-    pub fn add_only<T: Renderer>(&mut self, renderer: T) {
+    pub fn add_only<T: RendererSetup>(&mut self, renderer: T) {
         self.set.insert(TypeId::of::<T>(), Box::new(renderer));
     }
 
-    pub fn add<T: Renderer>(&mut self, ctx: &WidgetContext, mut renderer: T) {
+    pub fn add<T: RendererSetup>(&mut self, ctx: &WidgetContext, mut renderer: T) {
         let device = ctx.device();
         let queue = ctx.queue();
         let format = ctx.texture_format();
@@ -44,7 +44,7 @@ impl RendererMap {
         }
     }
 
-    pub fn get<T: Renderer>(&self) -> Option<&T> {
+    pub fn get<T: RendererSetup>(&self) -> Option<&T> {
         self.set
             .get(&TypeId::of::<T>())
             .and_then(|renderer| (renderer.as_ref() as &dyn Any).downcast_ref::<T>())
@@ -53,6 +53,6 @@ impl RendererMap {
 
 // MARK: Renderer
 
-pub trait Renderer: Any + Send {
+pub trait RendererSetup: Any + Send {
     fn setup(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat); // todo: add some error handling
 }

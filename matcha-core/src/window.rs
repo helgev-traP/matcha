@@ -407,9 +407,6 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, 
 
         // --- prepare gpu ---
 
-        // todo: refactor.
-        // separate font_context from the gpu state
-
         let gpu_state = self
             .tokio_runtime
             .block_on(global_context::GlobalContext::new(

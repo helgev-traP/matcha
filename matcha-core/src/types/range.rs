@@ -1,5 +1,4 @@
 use num::Float;
-use winit::dpi::Position;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Range2D<T: Float = f32> {

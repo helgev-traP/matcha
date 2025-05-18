@@ -4,7 +4,7 @@ use matcha_core::{
     context::WidgetContext,
     events::Event,
     observer::Observer,
-    renderer::{Renderer, RendererMap},
+    renderer::{RendererSetup, RendererMap},
     types::{
         cache::Cache,
         range::{CoverRange, Range2D},

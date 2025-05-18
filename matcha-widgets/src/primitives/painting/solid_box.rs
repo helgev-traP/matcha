@@ -1,7 +1,7 @@
 use matcha_core::{
     context::WidgetContext,
-    renderer::{Renderer, RendererMap},
-    vertex::{self, box_mesh, BoxDescriptor, BoxMesh, ColorVertex},
+    renderer::{RendererMap, RendererSetup},
+    vertex::{self, BoxDescriptor, BoxMesh, ColorVertex, box_mesh},
 };
 
 // todo: more documentation

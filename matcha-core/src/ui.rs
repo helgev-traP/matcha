@@ -4,7 +4,7 @@ use super::{
     context::WidgetContext,
     events::Event,
     observer::Observer,
-    renderer::{Renderer, RendererMap},
+    renderer::RendererMap,
     types::range::CoverRange,
     vertex::{ColorVertex, UvVertex},
 };
@@ -84,7 +84,7 @@ pub trait Widget<T>: Send {
 
     /// Updates the GPU device and queue for rendering purposes.
     /// This method is a placeholder and should be implemented to handle GPU resource updates.
-    fn update_gpu_device(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+    fn update_gpu_device(&mut self, _device: &wgpu::Device, _queue: &wgpu::Queue) {
         // TODO: Implement GPU device and queue updates.
         // This might involve updating buffers, textures, or other GPU resources.
     }
