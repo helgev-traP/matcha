@@ -116,15 +116,6 @@ impl GlobalContext<'_> {
             self.surface.configure(&self.device, &self.config);
         }
     }
-
-    pub fn add_renderer<T: RendererSetup>(&mut self, renderer: T) {
-        self.renderer_map.add_only(renderer);
-    }
-
-    pub fn renderer_setup(&mut self) {
-        self.renderer_map
-            .setup(&self.device, &self.queue, self.surface_format);
-    }
 }
 
 impl GlobalContext<'_> {
