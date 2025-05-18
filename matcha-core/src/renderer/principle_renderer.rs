@@ -5,7 +5,7 @@ use texture_color_renderer::TextureObjectRenderer;
 mod vertex_color_renderer;
 use vertex_color_renderer::VertexColorRenderer;
 
-use super::Renderer;
+use super::RendererSetup;
 
 #[derive(Default)]
 pub struct PrincipleRenderer {
@@ -14,7 +14,7 @@ pub struct PrincipleRenderer {
     vertex_color_renderer: Option<VertexColorRenderer>,
 }
 
-impl Renderer for PrincipleRenderer {
+impl RendererSetup for PrincipleRenderer {
     fn setup(&mut self, device: &wgpu::Device, _: &wgpu::Queue, format: wgpu::TextureFormat) {
         let texture_object_renderer =
             texture_color_renderer::TextureObjectRenderer::new(device, format);

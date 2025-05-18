@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::renderer::{Renderer, RendererMap};
+use crate::renderer::{RendererSetup, RendererMap};
 
 use super::context::WidgetContext;
 
@@ -117,7 +117,7 @@ impl GlobalContext<'_> {
         }
     }
 
-    pub fn add_renderer<T: Renderer>(&mut self, renderer: T) {
+    pub fn add_renderer<T: RendererSetup>(&mut self, renderer: T) {
         self.renderer_map.add_only(renderer);
     }
 
