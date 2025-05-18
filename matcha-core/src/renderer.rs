@@ -1,6 +1,10 @@
-use std::any::{Any, TypeId};
+use std::{
+    any::{Any, TypeId},
+    sync::Arc,
+};
 
 use fxhash::FxHashMap;
+use tokio::sync::RwLock;
 
 use super::context::WidgetContext;
 
@@ -10,49 +14,69 @@ pub mod principle_renderer;
 
 #[derive(Default)]
 pub struct RendererMap {
-    set: FxHashMap<TypeId, Box<dyn RendererSetup>>,
+    set: RwLock<FxHashMap<TypeId, Arc<dyn RendererSetup>>>,
 }
 
 impl RendererMap {
     pub fn new() -> Self {
         Self {
-            set: FxHashMap::default(),
+            set: RwLock::new(FxHashMap::default()),
         }
     }
 
-    pub fn add_only<T: RendererSetup>(&mut self, renderer: T) {
-        self.set.insert(TypeId::of::<T>(), Box::new(renderer));
-    }
+    // pub async fn add<T: RendererSetup>(&mut self, ctx: &WidgetContext<'_>, mut renderer: T) {
+    //     let device = ctx.device();
+    //     let queue = ctx.queue();
+    //     let format = ctx.texture_format();
+    //     renderer.setup(device, queue, format);
 
-    pub fn add<T: RendererSetup>(&mut self, ctx: &WidgetContext, mut renderer: T) {
+    //     self.set
+    //         .write()
+    //         .await
+    //         .insert(TypeId::of::<T>(), Arc::new(renderer));
+    // }
+
+    pub async fn get_or_setup<T>(&self, ctx: &WidgetContext<'_>) -> Arc<T>
+    where
+        T: RendererSetup + Default,
+    {
+        // Early return if already exists
+        if let Some(renderer) = self.set.read().await.get(&TypeId::of::<T>()) {
+            let renderer = Arc::clone(renderer);
+            let arc_any = renderer as Arc<dyn Any + Send + Sync>;
+
+            return arc_any.downcast().unwrap();
+        }
+
+        // If not, create a new one
         let device = ctx.device();
         let queue = ctx.queue();
         let format = ctx.texture_format();
+        let mut renderer = T::default();
         renderer.setup(device, queue, format);
 
-        self.set.insert(TypeId::of::<T>(), Box::new(renderer));
+        let renderer = Arc::new(renderer);
+        let return_value = Arc::clone(&renderer);
+
+        self.set.write().await.insert(TypeId::of::<T>(), renderer);
+
+        return_value
     }
 
-    pub(crate) fn setup(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        format: wgpu::TextureFormat,
-    ) {
-        for renderer in self.set.values_mut() {
-            renderer.setup(device, queue, format);
+    pub async fn get<T: RendererSetup>(&self) -> Option<Arc<T>> {
+        if let Some(renderer) = self.set.read().await.get(&TypeId::of::<T>()) {
+            let renderer = Arc::clone(renderer);
+            let arc_any = renderer as Arc<dyn Any + Send + Sync>;
+
+            arc_any.downcast().ok()
+        } else {
+            None
         }
-    }
-
-    pub fn get<T: RendererSetup>(&self) -> Option<&T> {
-        self.set
-            .get(&TypeId::of::<T>())
-            .and_then(|renderer| (renderer.as_ref() as &dyn Any).downcast_ref::<T>())
     }
 }
 
 // MARK: Renderer
 
-pub trait RendererSetup: Any + Send {
+pub trait RendererSetup: Any + Send + Sync {
     fn setup(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat); // todo: add some error handling
 }

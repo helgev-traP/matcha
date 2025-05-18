@@ -187,23 +187,29 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
 
         // start benchmark
         benchmarker.with_benchmark(|| {
+            let ctx = gpu_state.widget_context(self.default_font_size);
+
             let render_result = root_widget.render(
                 [Some(viewport_size[0]), Some(viewport_size[1])],
                 Background::new(&background_view, [0.0, 0.0]),
-                &gpu_state.widget_context(self.default_font_size),
+                &ctx,
                 gpu_state.renderer_map(),
             );
 
-            if let Some(renderer) = gpu_state.renderer_map().get::<PrincipleRenderer>() {
-                // project to screen
-                renderer.render_to_surface(
-                    gpu_state.device(),
-                    gpu_state.queue(),
-                    &surface_view,
-                    viewport_size,
-                    render_result,
-                );
-            };
+            let renderer = self.tokio_runtime.block_on(
+                gpu_state
+                    .renderer_map()
+                    .get_or_setup::<PrincipleRenderer>(&ctx),
+            );
+
+            // project to screen
+            renderer.render_to_surface(
+                gpu_state.device(),
+                gpu_state.queue(),
+                &surface_view,
+                viewport_size,
+                render_result,
+            );
         });
 
         // present to screen
@@ -415,11 +421,6 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, 
                 wgpu::TextureFormat::Rgba8UnormSrgb,
             ));
         self.gpu_state = Some(gpu_state);
-
-        // renderer preparation.
-        let renderer = PrincipleRenderer::new();
-        self.gpu_state.as_mut().unwrap().add_renderer(renderer);
-        self.gpu_state.as_mut().unwrap().renderer_setup();
 
         // --- init input context ---
         {
