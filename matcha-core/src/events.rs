@@ -43,8 +43,9 @@ impl Event {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum ConcreteEvent {
+    #[default]
     None,
     // mouse event
     MouseClick {
@@ -70,12 +71,6 @@ pub enum ConcreteEvent {
         element_state: ElementState,
     },
     // todo
-}
-
-impl Default for ConcreteEvent {
-    fn default() -> Self {
-        ConcreteEvent::None
-    }
 }
 
 // MARK: ElementState
