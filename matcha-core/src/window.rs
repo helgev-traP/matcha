@@ -193,7 +193,6 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
                 [Some(viewport_size[0]), Some(viewport_size[1])],
                 Background::new(&background_view, [0.0, 0.0]),
                 &ctx,
-                gpu_state.renderer_map(),
             );
 
             gpu_state

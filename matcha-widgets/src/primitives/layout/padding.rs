@@ -4,7 +4,7 @@ use matcha_core::{
     context::WidgetContext,
     events::Event,
     observer::Observer,
-    renderer::{RendererSetup, RendererMap},
+    renderer::{RendererMap, RendererSetup},
     types::range::{CoverRange, Range2D},
     ui::{Background, Dom, DomComPareResult, UpdateWidgetError, Widget},
 };
@@ -253,12 +253,11 @@ where
         &mut self,
         parent_size: [Option<f32>; 2],
         background: Background,
-        context: &WidgetContext,
-        renderer: &RendererMap,
+        ctx: &WidgetContext,
     ) -> Vec<matcha_core::ui::Object> {
         self.content
             .as_mut()
-            .map(|content| content.render(parent_size, background, context, renderer))
+            .map(|content| content.render(parent_size, background, ctx))
             .unwrap_or_default()
             .into_iter()
             .map(|mut object| {

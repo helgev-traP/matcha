@@ -4,7 +4,6 @@ use matcha_core::{
     context::WidgetContext,
     events::Event,
     observer::Observer,
-    renderer::{RendererSetup, RendererMap},
     types::{cache::Cache, range::CoverRange},
     ui::{Background, Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
 };
@@ -128,12 +127,9 @@ impl<T: Send + 'static> Widget<T> for SpaceNode {
     // render
     fn render(
         &mut self,
-        // ui environment
         _: [Option<f32>; 2],
         _: Background,
-        // context
         _: &WidgetContext,
-        _: &RendererMap,
     ) -> Vec<Object> {
         vec![]
     }

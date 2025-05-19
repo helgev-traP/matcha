@@ -285,8 +285,7 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
         &mut self,
         parent_size: [Option<f32>; 2],
         background: Background,
-        context: &WidgetContext,
-        renderer: &RendererMap,
+        ctx: &WidgetContext,
     ) -> Vec<Object> {
         let current_key = CacheKey::new(parent_size);
 
@@ -305,7 +304,7 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
                 self.gap_columns,
                 &self.template_rows,
                 self.gap_rows,
-                context,
+                ctx,
             );
 
             (
@@ -321,7 +320,7 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
 
         self.items
             .iter_mut()
-            .flat_map(|item| render_item(item, cache, background, context, renderer))
+            .flat_map(|item| render_item(item, cache, background, ctx))
             .collect()
     }
 }
@@ -332,8 +331,7 @@ fn render_item<'a, T: Send + 'static>(
     item: &'a mut GridNodeItem<T>,
     grid_cache: &GridCache,
     background: Background,
-    context: &WidgetContext,
-    renderer: &RendererMap,
+    ctx: &WidgetContext,
 ) -> Vec<Object<'a>> {
     // calculate range
     let item_range = Range2D::new(
@@ -358,8 +356,7 @@ fn render_item<'a, T: Send + 'static>(
         .render(
             [Some(item_range.width()), Some(item_range.height())],
             Background::new(background.view(), position),
-            context,
-            renderer,
+            ctx,
         )
         .into_iter()
         .map(|mut object| {

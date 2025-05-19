@@ -4,7 +4,7 @@ use matcha_core::{
     context::WidgetContext,
     events::Event,
     observer::Observer,
-    renderer::{RendererSetup, RendererMap},
+    renderer::{RendererMap, RendererSetup},
     types::range::{CoverRange, Range2D},
     ui::{Background, Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
 };
@@ -377,23 +377,17 @@ impl<T: Send + 'static> Widget<T> for RowNode<T> {
         parent_size: [Option<f32>; 2],
         background: Background,
         // context
-        context: &WidgetContext,
-        renderer: &RendererMap,
+        ctx: &WidgetContext,
     ) -> Vec<Object> {
         // prepare cache
-        self.prepare_cache(parent_size, context);
+        self.prepare_cache(parent_size, ctx);
         // get cache
         let (_, cache) = self.cache.as_ref().expect("unreachable!");
 
         // render children
         let mut objects = Vec::new();
         for (item, position) in self.items.iter_mut().zip(cache.content_position.iter()) {
-            let item_objects = item.render(
-                parent_size,
-                background.transition(*position),
-                context,
-                renderer,
-            );
+            let item_objects = item.render(parent_size, background.transition(*position), ctx);
             for mut object in item_objects {
                 object.transform(nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(
                     position[0],

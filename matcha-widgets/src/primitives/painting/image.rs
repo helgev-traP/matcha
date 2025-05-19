@@ -194,12 +194,9 @@ impl<T: Send + 'static> Widget<T> for ImageNode {
     // render
     fn render(
         &mut self,
-        // ui environment
         parent_size: [Option<f32>; 2],
-        _: Background,
-        // context
-        context: &WidgetContext,
-        _: &RendererMap,
+        background: Background,
+        ctx: &WidgetContext,
     ) -> Vec<Object> {
         let image = self
             .image
@@ -212,13 +209,13 @@ impl<T: Send + 'static> Widget<T> for ImageNode {
         // calculate size
         let px_size = self.size_cache.get_data_or_insert_with(&parent_size, || {
             let image_size = [image.width() as f32, image.height() as f32];
-            (self.size)(parent_size, image_size, context)
+            (self.size)(parent_size, image_size, ctx)
         });
 
         // prepare texture
         let texture = self.texture.get_or_insert_with(|| {
-            let device = context.device();
-            let queue = context.queue();
+            let device = ctx.device();
+            let queue = ctx.queue();
 
             let image_rgba = image.to_rgba8();
 

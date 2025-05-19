@@ -131,12 +131,9 @@ impl<T: Send + 'static> Widget<T> for TemplateNode {
     // render
     fn render(
         &mut self,
-        // ui environment
         parent_size: [Option<f32>; 2],
         background: Background,
-        // context
-        context: &WidgetContext,
-        renderer: &RendererMap,
+        ctx: &WidgetContext,
     ) -> Vec<Object> {
         todo!()
     }
