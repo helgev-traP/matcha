@@ -9,12 +9,13 @@ version = "0.0.5"
 matcha = { path = "main" }
 matcha-core = { path = "matcha-core" }
 matcha-widgets = { path = "matcha-widgets" }
-text-render ={ path = "text-render" }
+text-render = { path = "text-render" }
 
 # async runtime, utilities
 tokio = { version = "1", features = ["full"] }
 async-trait = "0.1.88"
 futures = "0.3.31"
+parking_lot = "0.12.3"
 
 # winit
 winit = "0.30"
