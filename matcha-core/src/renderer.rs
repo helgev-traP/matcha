@@ -1,9 +1,10 @@
 use std::{
     any::{Any, TypeId},
-    sync::{Arc, Mutex},
+    sync::{Arc},
 };
 
 use fxhash::FxHashMap;
+use parking_lot::Mutex;
 
 use super::context::WidgetContext;
 
@@ -40,7 +41,7 @@ impl RendererMap {
         T: RendererSetup + Default,
     {
         // Early return if already exists
-        if let Some(renderer) = self.set.lock().unwrap().get(&TypeId::of::<T>()) {
+        if let Some(renderer) = self.set.lock().get(&TypeId::of::<T>()) {
             let renderer = Arc::clone(renderer);
             let arc_any = renderer as Arc<dyn Any + Send + Sync>;
 
@@ -57,13 +58,13 @@ impl RendererMap {
         let renderer = Arc::new(renderer);
         let return_value = Arc::clone(&renderer);
 
-        self.set.lock().unwrap().insert(TypeId::of::<T>(), renderer);
+        self.set.lock().insert(TypeId::of::<T>(), renderer);
 
         return_value
     }
 
     pub fn get<T: RendererSetup>(&self) -> Option<Arc<T>> {
-        if let Some(renderer) = self.set.lock().unwrap().get(&TypeId::of::<T>()) {
+        if let Some(renderer) = self.set.lock().get(&TypeId::of::<T>()) {
             let renderer = Arc::clone(renderer);
             let arc_any = renderer as Arc<dyn Any + Send + Sync>;
 
