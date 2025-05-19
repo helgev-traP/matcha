@@ -322,9 +322,8 @@ impl<Model: Sync + Send + 'static, Response: 'static, InnerResponse: 'static> Wi
         parent_size: [Option<f32>; 2],
         background: Background,
         context: &WidgetContext,
-        renderer: &RendererMap,
     ) -> Vec<Object> {
         self.widget
-            .render(parent_size, background, context, renderer)
+            .render(parent_size, background, context)
     }
 }

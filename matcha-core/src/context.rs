@@ -33,7 +33,7 @@ impl<'a> WidgetContext<'a> {
             })
     }
 
-    pub fn renderer_map(&self) -> &super::renderer::RendererMap {
+    pub fn renderers(&self) -> &super::renderer::RendererMap {
         self.global_context.renderer_map()
     }
 

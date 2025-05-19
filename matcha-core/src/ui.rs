@@ -78,8 +78,7 @@ pub trait Widget<T>: Send {
         &mut self,
         parent_size: [Option<f32>; 2],
         background: Background,
-        context: &WidgetContext,
-        renderer: &RendererMap,
+        ctx: &WidgetContext,
     ) -> Vec<Object>;
 
     /// Updates the GPU device and queue for rendering purposes.

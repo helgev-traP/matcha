@@ -4,7 +4,7 @@ use matcha_core::{
     context::WidgetContext,
     events::Event,
     observer::Observer,
-    renderer::{RendererSetup, RendererMap},
+    renderer::{RendererMap, RendererSetup},
     types::range::CoverRange,
     ui::{Background, Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
 };
@@ -221,14 +221,13 @@ where
         &mut self,
         parent_size: [Option<f32>; 2],
         background: Background,
-        context: &WidgetContext,
-        renderer: &RendererMap,
+        ctx: &WidgetContext,
     ) -> Vec<Object> {
         match self.visible {
             VisibilityState::Visible => self
                 .content
                 .as_mut()
-                .map(|content| content.render(parent_size, background, context, renderer))
+                .map(|content| content.render(parent_size, background, ctx))
                 .unwrap_or_default(),
             VisibilityState::Hidden | VisibilityState::None => vec![],
         }
