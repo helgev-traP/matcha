@@ -4,7 +4,6 @@ use super::{
     context::WidgetContext,
     events::Event,
     observer::Observer,
-    renderer::RendererMap,
     types::range::CoverRange,
     vertex::{ColorVertex, UvVertex},
 };

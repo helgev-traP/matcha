@@ -16,13 +16,13 @@ pub mod principle_renderer;
 
 #[derive(Default)]
 pub struct RendererMap {
-    set: Mutex<FxHashMap<TypeId, Arc<dyn RendererSetup>>>,
+    map: Mutex<FxHashMap<TypeId, Arc<dyn RendererSetup>>>,
 }
 
 impl RendererMap {
     pub fn new() -> Self {
         Self {
-            set: Mutex::new(FxHashMap::default()),
+            map: Mutex::new(FxHashMap::default()),
         }
     }
 
@@ -42,8 +42,10 @@ impl RendererMap {
     where
         T: RendererSetup + Default,
     {
+        let mut map = self.map.lock();
+
         // Early return if already exists
-        if let Some(renderer) = self.set.lock().get(&TypeId::of::<T>()) {
+        if let Some(renderer) = map.get(&TypeId::of::<T>()) {
             let renderer = Arc::clone(renderer);
             let arc_any = renderer as Arc<dyn Any + Send + Sync>;
 
@@ -60,13 +62,14 @@ impl RendererMap {
         let renderer = Arc::new(renderer);
         let return_value = Arc::clone(&renderer);
 
-        self.set.lock().insert(TypeId::of::<T>(), renderer);
+        map.insert(TypeId::of::<T>(), renderer);
 
         return_value
     }
 
     pub fn get<T: RendererSetup>(&self) -> Option<Arc<T>> {
-        if let Some(renderer) = self.set.lock().get(&TypeId::of::<T>()) {
+        let map = self.map.lock();
+        if let Some(renderer) = map.get(&TypeId::of::<T>()) {
             let renderer = Arc::clone(renderer);
             let arc_any = renderer as Arc<dyn Any + Send + Sync>;
 

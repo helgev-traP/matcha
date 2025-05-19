@@ -8,7 +8,6 @@ use tokio::sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use super::{
     context::WidgetContext,
     observer::{ObserverReceiver, ObserverSender, create_observer_ch},
-    renderer::RendererMap,
     types::range::CoverRange,
     ui::{Background, Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
 };
