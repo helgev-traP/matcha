@@ -124,11 +124,6 @@ impl<'a> Background<'a> {
     }
 }
 
-// todo: add object type when renderer is ready
-// todo: Arcによる共有をObject内に持つべきか検討
-// todo: add re-rendering range to apply scissors test for optimization
-/// `Arc` is not necessary for sharing objects
-/// since `Arc` is already used in this struct.
 #[derive(Clone)]
 pub enum Object<'a> {
     TextureColor {
@@ -142,8 +137,6 @@ pub enum Object<'a> {
         indices: &'a [u16],
         transform: nalgebra::Matrix4<f32>,
     },
-    // Gradation
-    // GradationBlur ?
     // and more ...?
 }
 
