@@ -1,7 +1,9 @@
 use std::{
     any::{Any, TypeId},
-    sync::{Arc},
+    sync::Arc,
 };
+
+// note: consider using `dashmap` if performance is an issue
 
 use fxhash::FxHashMap;
 use parking_lot::Mutex;
