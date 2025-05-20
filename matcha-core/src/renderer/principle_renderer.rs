@@ -76,6 +76,7 @@ impl PrincipleRenderer {
         );
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn render_impl(
         &self,
         // gpu
