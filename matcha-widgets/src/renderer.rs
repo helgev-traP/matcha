@@ -1,17 +1,19 @@
 use std::sync::{Arc, Mutex};
 
 #[derive(Default)]
-pub struct Renderer {
-    vello_renderer: Option<Arc<Mutex<vello::Renderer>>>,
+pub struct VelloRenderer {
+    scene: Option<Mutex<vello::Scene>>,
+    renderer: Option<Mutex<vello::Renderer>>,
 }
 
-impl matcha_core::renderer::RendererSetup for Renderer {
+impl matcha_core::renderer::RendererSetup for VelloRenderer {
     fn setup(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat) {
-        self.vello_renderer = Some(Arc::new(Mutex::new(self.setup_vello(device))));
+        self.scene = Some(Mutex::new(vello::Scene::new()));
+        self.renderer = Some(Mutex::new(self.setup_vello(device)));
     }
 }
 
-impl Renderer {
+impl VelloRenderer {
     pub fn new() -> Self {
         Self::default()
     }
