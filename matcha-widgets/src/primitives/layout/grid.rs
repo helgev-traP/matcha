@@ -327,12 +327,12 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
 
 // MARK: render fn
 
-fn render_item<'a, T: Send + 'static>(
-    item: &'a mut GridNodeItem<T>,
+fn render_item<T: Send + 'static>(
+    item: &mut GridNodeItem<T>,
     grid_cache: &GridCache,
     background: Background,
     ctx: &WidgetContext,
-) -> Vec<Object<'a>> {
+) -> Vec<Object> {
     // calculate range
     let item_range = Range2D::new(
         [

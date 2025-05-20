@@ -88,6 +88,10 @@ impl<T: Float> Range2D<T> {
 // MARK: Getter
 
 impl<T: Float> Range2D<T> {
+    pub fn size(&self) -> [T; 2] {
+        [self.width(), self.height()]
+    }
+
     pub fn width(&self) -> T {
         self.x[1] - self.x[0]
     }
@@ -119,35 +123,35 @@ impl<T: Float> Range2D<T> {
         self.width() * self.height()
     }
 
-    pub fn left(&self) -> T {
+    pub const fn left(&self) -> T {
         self.x[0]
     }
 
-    pub fn right(&self) -> T {
+    pub const fn right(&self) -> T {
         self.x[1]
     }
 
-    pub fn top(&self) -> T {
+    pub const fn top(&self) -> T {
         self.y[0]
     }
 
-    pub fn bottom(&self) -> T {
+    pub const fn bottom(&self) -> T {
         self.y[1]
     }
 
-    pub fn upper_left(&self) -> [T; 2] {
+    pub const fn upper_left(&self) -> [T; 2] {
         [self.x[0], self.y[0]]
     }
 
-    pub fn lower_right(&self) -> [T; 2] {
+    pub const fn lower_right(&self) -> [T; 2] {
         [self.x[1], self.y[1]]
     }
 
-    pub fn x_range(&self) -> [T; 2] {
+    pub const fn x_range(&self) -> [T; 2] {
         self.x
     }
 
-    pub fn y_range(&self) -> [T; 2] {
+    pub const fn y_range(&self) -> [T; 2] {
         self.y
     }
 }
@@ -187,18 +191,18 @@ impl<T: Float> From<[Option<Range2D<T>>; 2]> for CoverRange<T> {
 }
 
 impl<T: Float> CoverRange<T> {
-    pub fn new(inscribed: Option<Range2D<T>>, circumscribed: Option<Range2D<T>>) -> Self {
+    pub const fn new(inscribed: Option<Range2D<T>>, circumscribed: Option<Range2D<T>>) -> Self {
         CoverRange {
             inscribed,
             circumscribed,
         }
     }
 
-    pub fn inscribed(&self) -> Option<Range2D<T>> {
+    pub const fn inscribed(&self) -> Option<Range2D<T>> {
         self.inscribed
     }
 
-    pub fn circumscribed(&self) -> Option<Range2D<T>> {
+    pub const fn circumscribed(&self) -> Option<Range2D<T>> {
         self.circumscribed
     }
 }

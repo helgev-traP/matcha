@@ -40,6 +40,7 @@ impl PrincipleRenderer {
         destination_size: [f32; 2],
         // objects
         objects: Vec<Object>,
+        offset: Option<nalgebra::Matrix4<f32>>,
     ) {
         self.render_impl(
             device,
@@ -47,6 +48,7 @@ impl PrincipleRenderer {
             destination_view,
             destination_size,
             objects,
+            offset,
             false,
         );
     }
@@ -61,6 +63,7 @@ impl PrincipleRenderer {
         destination_size: [f32; 2],
         // objects
         objects: Vec<Object>,
+        offset: Option<nalgebra::Matrix4<f32>>,
     ) {
         self.render_impl(
             device,
@@ -68,6 +71,7 @@ impl PrincipleRenderer {
             destination_view,
             destination_size,
             objects,
+            offset,
             true,
         );
     }
@@ -82,10 +86,13 @@ impl PrincipleRenderer {
         destination_size: [f32; 2],
         // objects
         objects: Vec<Object>,
+        offset: Option<nalgebra::Matrix4<f32>>,
         // render to surface or not
         render_to_surface: bool,
     ) {
         let normalize_matrix = make_normalize_matrix(destination_size);
+
+        let composed_matrix = offset.map_or(normalize_matrix, |offset| normalize_matrix * offset);
 
         // todo !: try mesh integration
 
@@ -107,10 +114,10 @@ impl PrincipleRenderer {
                             device,
                             queue,
                             destination_view,
-                            &normalize_matrix,
+                            &composed_matrix,
                             texture,
                             &uv_vertices,
-                            indices,
+                            &indices,
                             render_to_surface,
                         );
                     }
@@ -130,9 +137,9 @@ impl PrincipleRenderer {
                             device,
                             queue,
                             destination_view,
-                            &normalize_matrix,
+                            &composed_matrix,
                             &vertices,
-                            indices,
+                            &indices,
                             render_to_surface,
                         );
                     }
