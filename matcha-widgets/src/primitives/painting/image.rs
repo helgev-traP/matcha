@@ -286,9 +286,9 @@ impl<T: Send + 'static> Widget<T> for ImageNode {
 
         vec![Object::TextureColor {
             texture: texture.clone(),
-            uv_vertices: vertices,
-            indices,
-            transform: nalgebra::Matrix4::new_translation(&[0.0, 0.0, 0.0].into()),
+            uv_vertices: vertices.to_vec(),
+            indices: indices.to_vec(),
+            transform: nalgebra::Matrix4::identity(),
         }]
     }
 }

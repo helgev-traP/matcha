@@ -204,6 +204,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
                     &surface_view,
                     viewport_size,
                     render_result,
+                    None,
                 );
         });
 

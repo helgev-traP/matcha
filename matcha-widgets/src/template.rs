@@ -97,7 +97,7 @@ impl<T: Send + 'static> Widget<T> for TemplateNode {
         &mut self,
         position: [f32; 2],
         parent_size: [Option<f32>; 2],
-        context: &SharedContext,
+        context: &WidgetContext,
     ) -> bool {
         let px_size = Widget::<T>::px_size(self, parent_size, context);
 

@@ -123,22 +123,22 @@ impl<'a> Background<'a> {
 }
 
 #[derive(Clone)]
-pub enum Object<'a> {
+pub enum Object {
     TextureColor {
         texture: Arc<wgpu::Texture>,
-        uv_vertices: &'a [UvVertex],
-        indices: &'a [u16],
+        uv_vertices: Vec<UvVertex>,
+        indices: Vec<u16>,
         transform: nalgebra::Matrix4<f32>,
     },
     VertexColor {
-        vertices: &'a [ColorVertex],
-        indices: &'a [u16],
+        vertices: Vec<ColorVertex>,
+        indices: Vec<u16>,
         transform: nalgebra::Matrix4<f32>,
     },
     // and more ...?
 }
 
-impl Object<'_> {
+impl Object {
     pub fn transform(&mut self, affine: nalgebra::Matrix4<f32>) {
         match self {
             Object::TextureColor { transform, .. } | Object::VertexColor { transform, .. } => {
