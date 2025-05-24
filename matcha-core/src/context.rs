@@ -1,13 +1,13 @@
 #[derive(Clone)]
 pub struct WidgetContext<'a> {
-    global_context: &'a super::window::global_context::GlobalContext<'a>,
+    global_context: &'a super::window::gpu_context::GpuContext<'a>,
     root_font_size: f32,
     font_size: f32,
 }
 
 impl<'a> WidgetContext<'a> {
     pub(crate) fn new(
-        global_context: &'a super::window::global_context::GlobalContext,
+        global_context: &'a super::window::gpu_context::GpuContext,
         font_size: f32,
     ) -> Self {
         Self {
