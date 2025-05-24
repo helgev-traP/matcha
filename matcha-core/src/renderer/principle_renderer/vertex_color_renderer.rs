@@ -138,7 +138,7 @@ impl VertexColorRenderer {
         // object
         vertex: &[ColorVertex],
         indices: &[u16],
-        // remder to surface or not
+        // render to surface or not
         render_to_surface: bool,
     ) {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {

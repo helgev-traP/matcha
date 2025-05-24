@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use crate::renderer::{RendererSetup, RendererMap};
+use crate::renderer::RendererMap;
 
 use super::context::WidgetContext;
 
-pub struct GlobalContext<'a> {
+pub struct GpuContext<'a> {
     // gpu device
     _instance: wgpu::Instance,
     _adapter: wgpu::Adapter,
@@ -26,7 +26,7 @@ pub struct GlobalContext<'a> {
     renderer_map: RendererMap,
 }
 
-impl GlobalContext<'_> {
+impl GpuContext<'_> {
     pub async fn new(
         winit_window: Arc<winit::window::Window>,
         power_preference: wgpu::PowerPreference,
@@ -118,7 +118,7 @@ impl GlobalContext<'_> {
     }
 }
 
-impl GlobalContext<'_> {
+impl GpuContext<'_> {
     pub fn widget_context(&self, font_size: f32) -> WidgetContext {
         WidgetContext::new(self, font_size)
     }
