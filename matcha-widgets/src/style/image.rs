@@ -178,14 +178,20 @@ impl Style for Image {
 
         let texture_offset = offset;
         let draw_range = self.draw_range(boundary, ctx);
-        let relative_position = draw_range.slide([-texture_offset[0], -texture_offset[1]]);
+        let relative_position = draw_range.slide(texture_offset);
         let relative_position_x = relative_position.x_range();
         let relative_position_y = relative_position.y_range();
 
-        let vertices = [UvVertex {
-            position: [relative_position_x[0], relative_position_y[0], 0.0].into(),
-            uv: [0.0, 0.0].into(),
-        }];
+        let vertices = [
+            UvVertex {
+                position: [relative_position_x[0], relative_position_y[0], 0.0].into(),
+                uv: [0.0, 0.0].into(),
+            },
+            UvVertex {
+                position: [relative_position_x[0], relative_position_y[1], 0.0].into(),
+                uv: [0.0, 1.0].into(),
+            },
+        ];
 
         todo!("render to texture");
     }
