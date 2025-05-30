@@ -1,7 +1,7 @@
 use matcha_core::{
     context::WidgetContext,
-    renderer::{RendererMap, RendererSetup, principle_renderer::PrincipleRenderer},
-    vertex::{self, BoxDescriptor, BoxMesh, ColorVertex, box_mesh},
+    principle_renderer::PrincipleRenderer,
+    vertex::{BoxDescriptor, BoxMesh, ColorVertex, box_mesh},
 };
 
 // todo: more documentation
@@ -80,8 +80,9 @@ impl SolidBox {
 
 impl SolidBox {
     pub fn render(&mut self, size: [f32; 2], target: wgpu::TextureView, ctx: &WidgetContext) {
-        let renderer = ctx.renderers()
-            .get_or_setup::<PrincipleRenderer>(ctx);
+        let renderer = ctx
+            .common_resource()
+            .get_or_insert_with(|| PrincipleRenderer::new(ctx));
 
         let resource = self.resources.get_or_insert_with(|| {
             // make vertices and indices

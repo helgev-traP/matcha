@@ -41,7 +41,8 @@ cosmic-text = "0.14.2"
 rand = "0.9.1"
 bitflags = "2.6"
 num = "0.4.3"
-downcast-rs = "2.0.1"
+fxhash = "0.2.1"
+dashmap = "6.1.0"
 
 # interpolation crate
 # todo: maybe useful.

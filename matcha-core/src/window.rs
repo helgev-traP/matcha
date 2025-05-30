@@ -2,12 +2,13 @@ use std::{fmt::Debug, sync::Arc};
 
 use wgpu::util::DeviceExt;
 
+use crate::principle_renderer::PrincipleRenderer;
+
 use super::{
     component::Component,
     context,
     events::Event,
     observer::Observer,
-    renderer::principle_renderer::PrincipleRenderer,
     types::color::Color,
     ui::{Background, Widget},
 };
@@ -196,8 +197,10 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
             );
 
             gpu_state
-                .renderer_map()
-                .get_or_setup::<PrincipleRenderer>(&ctx)
+                .common_resource()
+                .get_or_insert_with::<PrincipleRenderer, _>(|| {
+                    PrincipleRenderer::new(&ctx)
+                })
                 .render_to_surface(
                     gpu_state.device(),
                     gpu_state.queue(),

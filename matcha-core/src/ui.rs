@@ -22,9 +22,10 @@ pub trait Dom<T>: Sync + Any {
 // Style
 
 pub trait Style {
-    fn draw_range(&mut self, boundary: [f32; 2]) -> Range2D<f32>;
+    fn draw_range(&mut self, boundary: [f32; 2], ctx: &WidgetContext) -> Range2D<f32>;
     fn draw(
         &mut self,
+        boundary: [f32; 2],
         render_pass: &wgpu::RenderPass<'_>,
         texture_size: [u32; 2],
         offset: [f32; 2],

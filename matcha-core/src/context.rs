@@ -33,8 +33,8 @@ impl<'a> WidgetContext<'a> {
             })
     }
 
-    pub fn renderers(&self) -> &super::renderer::RendererMap {
-        self.global_context.renderer_map()
+    pub fn common_resource(&self) -> &super::common_resource::CommonResource {
+        self.global_context.common_resource()
     }
 
     pub fn surface_format(&self) -> wgpu::TextureFormat {

@@ -6,10 +6,13 @@ pub mod events;
 pub mod window;
 
 // core modules
+pub mod common_resource;
 pub mod context;
 pub mod observer;
-pub mod renderer;
 pub mod ui;
+
+// renderers
+pub mod principle_renderer;
 
 // types
 pub mod types;
