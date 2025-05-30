@@ -1,10 +1,10 @@
 use std::any::Any;
 
 use matcha_core::{
+    common_resource::CommonResource,
     context::WidgetContext,
     events::Event,
     observer::Observer,
-    renderer::{RendererMap, RendererSetup},
     types::range::{CoverRange, Range2D},
     ui::{Background, Dom, DomComPareResult, UpdateWidgetError, Widget},
 };

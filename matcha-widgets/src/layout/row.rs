@@ -1,19 +1,19 @@
 use std::{any::Any, sync::Arc};
 
 use matcha_core::{
+    common_resource::CommonResource,
     context::WidgetContext,
     events::Event,
     observer::Observer,
-    renderer::{RendererMap, RendererSetup},
     types::range::{CoverRange, Range2D},
     ui::{Background, Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
 };
 
-use crate::primitives::property::flex::{AlignItems, JustifyContent};
+use crate::types::flex::{AlignItems, JustifyContent};
 
 // MARK: DOM
 
-pub struct Column<T> {
+pub struct Row<T> {
     pub label: Option<String>,
 
     pub justify_content: JustifyContent,
@@ -22,7 +22,7 @@ pub struct Column<T> {
     pub items: Vec<Box<dyn Dom<T>>>,
 }
 
-impl<T> Column<T> {
+impl<T> Row<T> {
     pub fn new(label: Option<&str>) -> Box<Self> {
         Box::new(Self {
             label: label.map(String::from),
@@ -36,9 +36,9 @@ impl<T> Column<T> {
 }
 
 #[async_trait::async_trait]
-impl<T: Send + 'static> Dom<T> for Column<T> {
+impl<T: Send + 'static> Dom<T> for Row<T> {
     fn build_widget_tree(&self) -> Box<dyn Widget<T>> {
-        Box::new(ColumnNode {
+        Box::new(RowNode {
             label: self.label.clone(),
             justify_content: self.justify_content.clone(),
             align_items: self.align_items,
@@ -63,7 +63,7 @@ impl<T: Send + 'static> Dom<T> for Column<T> {
 
 // MARK: Widget
 
-pub struct ColumnNode<T> {
+pub struct RowNode<T> {
     label: Option<String>,
 
     justify_content: JustifyContent,
@@ -96,13 +96,13 @@ impl CacheKey {
 // MARK: CacheData
 
 struct CacheData {
-    column_size: [f32; 2],
+    row_size: [f32; 2],
     content_position: Vec<[f32; 2]>,
 }
 
 // MARK: Cache preparation
 
-impl<T> ColumnNode<T> {
+impl<T> RowNode<T> {
     fn invalidate_cache(&mut self, parent_size: [Option<f32>; 2]) {
         let current_tag = CacheKey::new(parent_size);
 
@@ -137,8 +137,8 @@ impl<T> ColumnNode<T> {
 
         // calculate actual size
 
-        let mut max_width = 0.0f32; // use later
-        let mut acc_height = 0.0f32;
+        let mut max_height = 0.0f32; // use later
+        let mut acc_width = 0.0f32;
 
         let actual_size = match parent_size {
             // when actual size not need calculate
@@ -146,13 +146,13 @@ impl<T> ColumnNode<T> {
             _ => {
                 for item in self.items.iter_mut() {
                     let size = item.px_size(parent_size, context);
-                    max_width = max_width.max(size[0]);
-                    acc_height += size[1];
+                    max_height = max_height.max(size[1]);
+                    acc_width += size[0];
                 }
 
                 [
-                    parent_size[0].unwrap_or(max_width),
-                    parent_size[1].unwrap_or(acc_height),
+                    parent_size[0].unwrap_or(acc_width),
+                    parent_size[1].unwrap_or(max_height),
                 ]
             }
         };
@@ -160,11 +160,11 @@ impl<T> ColumnNode<T> {
         // calculate position of items
 
         let items_len = self.items.len() as f32;
-        let margin_all = (actual_size[1] - acc_height).max(0.0);
+        let margin_all = (actual_size[0] - acc_width).max(0.0);
         let mut positions = vec![[0.0f32, 0.0f32]; self.items.len()];
 
-        // main axis positioning (vertical for column)
-        let mut horizontal_fold_fn: Box<dyn StateClosureTrait> = justify_content_horizontal_fold_fn(
+        // main axis positioning
+        let mut vertical_fold_fn: Box<dyn StateClosureTrait> = justify_content_vertical_fold_fn(
             margin_all,
             items_len,
             &self.justify_content,
@@ -172,32 +172,32 @@ impl<T> ColumnNode<T> {
             context,
         );
 
-        // cross axis positioning (horizontal for column)
-        let mut vertical_fold_fn: Box<dyn StateClosureTrait> = match self.align_items {
+        // cross axis positioning
+        let mut horizontal_fold_fn: Box<dyn StateClosureTrait> = match self.align_items {
             AlignItems::Start => Box::new(StateClosure {
                 acc: 0.0,
                 func: |_, _| 0.0,
             }),
             AlignItems::Center => Box::new(StateClosure {
-                acc: max_width / 2.0,
-                func: |_, w: f32| (max_width - w) / 2.0,
+                acc: max_height / 2.0,
+                func: |_, h: f32| (max_height - h) / 2.0,
             }),
             AlignItems::End => Box::new(StateClosure {
-                acc: max_width,
-                func: |_, w: f32| max_width - w,
+                acc: max_height,
+                func: |_, h: f32| max_height - h,
             }),
         };
 
         // fill positions
         for (item, position) in self.items.iter_mut().zip(positions.iter_mut()) {
             let size = item.px_size(parent_size, context);
-            position[1] = horizontal_fold_fn.next(size[1]);
             position[0] = vertical_fold_fn.next(size[0]);
+            position[1] = horizontal_fold_fn.next(size[1]);
         }
 
         // cache data
         let cache_data = CacheData {
-            column_size: actual_size,
+            row_size: actual_size,
             content_position: positions,
         };
 
@@ -207,7 +207,7 @@ impl<T> ColumnNode<T> {
     }
 }
 
-fn justify_content_horizontal_fold_fn(
+fn justify_content_vertical_fold_fn(
     margin_all: f32,
     items_len: f32,
     justify_content: &JustifyContent,
@@ -216,7 +216,7 @@ fn justify_content_horizontal_fold_fn(
 ) -> Box<dyn StateClosureTrait> {
     match justify_content {
         JustifyContent::FlexStart { gap } => {
-            let gap = gap(parent_size[1], context);
+            let gap = gap(parent_size[0], context);
             Box::new(StateClosure {
                 acc: 0.0,
                 func: move |acc: &mut f32, next: f32| {
@@ -227,7 +227,7 @@ fn justify_content_horizontal_fold_fn(
             })
         }
         JustifyContent::FlexEnd { gap } => {
-            let gap = gap(parent_size[1], context);
+            let gap = gap(parent_size[0], context);
             Box::new(StateClosure {
                 acc: margin_all - gap * (items_len - 1.0),
                 func: move |acc: &mut f32, next: f32| {
@@ -238,7 +238,7 @@ fn justify_content_horizontal_fold_fn(
             })
         }
         JustifyContent::Center { gap } => {
-            let gap = gap(parent_size[1], context);
+            let gap = gap(parent_size[0], context);
             Box::new(StateClosure {
                 acc: (margin_all - gap * (items_len - 1.0)) / 2.0,
                 func: move |acc: &mut f32, next: f32| {
@@ -287,7 +287,7 @@ fn justify_content_horizontal_fold_fn(
 // MARK: Widget trait
 
 #[async_trait::async_trait]
-impl<T: Send + 'static> Widget<T> for ColumnNode<T> {
+impl<T: Send + 'static> Widget<T> for RowNode<T> {
     // label
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
@@ -300,7 +300,7 @@ impl<T: Send + 'static> Widget<T> for ColumnNode<T> {
         component_updated: bool,
         dom: &dyn Dom<T>,
     ) -> Result<(), UpdateWidgetError> {
-        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Column<T>>() {
+        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Row<T>>() {
             todo!()
         } else {
             return Err(UpdateWidgetError::TypeMismatch);
@@ -309,7 +309,7 @@ impl<T: Send + 'static> Widget<T> for ColumnNode<T> {
 
     // comparing dom
     fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult {
-        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Column<T>>() {
+        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Row<T>>() {
             todo!()
         } else {
             DomComPareResult::Different
@@ -352,7 +352,7 @@ impl<T: Send + 'static> Widget<T> for ColumnNode<T> {
         // get cache
         self.cache
             .as_ref()
-            .map(|(_, cache)| cache.column_size)
+            .map(|(_, cache)| cache.row_size)
             .expect("unreachable!")
     }
 

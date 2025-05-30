@@ -1,33 +1,27 @@
-use crate::ui::Object;
+use crate::{context::WidgetContext, ui::Object};
 
 mod texture_color_renderer;
 use texture_color_renderer::TextureObjectRenderer;
 mod vertex_color_renderer;
 use vertex_color_renderer::VertexColorRenderer;
 
-use super::RendererSetup;
-
-#[derive(Default)]
 pub struct PrincipleRenderer {
     // renderers
-    texture_color_renderer: Option<TextureObjectRenderer>,
-    vertex_color_renderer: Option<VertexColorRenderer>,
+    texture_color_renderer: TextureObjectRenderer,
+    vertex_color_renderer: VertexColorRenderer,
 }
 
-impl RendererSetup for PrincipleRenderer {
-    fn setup(&mut self, device: &wgpu::Device, _: &wgpu::Queue, format: wgpu::TextureFormat) {
-        let texture_object_renderer =
-            texture_color_renderer::TextureObjectRenderer::new(device, format);
-        let vertex_color_renderer = vertex_color_renderer::VertexColorRenderer::new(device, format);
-
-        self.texture_color_renderer = Some(texture_object_renderer);
-        self.vertex_color_renderer = Some(vertex_color_renderer);
-    }
-}
+impl PrincipleRenderer {}
 
 impl PrincipleRenderer {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(ctx: &WidgetContext) -> Self {
+        let texture_color_renderer = TextureObjectRenderer::new(ctx.device(), ctx.surface_format());
+        let vertex_color_renderer = VertexColorRenderer::new(ctx.device(), ctx.surface_format());
+
+        Self {
+            texture_color_renderer,
+            vertex_color_renderer,
+        }
     }
 
     pub fn render(
@@ -97,24 +91,42 @@ impl PrincipleRenderer {
 
         // todo !: try mesh integration
 
-        for obj in objects {
-            match obj {
-                Object::TextureColor {
-                    texture,
-                    uv_vertices,
-                    indices,
-                    transform,
-                } => {
-                    if let Some(renderer) = &self.texture_color_renderer {
+        {
+            let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("VColorObjectRenderer: Command Encoder"),
+            });
+
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("VColorObjectRenderer: Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: destination_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+            for obj in objects {
+                match obj {
+                    Object::TextureColor {
+                        texture,
+                        uv_vertices,
+                        indices,
+                        transform,
+                    } => {
                         let uv_vertices = uv_vertices
                             .iter()
                             .map(|vertex| vertex.transform(&transform))
                             .collect::<Vec<_>>();
 
-                        renderer.render(
+                        self.texture_color_renderer.render(
                             device,
-                            queue,
-                            destination_view,
+                            &mut render_pass,
                             &composed_matrix,
                             texture,
                             &uv_vertices,
@@ -122,22 +134,19 @@ impl PrincipleRenderer {
                             render_to_surface,
                         );
                     }
-                }
-                Object::VertexColor {
-                    vertices,
-                    indices,
-                    transform,
-                } => {
-                    if let Some(renderer) = &self.vertex_color_renderer {
+                    Object::VertexColor {
+                        vertices,
+                        indices,
+                        transform,
+                    } => {
                         let vertices = vertices
                             .iter()
                             .map(|vertex| vertex.transform(&transform))
                             .collect::<Vec<_>>();
 
-                        renderer.render(
+                        self.vertex_color_renderer.render(
                             device,
-                            queue,
-                            destination_view,
+                            &mut render_pass,
                             &composed_matrix,
                             &vertices,
                             &indices,

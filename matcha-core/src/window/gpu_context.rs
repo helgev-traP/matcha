@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::renderer::RendererMap;
+use crate::common_resource::CommonResource;
 
 use super::context::WidgetContext;
 
@@ -23,7 +23,7 @@ pub struct GpuContext<'a> {
     texture_format: wgpu::TextureFormat,
 
     // custom renderers
-    renderer_map: RendererMap,
+    common_resource: CommonResource,
 }
 
 impl GpuContext<'_> {
@@ -100,7 +100,7 @@ impl GpuContext<'_> {
             surface,
             surface_format,
             texture_format,
-            renderer_map: RendererMap::new(),
+            common_resource: CommonResource::new(),
         }
     }
 
@@ -123,8 +123,8 @@ impl GpuContext<'_> {
         WidgetContext::new(self, font_size)
     }
 
-    pub fn renderer_map(&self) -> &RendererMap {
-        &self.renderer_map
+    pub fn common_resource(&self) -> &CommonResource {
+        &self.common_resource
     }
 
     pub fn device(&self) -> &wgpu::Device {

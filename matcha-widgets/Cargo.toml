@@ -31,3 +31,5 @@ image = { workspace = true }
 rand = { workspace = true }
 num = { workspace = true }
 cosmic-text = { workspace = true }
+fxhash = { workspace = true }
+dashmap = { workspace = true }

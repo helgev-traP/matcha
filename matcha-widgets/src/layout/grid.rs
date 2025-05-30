@@ -1,17 +1,15 @@
-use std::any::Any;
+use std::{any::Any, sync::Arc};
 
 use matcha_core::{
     context::WidgetContext,
     events::Event,
     observer::Observer,
-    renderer::{RendererSetup, RendererMap},
     types::range::{CoverRange, Range2D},
     ui::{Background, Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
 };
-
 use num::Float;
 
-use crate::primitives::property::div_size::{DivSize, StdDivSize};
+use crate::types::size::Size;
 
 // todo: remove this memo
 // ********************************
@@ -25,10 +23,10 @@ pub struct Grid<T: Send + 'static> {
     label: Option<String>,
 
     // layout
-    template_columns: Vec<DivSize>,
-    template_rows: Vec<DivSize>,
-    gap_columns: DivSize,
-    gap_rows: DivSize,
+    template_columns: Vec<Size>,
+    template_rows: Vec<Size>,
+    gap_columns: Size,
+    gap_rows: Size,
 
     // items
     items: Vec<GridItem<T>>,
@@ -55,8 +53,8 @@ impl<T: Send + 'static> Grid<T> {
             label: None,
             template_columns: Vec::new(),
             template_rows: Vec::new(),
-            gap_columns: DivSize::Pixel(0.0),
-            gap_rows: DivSize::Pixel(0.0),
+            gap_columns: Size::Size(Arc::new(|_, _| 0.0)),
+            gap_rows: Size::Size(Arc::new(|_, _| 0.0)),
             items: Vec::new(),
         }
     }
@@ -66,22 +64,22 @@ impl<T: Send + 'static> Grid<T> {
         self
     }
 
-    pub fn template_columns(mut self, columns: Vec<DivSize>) -> Self {
+    pub fn template_columns(mut self, columns: Vec<Size>) -> Self {
         self.template_columns = columns;
         self
     }
 
-    pub fn template_rows(mut self, rows: Vec<DivSize>) -> Self {
+    pub fn template_rows(mut self, rows: Vec<Size>) -> Self {
         self.template_rows = rows;
         self
     }
 
-    pub fn gap_columns(mut self, gap: DivSize) -> Self {
+    pub fn gap_columns(mut self, gap: Size) -> Self {
         self.gap_columns = gap;
         self
     }
 
-    pub fn gap_rows(mut self, gap: DivSize) -> Self {
+    pub fn gap_rows(mut self, gap: Size) -> Self {
         self.gap_rows = gap;
         self
     }
@@ -119,10 +117,10 @@ pub struct GridNode<T: Send + 'static> {
     label: Option<String>,
 
     // layout properties
-    template_columns: Vec<DivSize>,
-    template_rows: Vec<DivSize>,
-    gap_columns: DivSize,
-    gap_rows: DivSize,
+    template_columns: Vec<Size>,
+    template_rows: Vec<Size>,
+    gap_columns: Size,
+    gap_rows: Size,
 
     // items
     items: Vec<GridNodeItem<T>>,
@@ -244,9 +242,9 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
         let (column_range, row_range) = calc_px_siz(
             parent_size,
             &self.template_columns,
-            self.gap_columns,
+            &self.gap_columns,
             &self.template_rows,
-            self.gap_rows,
+            &self.gap_rows,
             context,
         );
 
@@ -301,9 +299,9 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
             let (column_range, row_range) = calc_px_siz(
                 parent_size,
                 &self.template_columns,
-                self.gap_columns,
+                &self.gap_columns,
                 &self.template_rows,
-                self.gap_rows,
+                &self.gap_rows,
                 ctx,
             );
 
@@ -417,42 +415,27 @@ fn interpolate<T: Float>(p: Range2D<T>, v: Range2D<T>, x: Range2D<T>) -> Range2D
 /// returns ([[column_start, column_end]; num_columns], [[row_start, row_end]; num_rows])
 fn calc_px_siz(
     parent_size: [Option<f32>; 2],
-    template_columns: &[DivSize],
-    column_gap: DivSize,
-    template_rows: &[DivSize],
-    row_gap: DivSize,
+    template_columns: &[Size],
+    column_gap: &Size,
+    template_rows: &[Size],
+    row_gap: &Size,
     context: &WidgetContext,
 ) -> (Vec<[f32; 2]>, Vec<[f32; 2]>) {
-    // convert to standard size
-
-    let std_template_columns = template_columns
-        .iter()
-        .map(|size| size.to_std_div_size(parent_size[0], context))
-        .collect::<Vec<_>>();
-
-    let std_template_rows = template_rows
-        .iter()
-        .map(|size| size.to_std_div_size(parent_size[1], context))
-        .collect::<Vec<_>>();
-
-    let std_column_gap = column_gap.to_std_div_size(parent_size[0], context);
-    let std_row_gap = row_gap.to_std_div_size(parent_size[1], context);
-
     // sum up pixels and grows
 
-    let (column_px_sum, column_grow_sum) = std_template_columns
+    let (column_px_sum, column_grow_sum) = template_columns
         .iter()
-        .chain([std_column_gap].iter())
+        .chain(std::iter::once(column_gap))
         .fold((0.0, 0.0), |(sum, grow_sum), size| match size {
-            StdDivSize::Pixel(px) => (sum + px, grow_sum),
-            StdDivSize::Grow(grow) => (sum, grow_sum + grow),
+            Size::Size(f) => (sum + f(parent_size[0], context), grow_sum),
+            Size::Grow(f) => (sum, grow_sum + f(parent_size[0], context)),
         });
 
-    let (row_px_sum, row_grow_sum) = std_template_rows.iter().chain([std_row_gap].iter()).fold(
+    let (row_px_sum, row_grow_sum) = template_rows.iter().chain(std::iter::once(row_gap)).fold(
         (0.0, 0.0),
         |(sum, grow_sum), size| match size {
-            StdDivSize::Pixel(px) => (sum + px, grow_sum),
-            StdDivSize::Grow(grow) => (sum, grow_sum + grow),
+            Size::Size(f) => (sum + f(parent_size[1], context), grow_sum),
+            Size::Grow(f) => (sum, grow_sum + f(parent_size[1], context)),
         },
     );
 
@@ -474,20 +457,19 @@ fn calc_px_siz(
 
     // column
 
-    let mut column_accumulate_template: Vec<[f32; 2]> =
-        Vec::with_capacity(std_template_columns.len());
+    let mut column_accumulate_template: Vec<[f32; 2]> = Vec::with_capacity(template_columns.len());
     let mut column_accumulate = 0.0;
 
-    let column_gap = match std_column_gap {
-        StdDivSize::Pixel(px) => px,
-        StdDivSize::Grow(grow) => column_px_per_grow * grow,
+    let column_gap = match column_gap {
+        Size::Size(f) => f(parent_size[0], context),
+        Size::Grow(f) => column_px_per_grow * f(parent_size[0], context),
     };
 
-    for size in std_template_columns {
+    for size in template_columns {
         let start = column_accumulate;
         let end = match size {
-            StdDivSize::Pixel(px) => start + px,
-            StdDivSize::Grow(grow) => start + column_px_per_grow * grow,
+            Size::Size(f) => start + f(parent_size[0], context),
+            Size::Grow(f) => start + column_px_per_grow * f(parent_size[0], context),
         };
 
         column_accumulate_template.push([start, end]);
@@ -497,19 +479,19 @@ fn calc_px_siz(
 
     // row
 
-    let mut row_accumulate_template: Vec<[f32; 2]> = Vec::with_capacity(std_template_rows.len());
+    let mut row_accumulate_template: Vec<[f32; 2]> = Vec::with_capacity(template_rows.len());
     let mut row_accumulate = 0.0;
 
-    let row_gap = match std_row_gap {
-        StdDivSize::Pixel(px) => px,
-        StdDivSize::Grow(grow) => row_px_per_grow * grow,
+    let row_gap = match row_gap {
+        Size::Size(f) => f(parent_size[1], context),
+        Size::Grow(f) => row_px_per_grow * f(parent_size[1], context),
     };
 
-    for size in std_template_rows {
+    for size in template_rows {
         let start = row_accumulate;
         let end = match size {
-            StdDivSize::Pixel(px) => start + px,
-            StdDivSize::Grow(grow) => start + row_px_per_grow * grow,
+            Size::Size(f) => start + f(parent_size[1], context),
+            Size::Grow(f) => start + row_px_per_grow * f(parent_size[1], context),
         };
 
         row_accumulate_template.push([start, end]);
