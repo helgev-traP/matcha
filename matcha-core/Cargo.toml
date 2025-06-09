@@ -32,3 +32,4 @@ rand = { workspace = true }
 bitflags = { workspace = true }
 num = { workspace = true }
 fxhash = { workspace = true }
+lru = { workspace = true }

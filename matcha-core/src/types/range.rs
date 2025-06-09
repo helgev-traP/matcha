@@ -139,11 +139,11 @@ impl<T: Float> Range2D<T> {
         self.y[1]
     }
 
-    pub const fn upper_left(&self) -> [T; 2] {
+    pub const fn min_point(&self) -> [T; 2] {
         [self.x[0], self.y[0]]
     }
 
-    pub const fn lower_right(&self) -> [T; 2] {
+    pub const fn max_point(&self) -> [T; 2] {
         [self.x[1], self.y[1]]
     }
 

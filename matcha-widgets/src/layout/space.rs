@@ -125,12 +125,7 @@ impl<T: Send + 'static> Widget<T> for SpaceNode {
     }
 
     // render
-    fn render(
-        &mut self,
-        _: [Option<f32>; 2],
-        _: Background,
-        _: &WidgetContext,
-    ) -> Vec<Object> {
+    fn render(&mut self, _: [Option<f32>; 2], _: Background, _: &WidgetContext) -> Vec<Object> {
         vec![]
     }
 }

@@ -1,5 +1,8 @@
 use crate::{context::WidgetContext, ui::Object};
 
+pub mod texture_copy;
+pub use texture_copy::TextureCopy;
+
 mod texture_color_renderer;
 use texture_color_renderer::TextureObjectRenderer;
 mod vertex_color_renderer;
@@ -102,7 +105,12 @@ impl PrincipleRenderer {
                     view: destination_view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.0,
+                            g: 0.0,
+                            b: 0.0,
+                            a: 0.0,
+                        }),
                         store: wgpu::StoreOp::Store,
                     },
                 })],

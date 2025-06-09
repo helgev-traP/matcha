@@ -57,8 +57,11 @@ impl GpuContext<'_> {
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: None,
-                    required_features: wgpu::Features::empty(),
-                    required_limits: wgpu::Limits::default(),
+                    required_features: wgpu::Features::PUSH_CONSTANTS,
+                    required_limits: wgpu::Limits {
+                        max_push_constant_size: 128,
+                        ..wgpu::Limits::downlevel_defaults()
+                    },
                     memory_hints: wgpu::MemoryHints::default(),
                 },
                 None,
@@ -119,31 +122,31 @@ impl GpuContext<'_> {
 }
 
 impl GpuContext<'_> {
-    pub fn widget_context(&self, font_size: f32) -> WidgetContext {
+    pub const fn widget_context(&self, font_size: f32) -> WidgetContext {
         WidgetContext::new(self, font_size)
     }
 
-    pub fn common_resource(&self) -> &CommonResource {
+    pub const fn common_resource(&self) -> &CommonResource {
         &self.common_resource
     }
 
-    pub fn device(&self) -> &wgpu::Device {
+    pub const fn device(&self) -> &wgpu::Device {
         &self.device
     }
 
-    pub fn queue(&self) -> &wgpu::Queue {
+    pub const fn queue(&self) -> &wgpu::Queue {
         &self.queue
     }
 
-    pub fn get_config(&self) -> &wgpu::SurfaceConfiguration {
+    pub const fn get_config(&self) -> &wgpu::SurfaceConfiguration {
         &self.config
     }
 
-    pub fn surface_format(&self) -> wgpu::TextureFormat {
+    pub const fn surface_format(&self) -> wgpu::TextureFormat {
         self.surface_format
     }
 
-    pub fn texture_format(&self) -> wgpu::TextureFormat {
+    pub const fn texture_format(&self) -> wgpu::TextureFormat {
         self.texture_format
     }
 
@@ -151,7 +154,7 @@ impl GpuContext<'_> {
         self.winit_window.scale_factor()
     }
 
-    pub fn viewport_size(&self) -> [u32; 2] {
+    pub const fn viewport_size(&self) -> [u32; 2] {
         // let size = self.winit_window.inner_size();
         [self.config.width, self.config.height]
     }

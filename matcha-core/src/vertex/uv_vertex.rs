@@ -35,10 +35,7 @@ impl UvVertex {
         let position = transform.transform_point(&self.position);
         let uv = self.uv;
 
-        UvVertex {
-            position,
-            uv,
-        }
+        UvVertex { position, uv }
     }
 }
 

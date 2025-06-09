@@ -1,4 +1,4 @@
-use std::sync::{atomic::AtomicBool, Arc};
+use std::sync::{Arc, atomic::AtomicBool};
 
 pub fn create_observer_ch() -> (ObserverSender, ObserverReceiver) {
     let flag = Arc::new(AtomicBool::new(false));
@@ -86,9 +86,9 @@ impl Observer {
     }
 
     pub fn is_updated(&mut self) -> bool {
-        self.receivers.iter_mut().any(|receiver| {
-            receiver.is_updated()
-        })
+        self.receivers
+            .iter_mut()
+            .any(|receiver| receiver.is_updated())
     }
 }
 

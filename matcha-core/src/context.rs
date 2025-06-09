@@ -6,7 +6,7 @@ pub struct WidgetContext<'a> {
 }
 
 impl<'a> WidgetContext<'a> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         global_context: &'a super::window::gpu_context::GpuContext,
         font_size: f32,
     ) -> Self {
@@ -17,11 +17,11 @@ impl<'a> WidgetContext<'a> {
         }
     }
 
-    pub fn device(&self) -> &wgpu::Device {
+    pub const fn device(&self) -> &wgpu::Device {
         self.global_context.device()
     }
 
-    pub fn queue(&self) -> &wgpu::Queue {
+    pub const fn queue(&self) -> &wgpu::Queue {
         self.global_context.queue()
     }
 
@@ -29,19 +29,19 @@ impl<'a> WidgetContext<'a> {
         self.global_context
             .device()
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Widget Context Command Encoder"),
+                label: Some("Command Encoder created by WidgetContext"),
             })
     }
 
-    pub fn common_resource(&self) -> &super::common_resource::CommonResource {
+    pub const fn common_resource(&self) -> &super::common_resource::CommonResource {
         self.global_context.common_resource()
     }
 
-    pub fn surface_format(&self) -> wgpu::TextureFormat {
+    pub const fn surface_format(&self) -> wgpu::TextureFormat {
         self.global_context.surface_format()
     }
 
-    pub fn texture_format(&self) -> wgpu::TextureFormat {
+    pub const fn texture_format(&self) -> wgpu::TextureFormat {
         self.global_context.texture_format()
     }
 
@@ -49,23 +49,23 @@ impl<'a> WidgetContext<'a> {
         self.global_context.dpi()
     }
 
-    pub fn viewport_size(&self) -> [u32; 2] {
+    pub const fn viewport_size(&self) -> [u32; 2] {
         self.global_context.viewport_size()
     }
 }
 
 impl WidgetContext<'_> {
-    pub fn font_size(&self) -> f32 {
+    pub const fn font_size(&self) -> f32 {
         self.font_size
     }
 
-    pub fn root_font_size(&self) -> f32 {
+    pub const fn root_font_size(&self) -> f32 {
         self.root_font_size
     }
 }
 
 impl WidgetContext<'_> {
-    pub fn with_font_size(&self, font_size: f32) -> Self {
+    pub const fn with_font_size(&self, font_size: f32) -> Self {
         Self {
             global_context: self.global_context,
             root_font_size: self.root_font_size,

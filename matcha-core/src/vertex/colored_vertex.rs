@@ -62,9 +62,7 @@ impl ColorMesh {
         }
     }
 
-    pub fn integrate_all(
-        meshes: Vec<ColorMesh>,
-    ) -> Self {
+    pub fn integrate_all(meshes: Vec<ColorMesh>) -> Self {
         let mut new_mesh = Self::new();
         for mut mesh in meshes {
             new_mesh.mesh_integrate(&mut mesh);

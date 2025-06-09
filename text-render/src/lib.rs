@@ -1,7 +1,7 @@
 pub mod cache_atlas;
+pub mod error;
 pub mod recursive_atlas;
 pub mod text;
-pub mod error;
 
 mod keys;
 

@@ -1,5 +1,5 @@
-use nalgebra::Point3;
 use crate::types::range::Range2D;
+use nalgebra::Point3;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
