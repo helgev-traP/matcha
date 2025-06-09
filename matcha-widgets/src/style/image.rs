@@ -1,10 +1,11 @@
 use std::{hash::Hasher, sync::Arc};
 
 use dashmap::DashMap;
+use image::GenericImageView;
 use matcha_core::{
     context::WidgetContext,
     device,
-    types::{cache, range::Range2D},
+    types::{cache, color, range::Range2D},
     ui::Style,
     vertex::UvVertex,
 };
@@ -13,7 +14,7 @@ use matcha_core::{
 
 #[derive(Default)]
 pub struct ImageCache {
-    map: DashMap<ImageCacheKey, ImageCacheData, fxhash::FxBuildHasher>,
+    map: DashMap<ImageCacheKey, Option<ImageCacheData>, fxhash::FxBuildHasher>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -25,17 +26,17 @@ enum ImageCacheKey {
 }
 
 struct ImageCacheData {
-    /// The image data
-    data: Option<image::ImageBuffer<image::Rgba<u8>, Vec<u8>>>,
-    texture: Option<wgpu::Texture>,
+    data: image::DynamicImage,
+    color_type: image::ColorType,
+    texture: wgpu::Texture,
 }
 
-// MARK: Image
+// MARK: Image Construct
 
 type SizeFn = dyn for<'a> Fn([f32; 2], &'a WidgetContext) -> [f32; 2] + Send + Sync + 'static;
 
 pub struct Image {
-    image: Option<ImageSource>,
+    image: ImageSource,
     size: Arc<SizeFn>,
     offset: Arc<SizeFn>,
 }
@@ -43,24 +44,14 @@ pub struct Image {
 #[derive(Clone)]
 enum ImageSource {
     Path(String),
-    Data { data: &'static [u8], hash: u64 },
+    Slice { data: &'static [u8], hash: u64 },
+    Vec { data: Vec<u8>, hash: u64 },
 }
 
 impl Image {
-    pub fn new_from_path(path: &str) -> Self {
+    pub fn new(source: impl IntoSource) -> Self {
         Self {
-            image: Some(ImageSource::Path(path.to_string())),
-            size: Arc::new(|size, _| size),
-            offset: Arc::new(|_, _| [0.0, 0.0]),
-        }
-    }
-
-    pub fn new_from_data(data: &'static [u8]) -> Self {
-        Self {
-            image: Some(ImageSource::Data {
-                data,
-                hash: hash_data(data),
-            }),
+            image: source.into_source(),
             size: Arc::new(|size, _| size),
             offset: Arc::new(|_, _| [0.0, 0.0]),
         }
@@ -75,16 +66,40 @@ impl Image {
     }
 }
 
-fn hash_data(data: &[u8]) -> u64 {
-    let mut hasher = fxhash::FxHasher::default();
-    hasher.write(data);
-    hasher.finish()
+trait IntoSource {
+    fn into_source(self) -> ImageSource;
 }
 
+impl IntoSource for &str {
+    fn into_source(self) -> ImageSource {
+        ImageSource::Path(self.to_string())
+    }
+}
+
+impl IntoSource for (&'static [u8], u64) {
+    fn into_source(self) -> ImageSource {
+        ImageSource::Slice {
+            data: self.0,
+            hash: self.1,
+        }
+    }
+}
+
+impl IntoSource for (Vec<u8>, u64) {
+    fn into_source(self) -> ImageSource {
+        ImageSource::Vec {
+            data: self.0,
+            hash: self.1,
+        }
+    }
+}
+
+// MARK: Style implementation
+
 impl Style for Image {
-    fn draw_range(&mut self, boundary: [f32; 2], ctx: &WidgetContext) -> Range2D<f32> {
-        let size = (self.size)(boundary, ctx);
-        let offset = (self.offset)(boundary, ctx);
+    fn draw_range(&mut self, boundary_size: [f32; 2], ctx: &WidgetContext) -> Range2D<f32> {
+        let size = (self.size)(boundary_size, ctx);
+        let offset = (self.offset)(boundary_size, ctx);
 
         Range2D::new_unchecked(
             [offset[0], offset[1]],
@@ -94,105 +109,190 @@ impl Style for Image {
 
     fn draw(
         &mut self,
-        boundary: [f32; 2],
-        render_pass: &wgpu::RenderPass<'_>,
-        texture_size: [u32; 2],
+        render_pass: &mut wgpu::RenderPass<'_>,
+        target_size: [u32; 2],
+        target_format: wgpu::TextureFormat,
+        boundary_size: [f32; 2],
         offset: [f32; 2],
         ctx: &WidgetContext,
     ) {
         // get cache map
-        let cache_map = ctx.common_resource().get_or_insert_default::<ImageCache>();
+        let cache_map: Arc<ImageCache> =
+            ctx.common_resource().get_or_insert_default::<ImageCache>();
 
         let key = match &self.image {
-            Some(ImageSource::Path(path)) => ImageCacheKey::Path(path.clone()),
-            Some(ImageSource::Data { data, hash }) => ImageCacheKey::Data(*hash),
-            None => return, // No image source provided
+            ImageSource::Path(path) => ImageCacheKey::Path(path.clone()),
+            ImageSource::Slice { data, hash } => ImageCacheKey::Data(*hash),
+            ImageSource::Vec { data, hash } => ImageCacheKey::Data(*hash),
         };
 
         // get or insert the image data
-        let image = cache_map.map.entry(key).or_insert_with(|| {
-            let image_data = match &self.image {
-                Some(ImageSource::Path(path)) => image::open(path).ok(),
-                Some(ImageSource::Data { data, .. }) => image::load_from_memory(data).ok(),
-                None => unreachable!(),
-            };
+        let image_cache = cache_map
+            .map
+            .entry(key)
+            .or_insert_with(|| image_data(&self.image, ctx));
 
-            let Some(image_data) = image_data else {
-                // If the image could not be loaded, return an empty cache entry
-                return ImageCacheData {
-                    data: None,
-                    texture: None,
-                };
-            };
+        if let Some(image_cache) = &image_cache.value() {
+            // render
 
-            let image_size = image::GenericImageView::dimensions(&image_data);
-            let image_rgba = image_data.into_rgba8();
+            let texture_offset = offset;
+            let draw_range = self.draw_range(boundary_size, ctx);
+            let relative_position = draw_range.slide(texture_offset);
+            let min_point = relative_position.min_point();
+            let max_point = relative_position.max_point();
 
-            // create texture and upload image data
+            let texture_copy_renderer = ctx
+                .common_resource()
+                .get_or_insert_default::<matcha_core::renderer::TextureCopy>();
 
-            let device = ctx.device();
-            let queue = ctx.queue();
-
-            let texture = device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("Image Texture"),
-                size: wgpu::Extent3d {
-                    width: image_size.0,
-                    height: image_size.1,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: ctx.texture_format(),
-                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                view_formats: &[],
-            });
-
-            queue.write_texture(
-                wgpu::TexelCopyTextureInfo {
-                    texture: &texture,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                image_rgba.as_raw(),
-                wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(4 * image_size.0),
-                    rows_per_image: None,
-                },
-                wgpu::Extent3d {
-                    width: image_size.0,
-                    height: image_size.1,
-                    depth_or_array_layers: 1,
-                },
+            texture_copy_renderer.copy(
+                render_pass,
+                target_size,
+                target_format,
+                &image_cache.texture.create_view(&Default::default()),
+                [min_point, min_point],
+                Some(color_transform(image_cache.color_type)),
+                ctx,
             );
 
-            ImageCacheData {
-                data: Option::Some(image_rgba),
-                texture: Some(texture),
-            }
-        });
+            todo!("render to texture");
+        }
+    }
+}
 
-        // render
+fn image_data(image_source: &ImageSource, ctx: &WidgetContext) -> Option<ImageCacheData> {
+    // load the image from the source
 
-        let texture_offset = offset;
-        let draw_range = self.draw_range(boundary, ctx);
-        let relative_position = draw_range.slide(texture_offset);
-        let relative_position_x = relative_position.x_range();
-        let relative_position_y = relative_position.y_range();
+    let dynamic_image = match image_source {
+        ImageSource::Path(path) => image::open(path).ok(),
+        ImageSource::Slice { data, .. } => image::load_from_memory(data).ok(),
+        ImageSource::Vec { data, .. } => image::load_from_memory(data).ok(),
+    };
 
-        let vertices = [
-            UvVertex {
-                position: [relative_position_x[0], relative_position_y[0], 0.0].into(),
-                uv: [0.0, 0.0].into(),
-            },
-            UvVertex {
-                position: [relative_position_x[0], relative_position_y[1], 0.0].into(),
-                uv: [0.0, 1.0].into(),
-            },
-        ];
+    let Some(dynamic_image) = dynamic_image else {
+        // If the image could not be loaded, return an empty cache entry
+        return None;
+    };
 
-        todo!("render to texture");
+    // Create a texture and upload image data
+
+    match dynamic_image.color() {
+        image::ColorType::L8 => make_cache(dynamic_image, wgpu::TextureFormat::R8Snorm, ctx),
+        image::ColorType::L16 => make_cache(dynamic_image, wgpu::TextureFormat::R16Snorm, ctx),
+        image::ColorType::La8 => make_cache(dynamic_image, wgpu::TextureFormat::Rg8Snorm, ctx),
+        image::ColorType::La16 => make_cache(dynamic_image, wgpu::TextureFormat::Rg16Snorm, ctx),
+        image::ColorType::Rgb8 => {
+            // Convert to RGBA8 because wgpu do not support RGB8 format
+            let image = image::DynamicImage::ImageRgba8(dynamic_image.to_rgba8());
+            make_cache(image, wgpu::TextureFormat::Rgba8Unorm, ctx)
+        }
+        image::ColorType::Rgb16 => {
+            // Convert to RGBA16 because wgpu do not support RGB16 format
+            let image = image::DynamicImage::ImageRgba16(dynamic_image.to_rgba16());
+            make_cache(image, wgpu::TextureFormat::Rgba16Unorm, ctx)
+        }
+        image::ColorType::Rgba8 => make_cache(dynamic_image, wgpu::TextureFormat::Rgba8Unorm, ctx),
+        image::ColorType::Rgba16 => {
+            make_cache(dynamic_image, wgpu::TextureFormat::Rgba16Unorm, ctx)
+        }
+        image::ColorType::Rgb32F => {
+            // Convert to RGBA32F because wgpu do not support RGB32F format
+            let image = image::DynamicImage::ImageRgba32F(dynamic_image.to_rgba32f());
+            make_cache(image, wgpu::TextureFormat::Rgba32Float, ctx)
+        }
+        image::ColorType::Rgba32F => {
+            make_cache(dynamic_image, wgpu::TextureFormat::Rgba32Float, ctx)
+        }
+        _ => unimplemented!("Unsupported image color type: {:?}", dynamic_image.color()),
+    }
+    .into()
+}
+
+fn make_cache(
+    image: image::DynamicImage,
+    format: wgpu::TextureFormat,
+    ctx: &WidgetContext,
+) -> ImageCacheData {
+    let (width, height) = image.dimensions();
+    let data = image.as_bytes();
+
+    let device = ctx.device();
+    let queue = ctx.queue();
+
+    // create texture
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("Image Texture"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        data,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(format.target_pixel_byte_cost().unwrap() * width),
+            rows_per_image: None,
+        },
+        wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+    );
+
+    let color_type = image.color();
+
+    ImageCacheData {
+        data: image,
+        color_type,
+        texture,
+    }
+}
+
+#[rustfmt::skip]
+fn color_transform(color_type: image::ColorType) -> nalgebra::Matrix4<f32> {
+    match color_type {
+        // stored as r
+        image::ColorType::L8 | image::ColorType::L16 => nalgebra::Matrix4::new(
+            1.0, 0.0, 0.0, 0.0,
+            1.0, 0.0, 0.0, 0.0,
+            1.0, 0.0, 0.0, 0.0,
+            0.0, 0.0, 0.0, 0.0,
+        ),
+        // stored as rg
+        image::ColorType::La8 | image::ColorType::La16 => nalgebra::Matrix4::new(
+            1.0, 0.0, 0.0, 0.0,
+            1.0, 0.0, 0.0, 0.0,
+            1.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 0.0,
+        ),
+        // stored as rgba
+        image::ColorType::Rgb8
+        | image::ColorType::Rgb16
+        | image::ColorType::Rgb32F
+        | image::ColorType::Rgba8
+        | image::ColorType::Rgba16
+        | image::ColorType::Rgba32F => nalgebra::Matrix4::new(
+                1.0, 0.0, 0.0, 0.0,
+                0.0, 1.0, 0.0, 0.0,
+                0.0, 0.0, 1.0, 0.0,
+                0.0, 0.0, 0.0, 1.0,
+            ),
+        _ => todo!(),
     }
 }

@@ -1,6 +1,6 @@
 use matcha_core::{
     context::WidgetContext,
-    principle_renderer::PrincipleRenderer,
+    renderer::PrincipleRenderer,
     vertex::{BoxDescriptor, BoxMesh, ColorVertex, box_mesh},
 };
 

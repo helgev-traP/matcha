@@ -1,10 +1,10 @@
 use std::any::Any;
 
 use matcha_core::{
+    common_resource::CommonResource,
     context::WidgetContext,
     events::Event,
     observer::Observer,
-    common_resource::CommonResource,
     types::range::{CoverRange, Range2D},
     ui::{Background, Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
 };
@@ -131,6 +131,7 @@ impl<T: Send + 'static> Widget<T> for TemplateNode {
     // render
     fn render(
         &mut self,
+        render_pass: &mut wgpu::RenderPass<'_>,
         parent_size: [Option<f32>; 2],
         background: Background,
         ctx: &WidgetContext,

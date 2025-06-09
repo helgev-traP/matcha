@@ -1,8 +1,9 @@
 use std::{fmt::Debug, sync::Arc};
 
+use nalgebra::base;
 use wgpu::util::DeviceExt;
 
-use crate::principle_renderer::PrincipleRenderer;
+use crate::renderer::PrincipleRenderer;
 
 use super::{
     component::Component,
@@ -44,7 +45,6 @@ pub struct Window<
     // --- rendering context ---
     winit_window: Option<Arc<winit::window::Window>>,
     gpu_state: Option<gpu_context::GpuContext<'a>>,
-    background_texture: Option<wgpu::Texture>,
 
     // --- UI context ---
     root_component: Component<Model, Message, Response, IR>,
@@ -89,7 +89,6 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
             base_color: Color::default(),
             winit_window: None,
             gpu_state: None,
-            background_texture: None,
             root_component: component,
             root_widget: None,
             observer: Observer::default(),
@@ -158,57 +157,59 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
         let viewport_size = gpu_state.viewport_size();
         let viewport_size = [viewport_size[0] as f32, viewport_size[1] as f32];
 
-        // prepare background color (1x1) texture
-        let background_texture = self.background_texture.get_or_insert_with(|| {
-            let device = gpu_state.device();
-            let queue = gpu_state.queue();
-
-            device.create_texture_with_data(
-                queue,
-                &wgpu::TextureDescriptor {
-                    size: wgpu::Extent3d {
-                        width: 1,
-                        height: 1,
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: wgpu::TextureFormat::Rgba8UnormSrgb,
-                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST,
-                    label: None,
-                    view_formats: &[],
-                },
-                wgpu::util::TextureDataOrder::MipMajor,
-                &self.base_color.to_rgba_u8(),
-            )
-        });
-        let background_view =
-            background_texture.create_view(&wgpu::TextureViewDescriptor::default());
-
         // start benchmark
         benchmarker.with_benchmark(|| {
             let ctx = gpu_state.widget_context(self.default_font_size);
 
-            let render_result = root_widget.render(
-                [Some(viewport_size[0]), Some(viewport_size[1])],
-                Background::new(&background_view, [0.0, 0.0]),
-                &ctx,
-            );
+            let mut command_encoder = ctx.make_encoder();
 
-            gpu_state
-                .common_resource()
-                .get_or_insert_with::<PrincipleRenderer, _>(|| {
-                    PrincipleRenderer::new(&ctx)
-                })
-                .render_to_surface(
-                    gpu_state.device(),
-                    gpu_state.queue(),
-                    &surface_view,
-                    viewport_size,
-                    render_result,
-                    None,
+            {
+                let base_color = self.base_color.to_rgba_f64();
+                let mut render_pass =
+                    command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("Window Render Pass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: &surface_view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(wgpu::Color {
+                                    r: base_color[0],
+                                    g: base_color[1],
+                                    b: base_color[2],
+                                    a: base_color[3],
+                                }),
+                                store: wgpu::StoreOp::Store,
+                            },
+                        })],
+                        depth_stencil_attachment: None,
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                    });
+
+                let render_result = root_widget.render(
+                    &mut render_pass,
+                    [Some(viewport_size[0]), Some(viewport_size[1])],
+                    Background::new(&surface_view, [0.0, 0.0]),
+                    &ctx,
                 );
+
+                gpu_state
+                    .common_resource()
+                    .get_or_insert_with::<PrincipleRenderer, _>(|| PrincipleRenderer::new(&ctx))
+                    .render_to_surface(
+                        gpu_state.device(),
+                        gpu_state.queue(),
+                        &surface_view,
+                        viewport_size,
+                        render_result,
+                        None,
+                    );
+            }
+
+            // submit command encoder
+            gpu_state
+                .queue()
+                .submit(std::iter::once(command_encoder.finish()));
         });
 
         // present to screen

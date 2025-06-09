@@ -1,10 +1,10 @@
 use std::{any::Any, sync::Arc};
 
 use matcha_core::{
+    common_resource::CommonResource,
     context::WidgetContext,
     events::Event,
     observer::Observer,
-    common_resource::{CommonResource},
     types::range::{CoverRange, Range2D},
     ui::{Background, Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
 };

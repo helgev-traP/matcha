@@ -12,7 +12,7 @@ pub mod observer;
 pub mod ui;
 
 // renderers
-pub mod principle_renderer;
+pub mod renderer;
 
 // types
 pub mod types;

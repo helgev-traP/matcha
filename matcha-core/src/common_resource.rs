@@ -10,13 +10,13 @@ use parking_lot::Mutex;
 
 #[derive(Default)]
 pub struct CommonResource {
-    map: Mutex<FxHashMap<TypeId, Arc<dyn Any + Send + Sync>>>,
+    resource: Mutex<FxHashMap<TypeId, Arc<dyn Any + Send + Sync>>>,
 }
 
 impl CommonResource {
     pub fn new() -> Self {
         Self {
-            map: Mutex::new(FxHashMap::default()),
+            resource: Mutex::new(FxHashMap::default()),
         }
     }
 
@@ -47,7 +47,7 @@ impl CommonResource {
         T: Send + Sync + 'static,
         F: FnOnce() -> T,
     {
-        let mut map = self.map.lock();
+        let mut map = self.resource.lock();
 
         if let Some(renderer) = map.get(&TypeId::of::<T>()) {
             let renderer = Arc::clone(renderer);

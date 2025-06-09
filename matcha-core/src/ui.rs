@@ -1,5 +1,7 @@
 use std::{any::Any, sync::Arc};
 
+use wgpu::core::command;
+
 use crate::types::range::Range2D;
 
 use super::{
@@ -22,12 +24,15 @@ pub trait Dom<T>: Sync + Any {
 // Style
 
 pub trait Style {
-    fn draw_range(&mut self, boundary: [f32; 2], ctx: &WidgetContext) -> Range2D<f32>;
+    /// The y-axis in `Range2D` is points upward.
+    fn draw_range(&mut self, boundary_size: [f32; 2], ctx: &WidgetContext) -> Range2D<f32>;
+    /// The y-axis of `offset` is points upward.
     fn draw(
         &mut self,
-        boundary: [f32; 2],
-        render_pass: &wgpu::RenderPass<'_>,
+        render_pass: &mut wgpu::RenderPass<'_>,
         texture_size: [u32; 2],
+        texture_format: wgpu::TextureFormat,
+        boundary_size: [f32; 2],
         offset: [f32; 2],
         ctx: &WidgetContext,
     );
@@ -91,6 +96,7 @@ pub trait Widget<T>: Send {
 
     fn render(
         &mut self,
+        render_pass: &mut wgpu::RenderPass<'_>,
         parent_size: [Option<f32>; 2],
         background: Background,
         ctx: &WidgetContext,
