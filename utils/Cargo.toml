@@ -1,0 +1,8 @@
+[package]
+name = "utils"
+edition = "2024"
+version.workspace = true
+
+[dependencies]
+lru = { workspace = true}
+parking_lot = { workspace = true }

@@ -5,6 +5,9 @@ edition = "2024"
 publish = false
 
 [dependencies]
+# self
+utils = { workspace = true }
+
 # async runtime, utility
 tokio = { workspace = true }
 async-trait = { workspace = true }

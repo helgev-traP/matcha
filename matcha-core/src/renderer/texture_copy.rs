@@ -19,7 +19,8 @@ push constants:
 /// with offset and size parameters.
 #[derive(Default)]
 pub struct TextureCopy {
-    inner: Option<TextureCopyImpl>,
+    // inner: Option<TextureCopyImpl>,
+    inner: utils::rwoption::RwOption<TextureCopyImpl>,
 }
 
 const PIPELINE_CACHE_SIZE: NonZero<usize> = NonZero::new(4).unwrap();
