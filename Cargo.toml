@@ -1,5 +1,5 @@
 [workspace]
-members = ["main", "matcha-core", "matcha-widgets", "text-render"]
+members = ["main", "matcha-core", "matcha-widgets", "text-render", "utils"]
 
 [workspace.package]
 version = "0.0.5"
@@ -10,6 +10,7 @@ matcha = { path = "main" }
 matcha-core = { path = "matcha-core" }
 matcha-widgets = { path = "matcha-widgets" }
 text-render = { path = "text-render" }
+utils = { path = "utils" }
 
 # async runtime, utilities
 tokio = { version = "1", features = ["full"] }
