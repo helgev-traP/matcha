@@ -11,6 +11,8 @@ struct PushConstants {
     position: array<vec2<f32>, 2>,
     // color transform matrix (rgba)
     color_transform: mat4x4<f32>,
+    // color offset (rgba)
+    color_offset: vec4<f32>,
 };
 var<push_constant> pc: PushConstants;
 
@@ -63,5 +65,5 @@ fn fs_main(
 ) -> @location(0) vec4<f32> {
     let color = textureSample(copy_source, texture_sampler, tex_coords);
     // Apply color transform
-    return pc.color_transform * color.rgba;
+    return pc.color_transform * color.rgba + pc.color_offset;
 }

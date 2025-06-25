@@ -1,19 +1,13 @@
-use std::{hash::Hasher, sync::Arc};
+use std::sync::Arc;
 
 use dashmap::DashMap;
 use image::GenericImageView;
-use matcha_core::{
-    context::WidgetContext,
-    device,
-    types::{cache, color, range::Range2D},
-    ui::Style,
-    vertex::UvVertex,
-};
+use matcha_core::{context::WidgetContext, types::range::Range2D, ui::Style};
 
 // MARK: Cache
 
 #[derive(Default)]
-pub struct ImageCache {
+struct ImageCache {
     map: DashMap<ImageCacheKey, Option<ImageCacheData>, fxhash::FxBuildHasher>,
 }
 
@@ -33,7 +27,8 @@ struct ImageCacheData {
 
 // MARK: Image Construct
 
-type SizeFn = dyn for<'a> Fn([f32; 2], &'a WidgetContext) -> [f32; 2] + Send + Sync + 'static;
+type SizeFn =
+    dyn for<'a> Fn([f32; 2], [f32; 2], &'a WidgetContext) -> [f32; 2] + Send + Sync + 'static;
 
 pub struct Image {
     image: ImageSource,
@@ -42,41 +37,50 @@ pub struct Image {
 }
 
 #[derive(Clone)]
-enum ImageSource {
+pub enum ImageSource {
     Path(String),
     Slice { data: &'static [u8], hash: u64 },
     Vec { data: Vec<u8>, hash: u64 },
 }
 
 impl Image {
-    pub fn new(source: impl IntoSource) -> Self {
+    pub fn new(source: impl IntoImageSource) -> Self {
         Self {
             image: source.into_source(),
-            size: Arc::new(|size, _| size),
-            offset: Arc::new(|_, _| [0.0, 0.0]),
+            size: Arc::new(|_, size, _| size),
+            offset: Arc::new(|_, _, _| [0.0, 0.0]),
         }
     }
 
     pub fn size<F>(mut self, size: F) -> Self
     where
-        F: Fn([f32; 2], &WidgetContext) -> [f32; 2] + Send + Sync + 'static,
+        F: Fn([f32; 2], [f32; 2], &WidgetContext) -> [f32; 2] + Send + Sync + 'static,
     {
         self.size = Arc::new(size);
         self
     }
+
+    fn key(&self) -> ImageCacheKey {
+        match &self.image {
+            ImageSource::Path(path) => ImageCacheKey::Path(path.clone()),
+            ImageSource::Slice { hash, .. } | ImageSource::Vec { hash, .. } => {
+                ImageCacheKey::Data(*hash)
+            }
+        }
+    }
 }
 
-trait IntoSource {
+pub trait IntoImageSource {
     fn into_source(self) -> ImageSource;
 }
 
-impl IntoSource for &str {
+impl IntoImageSource for &str {
     fn into_source(self) -> ImageSource {
         ImageSource::Path(self.to_string())
     }
 }
 
-impl IntoSource for (&'static [u8], u64) {
+impl IntoImageSource for (&'static [u8], u64) {
     fn into_source(self) -> ImageSource {
         ImageSource::Slice {
             data: self.0,
@@ -85,7 +89,7 @@ impl IntoSource for (&'static [u8], u64) {
     }
 }
 
-impl IntoSource for (Vec<u8>, u64) {
+impl IntoImageSource for (Vec<u8>, u64) {
     fn into_source(self) -> ImageSource {
         ImageSource::Vec {
             data: self.0,
@@ -97,18 +101,37 @@ impl IntoSource for (Vec<u8>, u64) {
 // MARK: Style implementation
 
 impl Style for Image {
-    fn draw_range(&mut self, boundary_size: [f32; 2], ctx: &WidgetContext) -> Range2D<f32> {
-        let size = (self.size)(boundary_size, ctx);
-        let offset = (self.offset)(boundary_size, ctx);
+    fn is_inside(&self, position: [f32; 2], boundary_size: [f32; 2], ctx: &WidgetContext) -> bool {
+        let draw_range = self.draw_range(boundary_size, ctx);
+        draw_range.contains(position)
+    }
+
+    fn draw_range(&self, boundary_size: [f32; 2], ctx: &WidgetContext) -> Range2D<f32> {
+        let cache_map = ctx.common_resource().get_or_insert_default::<ImageCache>();
+        let key = self.key();
+        let image_cache = cache_map
+            .map
+            .entry(key)
+            .or_insert_with(|| image_data(&self.image, ctx));
+
+        let Some(image) = image_cache.value() else {
+            // If the image is not loaded, return an empty range
+            return Range2D::new_unchecked([0.0, 0.0], [0.0, 0.0]);
+        };
+
+        let (width, height) = image.data.dimensions();
+
+        let size = (self.size)([width as f32, height as f32], boundary_size, ctx);
+        let offset = (self.offset)([width as f32, height as f32], boundary_size, ctx);
 
         Range2D::new_unchecked(
-            [offset[0], offset[1]],
-            [size[0] + offset[0], size[1] + offset[1]],
+            [offset[0], -size[1] - offset[1]],
+            [size[0] + offset[0], -offset[1]],
         )
     }
 
     fn draw(
-        &mut self,
+        &self,
         render_pass: &mut wgpu::RenderPass<'_>,
         target_size: [u32; 2],
         target_format: wgpu::TextureFormat,
@@ -116,17 +139,8 @@ impl Style for Image {
         offset: [f32; 2],
         ctx: &WidgetContext,
     ) {
-        // get cache map
-        let cache_map: Arc<ImageCache> =
-            ctx.common_resource().get_or_insert_default::<ImageCache>();
-
-        let key = match &self.image {
-            ImageSource::Path(path) => ImageCacheKey::Path(path.clone()),
-            ImageSource::Slice { data, hash } => ImageCacheKey::Data(*hash),
-            ImageSource::Vec { data, hash } => ImageCacheKey::Data(*hash),
-        };
-
-        // get or insert the image data
+        let cache_map = ctx.common_resource().get_or_insert_default::<ImageCache>();
+        let key = self.key();
         let image_cache = cache_map
             .map
             .entry(key)
@@ -141,21 +155,24 @@ impl Style for Image {
             let min_point = relative_position.min_point();
             let max_point = relative_position.max_point();
 
-            let texture_copy_renderer = ctx
-                .common_resource()
-                .get_or_insert_default::<matcha_core::renderer::TextureCopy>();
+            let texture_copy_renderer =
+                ctx.common_resource()
+                    .get_or_insert_default::<matcha_core::renderer::texture_copy::TextureCopy>();
 
-            texture_copy_renderer.copy(
+            texture_copy_renderer.render(
                 render_pass,
-                target_size,
-                target_format,
-                &image_cache.texture.create_view(&Default::default()),
-                [min_point, min_point],
-                Some(color_transform(image_cache.color_type)),
+                matcha_core::renderer::texture_copy::TargetData {
+                    target_size,
+                    target_format,
+                },
+                matcha_core::renderer::texture_copy::RenderData {
+                    source_texture_view: &image_cache.texture.create_view(&Default::default()),
+                    source_texture_position: [min_point, max_point],
+                    color_transformation: Some(color_transform(image_cache.color_type)),
+                    color_offset: Some(color_offset(image_cache.color_type)),
+                },
                 ctx,
             );
-
-            todo!("render to texture");
         }
     }
 }
@@ -268,14 +285,16 @@ fn make_cache(
 fn color_transform(color_type: image::ColorType) -> nalgebra::Matrix4<f32> {
     match color_type {
         // stored as r
-        image::ColorType::L8 | image::ColorType::L16 => nalgebra::Matrix4::new(
+        image::ColorType::L8
+        | image::ColorType::L16 => nalgebra::Matrix4::new(
             1.0, 0.0, 0.0, 0.0,
             1.0, 0.0, 0.0, 0.0,
             1.0, 0.0, 0.0, 0.0,
             0.0, 0.0, 0.0, 0.0,
         ),
         // stored as rg
-        image::ColorType::La8 | image::ColorType::La16 => nalgebra::Matrix4::new(
+        image::ColorType::La8
+        | image::ColorType::La16 => nalgebra::Matrix4::new(
             1.0, 0.0, 0.0, 0.0,
             1.0, 0.0, 0.0, 0.0,
             1.0, 0.0, 0.0, 0.0,
@@ -288,11 +307,28 @@ fn color_transform(color_type: image::ColorType) -> nalgebra::Matrix4<f32> {
         | image::ColorType::Rgba8
         | image::ColorType::Rgba16
         | image::ColorType::Rgba32F => nalgebra::Matrix4::new(
-                1.0, 0.0, 0.0, 0.0,
-                0.0, 1.0, 0.0, 0.0,
-                0.0, 0.0, 1.0, 0.0,
-                0.0, 0.0, 0.0, 1.0,
-            ),
+            1.0, 0.0, 0.0, 0.0,
+            0.0, 1.0, 0.0, 0.0,
+            0.0, 0.0, 1.0, 0.0,
+            0.0, 0.0, 0.0, 1.0,
+        ),
+        _ => todo!(),
+    }
+}
+
+fn color_offset(color_type: image::ColorType) -> [f32; 4] {
+    match color_type {
+        // alpha is not stored, so we set it to 1.0
+        image::ColorType::L8 | image::ColorType::L16 => [0.0, 0.0, 0.0, 1.0],
+        // alpha is stored in the texture
+        image::ColorType::La8
+        | image::ColorType::La16
+        | image::ColorType::Rgb8
+        | image::ColorType::Rgb16
+        | image::ColorType::Rgb32F
+        | image::ColorType::Rgba8
+        | image::ColorType::Rgba16
+        | image::ColorType::Rgba32F => [0.0, 0.0, 0.0, 0.0],
         _ => todo!(),
     }
 }

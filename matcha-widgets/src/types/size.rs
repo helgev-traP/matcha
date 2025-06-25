@@ -2,80 +2,155 @@ use std::sync::Arc;
 
 use matcha_core::context::WidgetContext;
 
-type SizeFn = dyn for<'a> Fn(Option<f32>, &'a WidgetContext) -> f32 + Send + Sync + 'static;
+pub struct ChildSize<'a> {
+    get_size: Box<dyn FnMut() -> [f32; 2] + 'a>,
+    cached_child_size: std::cell::Cell<Option<[f32; 2]>>,
+}
 
+impl Default for ChildSize<'_> {
+    fn default() -> Self {
+        Self {
+            get_size: Box::new(|| [0.0, 0.0]),
+            cached_child_size: std::cell::Cell::new(Some([0.0, 0.0])),
+        }
+    }
+}
+
+impl<'a> ChildSize<'a> {
+    pub fn new<F>(get_size: F) -> Self
+    where
+        F: FnMut() -> [f32; 2] + 'a,
+    {
+        Self {
+            get_size: Box::new(get_size),
+            cached_child_size: std::cell::Cell::new(None),
+        }
+    }
+
+    pub fn with_size(size: [f32; 2]) -> Self {
+        Self {
+            get_size: Box::new(move || size),
+            cached_child_size: std::cell::Cell::new(Some(size)),
+        }
+    }
+}
+
+impl ChildSize<'_> {
+    pub fn get(&mut self) -> [f32; 2] {
+        if let Some(size) = self.cached_child_size.get() {
+            size
+        } else {
+            let size = (self.get_size)();
+            self.cached_child_size.set(Some(size));
+            size
+        }
+    }
+}
+
+type SizeFn = dyn Fn([Option<f32>; 2], &mut ChildSize, &WidgetContext) -> f32 + Send + Sync + 'static;
+
+/// Calculate size from parent size child size and context.
+/// `Size::Grow` will be treated as same size as parent size in widget that have only one child.
+#[derive(Clone)]
 pub enum Size {
-    /// returned value will interpret as pixel size
     Size(Arc<SizeFn>),
-    /// returned value will interpret as grow value
     Grow(Arc<SizeFn>),
 }
 
+impl Default for Size {
+    fn default() -> Self {
+        Size::parent(1.0)
+    }
+}
+
 impl Size {
+    /// Specify size in pixels.
     pub fn px(px: f32) -> Self {
-        Size::Size(Arc::new(move |_, _| px))
+        Size::Size(Arc::new(move |_, _, _| px))
     }
 
+    /// Specify size in inches.
     pub fn inch(inch: f32) -> Self {
-        Size::Size(Arc::new(move |_, ctx| inch * ctx.dpi() as f32))
+        Size::Size(Arc::new(move |_, _, ctx| inch * ctx.dpi() as f32))
     }
 
+    /// Specify size in points.
     pub fn point(point: f32) -> Self {
-        Size::Size(Arc::new(move |_, ctx| point * ctx.dpi() as f32 / 72.0))
+        Size::Size(Arc::new(move |_, _, ctx| point * ctx.dpi() as f32 / 72.0))
     }
 
+    /// Specify size in magnification of parent size.
     pub fn parent(mag: f32) -> Self {
-        Size::Size(Arc::new(move |parent_size, _| {
-            parent_size.unwrap_or(0.0) * mag
+        Size::Size(Arc::new(move |parent_size, child_size, _| {
+            parent_size[0]
+                .map(|size| size * mag)
+                .unwrap_or_else(|| child_size.get()[0])
         }))
     }
 
+    /// Specify size in magnification of font size.
     pub fn em(em: f32) -> Self {
-        Size::Size(Arc::new(move |_, ctx| em * ctx.font_size()))
+        Size::Size(Arc::new(move |_, _, ctx| em * ctx.font_size()))
     }
 
+    /// Specify size in magnification of root font size.
     pub fn rem(rem: f32) -> Self {
-        Size::Size(Arc::new(move |_, ctx| rem * ctx.root_font_size()))
+        Size::Size(Arc::new(move |_, _, ctx| rem * ctx.root_font_size()))
     }
 
+    /// Specify size in magnification of viewport width.
     pub fn vw(vw: f32) -> Self {
-        Size::Size(Arc::new(move |_, ctx| vw * ctx.viewport_size()[0] as f32))
+        Size::Size(Arc::new(move |_, _, ctx| {
+            vw * ctx.viewport_size()[0] as f32
+        }))
     }
 
+    /// Specify size in magnification of viewport height.
     pub fn vh(vh: f32) -> Self {
-        Size::Size(Arc::new(move |_, ctx| vh * ctx.viewport_size()[1] as f32))
+        Size::Size(Arc::new(move |_, _, ctx| {
+            vh * ctx.viewport_size()[1] as f32
+        }))
     }
 
+    /// Specify size in magnification of vmax.
     pub fn vmax(vmax: f32) -> Self {
-        Size::Size(Arc::new(move |_, ctx| {
+        Size::Size(Arc::new(move |_, _, ctx| {
             let viewport_size = ctx.viewport_size();
             vmax * viewport_size[0].max(viewport_size[1]) as f32
         }))
     }
 
+    /// Specify size in magnification of vmin.
     pub fn vmin(vmin: f32) -> Self {
-        Size::Size(Arc::new(move |_, ctx| {
+        Size::Size(Arc::new(move |_, _, ctx| {
             let viewport_size = ctx.viewport_size();
             vmin * viewport_size[0].min(viewport_size[1]) as f32
         }))
     }
+}
 
-    pub fn size_fn<F>(f: F) -> Self
-    where
-        F: Fn(Option<f32>, &WidgetContext) -> f32 + Send + Sync + 'static,
-    {
-        Size::Size(Arc::new(f))
+impl Size {
+    /// Specify size that grows to fill the available space.
+    /// This is used in widgets that have multiple children.
+    /// note that this will be treated as same size as parent size in widget that have only one child.
+    pub fn grow(grow: f32) -> Self {
+        Size::Grow(Arc::new(move |_, _, _| grow))
     }
 }
 
 impl Size {
-    pub fn grow(grow: f32) -> Self {
-        Size::Grow(Arc::new(move |_, _| grow))
+    /// Specify size with a custom function.
+    pub fn size_f<F>(f: F) -> Self
+    where
+        F: Fn([Option<f32>; 2], &mut ChildSize, &WidgetContext) -> f32 + Send + Sync + 'static,
+    {
+        Size::Size(Arc::new(f))
     }
 
-    pub fn grow_fn<F>(f: F) -> Self
+    /// Specify size that grows with a custom function.
+    pub fn grow_f<F>(f: F) -> Self
     where
-        F: Fn(Option<f32>, &WidgetContext) -> f32 + Send + Sync + 'static,
+        F: Fn([Option<f32>; 2], &mut ChildSize, &WidgetContext) -> f32 + Send + Sync + 'static,
     {
         Size::Grow(Arc::new(f))
     }

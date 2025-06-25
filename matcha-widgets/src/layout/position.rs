@@ -121,6 +121,9 @@ impl<T: Send + 'static> Widget<T> for PositionNode {
     // render
     fn render(
         &mut self,
+        render_pass: &mut wgpu::RenderPass<'_>,
+        target_size: [u32; 2],
+        target_format: wgpu::TextureFormat,
         parent_size: [Option<f32>; 2],
         background: Background,
         ctx: &WidgetContext,

@@ -16,22 +16,23 @@ use super::{
 
 #[async_trait::async_trait]
 pub trait Dom<T>: Sync + Any {
-    // if any dynamic widget is included in the widget tree, the second value is true.
     fn build_widget_tree(&self) -> Box<dyn Widget<T>>;
     async fn collect_observer(&self) -> Observer;
 }
 
 // Style
 
-pub trait Style {
+pub trait Style: Send + Sync {
+    /// is given position inside the shape of this style.
+    fn is_inside(&self, position: [f32; 2], boundary_size: [f32; 2], ctx: &WidgetContext) -> bool;
     /// The y-axis in `Range2D` is points upward.
-    fn draw_range(&mut self, boundary_size: [f32; 2], ctx: &WidgetContext) -> Range2D<f32>;
+    fn draw_range(&self, boundary_size: [f32; 2], ctx: &WidgetContext) -> Range2D<f32>;
     /// The y-axis of `offset` is points upward.
     fn draw(
-        &mut self,
+        &self,
         render_pass: &mut wgpu::RenderPass<'_>,
-        texture_size: [u32; 2],
-        texture_format: wgpu::TextureFormat,
+        target_size: [u32; 2],
+        target_format: wgpu::TextureFormat,
         boundary_size: [f32; 2],
         offset: [f32; 2],
         ctx: &WidgetContext,
@@ -50,7 +51,7 @@ pub trait Widget<T>: Send {
     // label
     fn label(&self) -> Option<&str>;
 
-    // for dom handling
+    // for dom handling]
     async fn update_widget_tree(
         &mut self,
         component_updated: bool,
@@ -97,6 +98,8 @@ pub trait Widget<T>: Send {
     fn render(
         &mut self,
         render_pass: &mut wgpu::RenderPass<'_>,
+        target_size: [u32; 2],
+        target_format: wgpu::TextureFormat,
         parent_size: [Option<f32>; 2],
         background: Background,
         ctx: &WidgetContext,
@@ -145,27 +148,15 @@ impl<'a> Background<'a> {
 }
 
 #[derive(Clone)]
-pub enum Object {
-    TextureColor {
-        texture: Arc<wgpu::Texture>,
-        uv_vertices: Vec<UvVertex>,
-        indices: Vec<u16>,
-        transform: nalgebra::Matrix4<f32>,
-    },
-    VertexColor {
-        vertices: Vec<ColorVertex>,
-        indices: Vec<u16>,
-        transform: nalgebra::Matrix4<f32>,
-    },
-    // and more ...?
+pub struct Object {
+    pub texture: Arc<wgpu::Texture>,
+    pub uv_vertices: Vec<UvVertex>,
+    pub indices: Vec<u16>,
+    pub transform: nalgebra::Matrix4<f32>,
 }
 
 impl Object {
     pub fn transform(&mut self, affine: nalgebra::Matrix4<f32>) {
-        match self {
-            Object::TextureColor { transform, .. } | Object::VertexColor { transform, .. } => {
-                *transform = affine * (*transform);
-            }
-        }
+        self.transform = affine * self.transform;
     }
 }

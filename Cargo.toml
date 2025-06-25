@@ -1,5 +1,5 @@
 [workspace]
-members = ["main", "matcha-core", "matcha-widgets", "text-render", "utils"]
+members = ["main", "matcha-core", "matcha-widgets", "renderer", "text-render", "utils"]
 
 [workspace.package]
 version = "0.0.5"
@@ -22,9 +22,9 @@ parking_lot = "0.12.3"
 winit = "0.30"
 
 # graphics
-wgpu = "24.0.3"
+wgpu = "24.0"
 bytemuck = { version = "1", features = ["derive"] }
-vello = "0.5.0"
+vello = "0.5"
 
 # math
 nalgebra = { version = "0.33", features = ["bytemuck"] }
@@ -33,22 +33,24 @@ nalgebra = { version = "0.33", features = ["bytemuck"] }
 image = "0.25"
 
 # font
-fontdb = "0.23.0"
-fontdue = "0.9.3"
+fontdb = "0.23"
+fontdue = "0.9"
 
 # other
-pathfinder_geometry = "0.5.1"
-cosmic-text = "0.14.2"
-rand = "0.9.1"
+rand = "0.9"
 bitflags = "2.6"
-num = "0.4.3"
-fxhash = "0.2.1"
-dashmap = "6.1.0"
-lru = "0.14.0"
+num = "0.4"
+fxhash = "0.2"
+dashmap = "6.1"
+# lru = "0.14.0"
+moka = { version = "0.12", features = ["sync"] }
 
 # interpolation crate
 # todo: maybe useful.
 # interpolation = "0.3.0"
 
 # dev-dependencies
-pollster = "0.4.0"
+pollster = "0.4"
+
+[workspace.lints.clippy]
+unwrap_used = "warn"

@@ -125,7 +125,15 @@ impl<T: Send + 'static> Widget<T> for SpaceNode {
     }
 
     // render
-    fn render(&mut self, _: [Option<f32>; 2], _: Background, _: &WidgetContext) -> Vec<Object> {
+    fn render(
+        &mut self,
+        _: &mut wgpu::RenderPass<'_>,
+        _: [u32; 2],
+        _: wgpu::TextureFormat,
+        _: [Option<f32>; 2],
+        _: Background,
+        _: &WidgetContext,
+    ) -> Vec<Object> {
         vec![]
     }
 }

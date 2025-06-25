@@ -353,7 +353,7 @@ impl<T: Send + 'static> Widget<T> for ColumnNode<T> {
         self.cache
             .as_ref()
             .map(|(_, cache)| cache.column_size)
-            .expect("unreachable!")
+            .expect("never panic!")
     }
 
     // The drawing range and the area that the widget always covers.
@@ -373,21 +373,29 @@ impl<T: Send + 'static> Widget<T> for ColumnNode<T> {
     // render
     fn render(
         &mut self,
-        // ui environment
+        render_pass: &mut wgpu::RenderPass<'_>,
+        target_size: [u32; 2],
+        target_format: wgpu::TextureFormat,
         parent_size: [Option<f32>; 2],
         background: Background,
-        // context
         ctx: &WidgetContext,
     ) -> Vec<Object> {
         // prepare cache
         self.prepare_cache(parent_size, ctx);
         // get cache
-        let (_, cache) = self.cache.as_ref().expect("unreachable!");
+        let (_, cache) = self.cache.as_ref().expect("never panic!");
 
         // render children
         let mut objects = Vec::new();
         for (item, position) in self.items.iter_mut().zip(cache.content_position.iter()) {
-            let item_objects = item.render(parent_size, background.transition(*position), ctx);
+            let item_objects = item.render(
+                render_pass,
+                target_size,
+                target_format,
+                parent_size,
+                background.transition(*position),
+                ctx,
+            );
             for mut object in item_objects {
                 object.transform(nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(
                     position[0],

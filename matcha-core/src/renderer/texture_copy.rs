@@ -1,7 +1,4 @@
-use std::num::NonZero;
-
 use crate::context::WidgetContext;
-use lru::LruCache;
 use nalgebra::Matrix4;
 use wgpu::PipelineCompilationOptions;
 
@@ -13,23 +10,34 @@ push constants:
     [f32; 2] // target texture size
     [[f32; 2]; 2] // source texture position relative to target texture. [[x_min, y_min], [x_max, y_max]]
     [[f32; 4]; 4] // color transformation matrix (optional, can be used for color adjustments)
+    [f32; 4] // color offset
 */
+
+// vertex position will be calculated as:
+// position = (position * 2.0) / target_texture_size + [-1.0, 1.0]
+
+// color will be calculated as:
+// color = color_transformation * source_color + color_offset
+
+const RANGE_TEXTURE_SIZE: u32 = std::mem::size_of::<[f32; 2]>() as u32;
+const RANGE_SRC_POSITION: u32 = RANGE_TEXTURE_SIZE + std::mem::size_of::<[[f32; 2]; 2]>() as u32;
+const RANGE_COL_TRANSFORM: u32 = RANGE_SRC_POSITION + std::mem::size_of::<[[f32; 4]; 4]>() as u32;
+const RANGE_COL_OFFSET: u32 = RANGE_COL_TRANSFORM + std::mem::size_of::<[f32; 4]>() as u32;
 
 /// Copy texture data from one texture to another in a wgpu pipeline,
 /// with offset and size parameters.
 #[derive(Default)]
 pub struct TextureCopy {
-    // inner: Option<TextureCopyImpl>,
-    inner: utils::rwoption::RwOption<TextureCopyImpl>,
+    inner: utils::RwOption<TextureCopyImpl>,
 }
 
-const PIPELINE_CACHE_SIZE: NonZero<usize> = NonZero::new(4).unwrap();
+const PIPELINE_CACHE_SIZE: u64 = 4;
 
 struct TextureCopyImpl {
     texture_bind_group_layout: wgpu::BindGroupLayout,
     texture_sampler: wgpu::Sampler,
     pipeline_layout: wgpu::PipelineLayout,
-    pipeline: LruCache<wgpu::TextureFormat, wgpu::RenderPipeline, fxhash::FxBuildHasher>,
+    pipeline: moka::sync::Cache<wgpu::TextureFormat, wgpu::RenderPipeline, fxhash::FxBuildHasher>,
 }
 
 impl TextureCopyImpl {
@@ -40,6 +48,7 @@ impl TextureCopyImpl {
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("texture_copy_bind_group_layout"),
                 entries: &[
+                    // texture
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
                         visibility: wgpu::ShaderStages::FRAGMENT,
@@ -50,6 +59,7 @@ impl TextureCopyImpl {
                         },
                         count: None,
                     },
+                    // sampler
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
                         visibility: wgpu::ShaderStages::FRAGMENT,
@@ -76,23 +86,25 @@ impl TextureCopyImpl {
             push_constant_ranges: &[
                 wgpu::PushConstantRange {
                     stages: wgpu::ShaderStages::VERTEX,
-                    range: 0..(std::mem::size_of::<[f32; 2]>() as u32),
+                    range: 0..RANGE_TEXTURE_SIZE,
                 },
                 wgpu::PushConstantRange {
                     stages: wgpu::ShaderStages::VERTEX,
-                    range: (std::mem::size_of::<[f32; 2]>() as u32)
-                        ..(std::mem::size_of::<[[f32; 2]; 2]>() as u32),
+                    range: RANGE_TEXTURE_SIZE..RANGE_SRC_POSITION,
                 },
                 wgpu::PushConstantRange {
                     stages: wgpu::ShaderStages::FRAGMENT,
-                    range: ((std::mem::size_of::<[f32; 2]>() + std::mem::size_of::<[[f32; 2]; 2]>())
-                        as u32)
-                        ..(std::mem::size_of::<[[f32; 4]; 4]>() as u32),
+                    range: RANGE_SRC_POSITION..RANGE_COL_TRANSFORM,
+                },
+                wgpu::PushConstantRange {
+                    stages: wgpu::ShaderStages::FRAGMENT,
+                    range: RANGE_COL_TRANSFORM..RANGE_COL_OFFSET,
                 },
             ],
         });
 
-        let pipeline = LruCache::with_hasher(PIPELINE_CACHE_SIZE, fxhash::FxBuildHasher::default());
+        let pipeline = moka::sync::CacheBuilder::new(PIPELINE_CACHE_SIZE)
+            .build_with_hasher(fxhash::FxBuildHasher::default());
 
         TextureCopyImpl {
             texture_bind_group_layout,
@@ -103,16 +115,35 @@ impl TextureCopyImpl {
     }
 }
 
+pub struct TargetData {
+    pub target_size: [u32; 2],
+    pub target_format: wgpu::TextureFormat,
+}
+
+pub struct RenderData<'a> {
+    pub source_texture_view: &'a wgpu::TextureView,
+    /// y-axis heads upward, x-axis heads rightward.
+    ///
+    /// `[[x_min, y_min], [x_max, y_max]]`
+    pub source_texture_position: [[f32; 2]; 2],
+    pub color_transformation: Option<Matrix4<f32>>,
+    pub color_offset: Option<[f32; 4]>,
+}
+
 impl TextureCopy {
-    #[allow(clippy::too_many_arguments)]
-    pub fn copy(
-        &mut self,
+    pub fn render(
+        &self,
         render_pass: &mut wgpu::RenderPass<'_>,
-        target_size: [u32; 2],
-        target_format: wgpu::TextureFormat,
-        source_texture: &wgpu::TextureView,
-        source_texture_position: [[f32; 2]; 2],
-        color_transformation: Option<Matrix4<f32>>,
+        TargetData {
+            target_size,
+            target_format,
+        }: TargetData,
+        RenderData {
+            source_texture_view: source_texture,
+            source_texture_position,
+            color_transformation,
+            color_offset,
+        }: RenderData<'_>,
         ctx: &WidgetContext,
     ) {
         let TextureCopyImpl {
@@ -120,19 +151,19 @@ impl TextureCopy {
             texture_sampler,
             pipeline_layout,
             pipeline,
-        } = self
+        } = &*self
             .inner
             .get_or_insert_with(|| TextureCopyImpl::setup(ctx));
 
-        let render_pipeline = pipeline.get_or_insert(target_format, || {
+        let render_pipeline = pipeline.get_with(target_format, || {
             make_pipeline(ctx, target_format, pipeline_layout)
         });
 
-        render_pass.set_pipeline(render_pipeline);
+        render_pass.set_pipeline(&render_pipeline);
         render_pass.set_bind_group(
             0,
             &ctx.device().create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("texture_copy_bind_group"),
+                label: Some("TextureCopyBindGroup"),
                 layout: texture_bind_group_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
@@ -154,17 +185,22 @@ impl TextureCopy {
         );
         render_pass.set_push_constants(
             wgpu::ShaderStages::VERTEX,
-            std::mem::size_of::<[f32; 2]>() as u32,
+            RANGE_TEXTURE_SIZE,
             bytemuck::cast_slice(&source_texture_position),
         );
         render_pass.set_push_constants(
             wgpu::ShaderStages::FRAGMENT,
-            (std::mem::size_of::<[f32; 2]>() + std::mem::size_of::<[[f32; 2]; 2]>()) as u32,
+            RANGE_SRC_POSITION,
             bytemuck::cast_slice(
                 color_transformation
                     .unwrap_or(Matrix4::identity())
                     .as_slice(),
             ),
+        );
+        render_pass.set_push_constants(
+            wgpu::ShaderStages::FRAGMENT,
+            RANGE_COL_TRANSFORM,
+            bytemuck::cast_slice(&color_offset.unwrap_or([0.0, 0.0, 0.0, 0.0])),
         );
         render_pass.draw(0..4, 0..1);
     }
@@ -176,6 +212,7 @@ fn make_pipeline(
     pipeline_layout: &wgpu::PipelineLayout,
 ) -> wgpu::RenderPipeline {
     let device = ctx.device();
+
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("texture_copy_shader"),
         source: wgpu::ShaderSource::Wgsl(include_str!("texture_copy.wgsl").into()),

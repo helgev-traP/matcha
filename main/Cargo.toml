@@ -33,8 +33,8 @@ fontdb = { workspace = true }
 fontdue = { workspace = true }
 
 # other
-pathfinder_geometry = { workspace = true }
-cosmic-text = { workspace = true }
-rand = { workspace = true }
 bitflags = { workspace = true }
 num = { workspace = true }
+
+[lints]
+workspace = true

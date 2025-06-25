@@ -126,7 +126,6 @@ impl VertexColorRenderer {
     }
 
     // Use this after mesh integration.
-    #[allow(clippy::too_many_arguments)]
     pub fn render(
         &self,
         // gpu
