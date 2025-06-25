@@ -7,11 +7,13 @@ publish = false
 [dependencies]
 # matcha
 matcha-core = { workspace = true }
+utils = { workspace = true }
 
 # runtime
 tokio = { workspace = true }
 async-trait = { workspace = true }
 futures = { workspace = true }
+parking_lot = { workspace = true }
 
 # winit
 winit = { workspace = true }
@@ -28,8 +30,11 @@ nalgebra = { features = ["bytemuck"], workspace = true }
 image = { workspace = true }
 
 # other
-rand = { workspace = true }
 num = { workspace = true }
-cosmic-text = { workspace = true }
+cosmic-text = "0.14"
 fxhash = { workspace = true }
 dashmap = { workspace = true }
+moka = { workspace = true }
+
+[lints]
+workspace = true

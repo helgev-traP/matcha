@@ -3,36 +3,45 @@ use std::{
     sync::Arc,
 };
 
-// note: consider using `dashmap` if performance is an issue
+// note: consider using `dashmap` or `scc` if performance is an issue
 
-use fxhash::FxHashMap;
-use parking_lot::Mutex;
+use dashmap::DashMap;
 
 #[derive(Default)]
 pub struct CommonResource {
-    resource: Mutex<FxHashMap<TypeId, Arc<dyn Any + Send + Sync>>>,
+    // resource: Mutex<FxHashMap<TypeId, Arc<dyn Any + Send + Sync>>>,
+    resource: DashMap<TypeId, Arc<dyn Any + Send + Sync>, fxhash::FxBuildHasher>,
 }
 
 impl CommonResource {
     pub fn new() -> Self {
-        Self {
-            resource: Mutex::new(FxHashMap::default()),
-        }
+        Default::default()
     }
 
-    // pub fn insert<T>(&self, renderer: Arc<T>)
+    // insert() and get() methods are not recommended for public use
+
+    // pub fn insert<T>(&self, renderer: T)
     // where
     //     T: Send + Sync + 'static,
     // {
-    //     let mut map = self.map.lock();
-    //     map.insert(TypeId::of::<T>(), renderer);
+    //     self.resource
+    //         .insert(TypeId::of::<T>(), Arc::new(renderer));
     // }
 
-    pub fn get_or_insert<T>(&self, value: T) -> Arc<T>
+    // pub fn get<T>(&self) -> Option<Arc<T>>
+    // where
+    //     T: Send + Sync + 'static,
+    // {
+    //     self.resource
+    //         .get(&TypeId::of::<T>())
+    //         .and_then(|v| v.downcast_ref::<Arc<T>>().cloned())
+    // }
+
+    pub fn get_or_insert<T>(&self, v: T) -> Arc<T>
     where
         T: Send + Sync + 'static,
     {
-        self.get_or_insert_with(|| value)
+        self.get_or_insert_with(|| v)
     }
 
     pub fn get_or_insert_default<T>(&self) -> Arc<T>
@@ -47,35 +56,39 @@ impl CommonResource {
         T: Send + Sync + 'static,
         F: FnOnce() -> T,
     {
-        let mut map = self.resource.lock();
+        self.resource
+            .entry(TypeId::of::<T>())
+            .or_insert_with(|| Arc::new(f()))
+            .clone()
+            .downcast()
+            .expect("Type map in `CommonResource` should ensure `key == value.type_id()`")
+    }
+}
 
-        if let Some(renderer) = map.get(&TypeId::of::<T>()) {
-            let renderer = Arc::clone(renderer);
-            let arc_any = renderer as Arc<dyn Any + Send + Sync>;
-            return arc_any.downcast().unwrap();
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-        // If not, create a new
-        let renderer = Arc::new(f());
-        let return_value = Arc::clone(&renderer);
-
-        map.insert(TypeId::of::<T>(), renderer);
-
-        return_value
+    struct TypeA;
+    struct TypeB;
+    #[derive(Default)]
+    struct TypeC {
+        v: u32,
     }
 
-    // pub fn get<T>(&self) -> Option<Arc<T>>
-    // where
-    //     T: Send + Sync + 'static,
-    // {
-    //     let map = self.map.lock();
-    //     if let Some(renderer) = map.get(&TypeId::of::<T>()) {
-    //         let renderer = Arc::clone(renderer);
-    //         let arc_any = renderer as Arc<dyn Any + Send + Sync>;
+    #[test]
+    fn test_common_resource() {
+        let resource = CommonResource::new();
 
-    //         arc_any.downcast().ok()
-    //     } else {
-    //         None
-    //     }
-    // }
+        let a = resource.get_or_insert(TypeA);
+        let b = resource.get_or_insert_with(|| TypeB);
+        let c = resource.get_or_insert_default::<TypeC>();
+
+        assert!(TypeId::of::<Arc<TypeA>>() == a.type_id());
+        assert!(TypeId::of::<Arc<TypeB>>() == b.type_id());
+        assert!(TypeId::of::<Arc<TypeC>>() == c.type_id());
+
+        let c2 = resource.get_or_insert(TypeC { v: 42 });
+        assert_eq!(c2.v, u32::default());
+    }
 }

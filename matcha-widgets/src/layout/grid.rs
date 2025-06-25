@@ -9,7 +9,7 @@ use matcha_core::{
 };
 use num::Float;
 
-use crate::types::size::Size;
+use crate::types::size::{ChildSize, Size};
 
 // todo: remove this memo
 // ********************************
@@ -53,8 +53,8 @@ impl<T: Send + 'static> Grid<T> {
             label: None,
             template_columns: Vec::new(),
             template_rows: Vec::new(),
-            gap_columns: Size::Size(Arc::new(|_, _| 0.0)),
-            gap_rows: Size::Size(Arc::new(|_, _| 0.0)),
+            gap_columns: Size::px(0.0),
+            gap_rows: Size::px(0.0),
             items: Vec::new(),
         }
     }
@@ -281,6 +281,9 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
 
     fn render(
         &mut self,
+        render_pass: &mut wgpu::RenderPass<'_>,
+        target_size: [u32; 2],
+        target_format: wgpu::TextureFormat,
         parent_size: [Option<f32>; 2],
         background: Background,
         ctx: &WidgetContext,
@@ -318,7 +321,17 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
 
         self.items
             .iter_mut()
-            .flat_map(|item| render_item(item, cache, background, ctx))
+            .flat_map(|item| {
+                render_item(
+                    render_pass,
+                    target_size,
+                    target_format,
+                    item,
+                    cache,
+                    background,
+                    ctx,
+                )
+            })
             .collect()
     }
 }
@@ -326,6 +339,9 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
 // MARK: render fn
 
 fn render_item<T: Send + 'static>(
+    reder_pass: &mut wgpu::RenderPass<'_>,
+    target_size: [u32; 2],
+    target_format: wgpu::TextureFormat,
     item: &mut GridNodeItem<T>,
     grid_cache: &GridCache,
     background: Background,
@@ -352,6 +368,9 @@ fn render_item<T: Send + 'static>(
     // render
     item.item
         .render(
+            reder_pass,
+            target_size,
+            target_format,
             [Some(item_range.width()), Some(item_range.height())],
             Background::new(background.view(), position),
             ctx,
@@ -427,15 +446,27 @@ fn calc_px_siz(
         .iter()
         .chain(std::iter::once(column_gap))
         .fold((0.0, 0.0), |(sum, grow_sum), size| match size {
-            Size::Size(f) => (sum + f(parent_size[0], context), grow_sum),
-            Size::Grow(f) => (sum, grow_sum + f(parent_size[0], context)),
+            Size::Size(f) => (
+                sum + f(parent_size, &mut ChildSize::default(), context),
+                grow_sum,
+            ),
+            Size::Grow(f) => (
+                sum,
+                grow_sum + f(parent_size, &mut ChildSize::default(), context),
+            ),
         });
 
     let (row_px_sum, row_grow_sum) = template_rows.iter().chain(std::iter::once(row_gap)).fold(
         (0.0, 0.0),
         |(sum, grow_sum), size| match size {
-            Size::Size(f) => (sum + f(parent_size[1], context), grow_sum),
-            Size::Grow(f) => (sum, grow_sum + f(parent_size[1], context)),
+            Size::Size(f) => (
+                sum + f(parent_size, &mut ChildSize::default(), context),
+                grow_sum,
+            ),
+            Size::Grow(f) => (
+                sum,
+                grow_sum + f(parent_size, &mut ChildSize::default(), context),
+            ),
         },
     );
 
@@ -461,15 +492,17 @@ fn calc_px_siz(
     let mut column_accumulate = 0.0;
 
     let column_gap = match column_gap {
-        Size::Size(f) => f(parent_size[0], context),
-        Size::Grow(f) => column_px_per_grow * f(parent_size[0], context),
+        Size::Size(f) => f(parent_size, &mut ChildSize::default(), context),
+        Size::Grow(f) => column_px_per_grow * f(parent_size, &mut ChildSize::default(), context),
     };
 
     for size in template_columns {
         let start = column_accumulate;
         let end = match size {
-            Size::Size(f) => start + f(parent_size[0], context),
-            Size::Grow(f) => start + column_px_per_grow * f(parent_size[0], context),
+            Size::Size(f) => start + f(parent_size, &mut ChildSize::default(), context),
+            Size::Grow(f) => {
+                start + column_px_per_grow * f(parent_size, &mut ChildSize::default(), context)
+            }
         };
 
         column_accumulate_template.push([start, end]);
@@ -483,15 +516,17 @@ fn calc_px_siz(
     let mut row_accumulate = 0.0;
 
     let row_gap = match row_gap {
-        Size::Size(f) => f(parent_size[1], context),
-        Size::Grow(f) => row_px_per_grow * f(parent_size[1], context),
+        Size::Size(f) => f(parent_size, &mut ChildSize::default(), context),
+        Size::Grow(f) => row_px_per_grow * f(parent_size, &mut ChildSize::default(), context),
     };
 
     for size in template_rows {
         let start = row_accumulate;
         let end = match size {
-            Size::Size(f) => start + f(parent_size[1], context),
-            Size::Grow(f) => start + row_px_per_grow * f(parent_size[1], context),
+            Size::Size(f) => start + f(parent_size, &mut ChildSize::default(), context),
+            Size::Grow(f) => {
+                start + row_px_per_grow * f(parent_size, &mut ChildSize::default(), context)
+            }
         };
 
         row_accumulate_template.push([start, end]);

@@ -1,6 +1,6 @@
 [package]
 name = "matcha-core"
-version =  { workspace = true }
+version = { workspace = true }
 edition = "2024"
 publish = false
 
@@ -29,10 +29,11 @@ nalgebra = { features = ["bytemuck"], workspace = true }
 image = { workspace = true }
 
 # other
-pathfinder_geometry = { workspace = true }
-cosmic-text = { workspace = true }
-rand = { workspace = true }
 bitflags = { workspace = true }
 num = { workspace = true }
 fxhash = { workspace = true }
-lru = { workspace = true }
+moka = { workspace = true }
+dashmap = { workspace = true }
+
+[lints]
+workspace = true

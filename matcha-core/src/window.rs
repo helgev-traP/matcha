@@ -188,6 +188,8 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
 
                 let render_result = root_widget.render(
                     &mut render_pass,
+                    [viewport_size[0] as u32, viewport_size[1] as u32],
+                    gpu_state.surface_format(),
                     [Some(viewport_size[0]), Some(viewport_size[1])],
                     Background::new(&surface_view, [0.0, 0.0]),
                     &ctx,

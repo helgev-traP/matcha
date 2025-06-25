@@ -1,5 +1,4 @@
-// pub mod elements;
-// pub mod primitives;
+pub mod buffer;
 pub mod layout;
 pub mod style;
 pub mod widget;
@@ -7,4 +6,6 @@ pub mod widget;
 pub mod types;
 
 pub mod renderer;
-pub mod template;
+
+// templates
+pub mod template_widget;

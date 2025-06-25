@@ -1,7 +1,6 @@
 use crate::{context::WidgetContext, ui::Object};
 
 pub mod texture_copy;
-pub use texture_copy::TextureCopy;
 
 mod texture_color_renderer;
 use texture_color_renderer::TextureObjectRenderer;
@@ -119,75 +118,40 @@ impl PrincipleRenderer {
                 occlusion_query_set: None,
             });
 
-            for obj in objects {
-                match obj {
-                    Object::TextureColor {
+            for Object {
+                texture,
+                uv_vertices,
+                indices,
+                transform,
+            } in objects
+            {
+                {
+                    let uv_vertices = uv_vertices
+                        .iter()
+                        .map(|vertex| vertex.transform(&transform))
+                        .collect::<Vec<_>>();
+
+                    self.texture_color_renderer.render(
+                        device,
+                        &mut render_pass,
+                        &composed_matrix,
                         texture,
-                        uv_vertices,
-                        indices,
-                        transform,
-                    } => {
-                        let uv_vertices = uv_vertices
-                            .iter()
-                            .map(|vertex| vertex.transform(&transform))
-                            .collect::<Vec<_>>();
-
-                        self.texture_color_renderer.render(
-                            device,
-                            &mut render_pass,
-                            &composed_matrix,
-                            texture,
-                            &uv_vertices,
-                            &indices,
-                            render_to_surface,
-                        );
-                    }
-                    Object::VertexColor {
-                        vertices,
-                        indices,
-                        transform,
-                    } => {
-                        let vertices = vertices
-                            .iter()
-                            .map(|vertex| vertex.transform(&transform))
-                            .collect::<Vec<_>>();
-
-                        self.vertex_color_renderer.render(
-                            device,
-                            &mut render_pass,
-                            &composed_matrix,
-                            &vertices,
-                            &indices,
-                            render_to_surface,
-                        );
-                    }
+                        &uv_vertices,
+                        &indices,
+                        render_to_surface,
+                    );
                 }
             }
         }
     }
 }
 
+#[rustfmt::skip]
 fn make_normalize_matrix(destination_size: [f32; 2]) -> nalgebra::Matrix4<f32> {
     nalgebra::Matrix4::new(
-        // x
-        2.0 / destination_size[0],
-        0.0,
-        0.0,
-        -1.0,
-        // y
-        0.0,
-        2.0 / destination_size[1],
-        0.0,
-        1.0,
-        // z
-        0.0,
-        0.0,
-        1.0,
-        0.0,
-        // w
-        0.0,
-        0.0,
-        0.0,
-        1.0,
+        2.0 / destination_size[0], 0.0, 0.0, -1.0,
+        0.0, 2.0 / destination_size[1], 0.0, 1.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0,
     )
 }

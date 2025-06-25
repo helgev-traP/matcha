@@ -12,3 +12,6 @@ nalgebra = { workspace = true }
 
 [dev-dependencies]
 pollster = { workspace = true }
+
+[lints]
+workspace = true

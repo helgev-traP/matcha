@@ -251,13 +251,25 @@ where
 
     fn render(
         &mut self,
+        render_pass: &mut wgpu::RenderPass<'_>,
+        target_size: [u32; 2],
+        target_format: wgpu::TextureFormat,
         parent_size: [Option<f32>; 2],
         background: Background,
         ctx: &WidgetContext,
     ) -> Vec<matcha_core::ui::Object> {
         self.content
             .as_mut()
-            .map(|content| content.render(parent_size, background, ctx))
+            .map(|content| {
+                content.render(
+                    render_pass,
+                    target_size,
+                    target_format,
+                    parent_size,
+                    background,
+                    ctx,
+                )
+            })
             .unwrap_or_default()
             .into_iter()
             .map(|mut object| {
