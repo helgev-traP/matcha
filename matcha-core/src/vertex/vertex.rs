@@ -48,7 +48,7 @@ pub struct BoxDescriptor {
 impl Default for BoxDescriptor {
     fn default() -> Self {
         Self {
-            range: Range2D::new_unchecked([0.0, 0.0], [0.0, 0.0]),
+            range: Range2D::new([0.0, 0.0], [0.0, 0.0]),
             radius: 0.0,
             div: 1,
             border_width: 0.0,
@@ -57,13 +57,17 @@ impl Default for BoxDescriptor {
 }
 
 impl BoxDescriptor {
-    pub fn new(width: f32, height: f32, border_width: f32) -> Option<Self> {
-        Some(Self {
-            range: Range2D::new([0.0, width], [0.0, height])?,
+    pub fn new(width: f32, height: f32, border_width: f32) -> Self {
+        if width < 0.0 || height < 0.0 {
+            panic!("Width and height must be greater than zero.");
+        }
+
+        Self {
+            range: Range2D::new([0.0, width], [0.0, height]),
             radius: 0.0,
             div: 0,
             border_width: border_width.min(width / 2.0).min(height / 2.0),
-        })
+        }
     }
 
     pub fn offset(mut self, x: f32, y: f32) -> Self {

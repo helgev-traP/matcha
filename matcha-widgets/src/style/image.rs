@@ -116,7 +116,7 @@ impl Style for Image {
 
         let Some(image) = image_cache.value() else {
             // If the image is not loaded, return an empty range
-            return Range2D::new_unchecked([0.0, 0.0], [0.0, 0.0]);
+            return Range2D::new([0.0, 0.0], [0.0, 0.0]);
         };
 
         let (width, height) = image.data.dimensions();
@@ -124,7 +124,7 @@ impl Style for Image {
         let size = (self.size)([width as f32, height as f32], boundary_size, ctx);
         let offset = (self.offset)([width as f32, height as f32], boundary_size, ctx);
 
-        Range2D::new_unchecked(
+        Range2D::new(
             [offset[0], -size[1] - offset[1]],
             [size[0] + offset[0], -offset[1]],
         )

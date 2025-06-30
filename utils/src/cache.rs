@@ -1,14 +1,15 @@
-pub struct Cache<K, V> {
+pub struct Cache<K: PartialEq, V> {
     data: Option<(K, V)>,
 }
 
-impl<K, V> Default for Cache<K, V> {
+impl<K: PartialEq, V> Default for Cache<K, V>
+{
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<K, V> Cache<K, V> {
+impl<K: PartialEq, V> Cache<K, V> {
     pub fn new() -> Self {
         Cache { data: None }
     }
@@ -40,10 +41,11 @@ impl<K, V> Cache<K, V> {
     where
         F: FnOnce() -> V,
     {
-        if self.data.is_none() {
-            let value = f();
-            self.set(key, value);
+        if !self.get().is_some_and(|(k, _)| *k == key) {
+            self.set(key, f());
         }
-        self.data.as_mut().map(|(k, v)| (k as &K, v)).unwrap()
+
+        self.get_mut()
+            .expect("infallible: cache is guaranteed to be populated")
     }
 }

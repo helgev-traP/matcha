@@ -1,9 +1,5 @@
 use cosmic_text::{Attrs, Buffer, Color, FontSystem, Metrics, Shaping, SwashCache};
-use matcha_core::{
-    context::WidgetContext,
-    renderer::texture_copy,
-    ui::Style,
-};
+use matcha_core::{context::WidgetContext, renderer::texture_copy, ui::Style};
 use parking_lot::Mutex;
 
 struct FontContext {
@@ -203,7 +199,7 @@ impl Style for TextCosmic<'_> {
         }
         let cache_in_memory = cache_in_memory.as_ref().unwrap();
 
-        matcha_core::types::range::Range2D::new_unchecked(
+        matcha_core::types::range::Range2D::new(
             [
                 cache_in_memory.text_offset[0] as f32,
                 cache_in_memory.text_offset[1] as f32,
