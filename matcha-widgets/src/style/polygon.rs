@@ -158,7 +158,7 @@ impl Style for Polygon {
                             (min.min(v.position[1]), max.max(v.position[1]))
                         });
 
-                    Range2D::new_unchecked([x_min_max.0, y_min_max.0], [x_min_max.1, y_min_max.1])
+                    Range2D::new([x_min_max.0, y_min_max.0], [x_min_max.1, y_min_max.1])
                 }
             }
         })

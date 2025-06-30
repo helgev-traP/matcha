@@ -6,6 +6,3 @@ pub mod widget;
 pub mod types;
 
 pub mod renderer;
-
-// templates
-pub mod template_widget;

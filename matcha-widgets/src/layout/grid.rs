@@ -270,8 +270,8 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
         let [width, height] = self.px_size(parent_size, context);
 
         CoverRange::new(
-            Range2D::new([0.0, width], [0.0, height]),
-            Range2D::new([0.0, width], [0.0, height]),
+            Some(Range2D::new([0.0, width], [0.0, height])),
+            Some(Range2D::new([0.0, width], [0.0, height])),
         )
     }
 
@@ -357,8 +357,7 @@ fn render_item<T: Send + 'static>(
             grid_cache.row_range[item.row[0]][0], // row start
             grid_cache.row_range[item.row[1]][1], // row end
         ],
-    )
-    .unwrap();
+    );
 
     let position = [
         grid_cache.column_range[item.column[0]][0],
@@ -426,7 +425,7 @@ fn interpolate<T: Float>(p: Range2D<T>, v: Range2D<T>, x: Range2D<T>) -> Range2D
         x.y_range()[1],
     );
 
-    Range2D::new([x_start, x_end], [y_start, y_end]).unwrap()
+    Range2D::new([x_start, x_end], [y_start, y_end])
 }
 
 // MARK: calc_px_size

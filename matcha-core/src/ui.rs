@@ -1,15 +1,10 @@
 use std::{any::Any, sync::Arc};
 
-use wgpu::core::command;
-
 use crate::types::range::Range2D;
 
 use super::{
-    context::WidgetContext,
-    events::Event,
-    observer::Observer,
-    types::range::CoverRange,
-    vertex::{ColorVertex, UvVertex},
+    context::WidgetContext, events::Event, observer::Observer, types::range::CoverRange,
+    vertex::UvVertex,
 };
 
 // dom tree node
@@ -28,6 +23,8 @@ pub trait Style: Send + Sync {
     /// The y-axis in `Range2D` is points upward.
     fn draw_range(&self, boundary_size: [f32; 2], ctx: &WidgetContext) -> Range2D<f32>;
     /// The y-axis of `offset` is points upward.
+    /// `offset` is the position of the upper left corner of the texture
+    /// relative to the upper left corner of the boundary.
     fn draw(
         &self,
         render_pass: &mut wgpu::RenderPass<'_>,
