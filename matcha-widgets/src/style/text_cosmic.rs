@@ -26,6 +26,7 @@ pub struct TextCosmic<'a> {
     cache_in_texture: Mutex<Option<wgpu::Texture>>,
 }
 
+#[derive(Clone)]
 pub struct TextElement<'a> {
     text: String,
     attrs: Attrs<'a>,
@@ -36,6 +37,20 @@ struct CacheInMemory {
     /// ! y-axis heads up
     text_offset: [i32; 2],
     data: Vec<u8>,
+}
+
+impl<'a> Clone for TextCosmic<'a> {
+    fn clone(&self) -> Self {
+        Self {
+            texts: self.texts.clone(),
+            color: self.color,
+            metrics: self.metrics,
+            max_size: self.max_size,
+            buffer: Mutex::new(None),
+            cache_in_memory: Mutex::new(None),
+            cache_in_texture: Mutex::new(None),
+        }
+    }
 }
 
 impl TextCosmic<'_> {
@@ -152,7 +167,11 @@ impl TextCosmic<'_> {
     }
 }
 
-impl Style for TextCosmic<'_> {
+impl Style for TextCosmic<'static> {
+    fn clone_boxed(&self) -> Box<dyn Style> {
+        Box::new(self.clone())
+    }
+
     fn is_inside(
         &self,
         position: [f32; 2],

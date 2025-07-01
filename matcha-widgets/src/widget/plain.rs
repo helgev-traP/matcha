@@ -19,7 +19,7 @@ use crate::types::size::{ChildSize, Size};
 pub struct Plain<T> {
     label: Option<String>,
     size: [Size; 2],
-    style: Vec<Arc<dyn Style>>,
+    style: Vec<Box<dyn Style>>,
     content: Option<Box<dyn Dom<T>>>,
 }
 
@@ -33,7 +33,7 @@ impl<T> Plain<T> {
         })
     }
 
-    pub fn style(mut self, style: Arc<dyn Style>) -> Self {
+    pub fn style(mut self, style: Box<dyn Style>) -> Self {
         self.style.push(style);
         self
     }
@@ -67,7 +67,7 @@ impl<T: Send + 'static> Dom<T> for Plain<T> {
 pub struct PlainNode<T> {
     label: Option<String>,
     size: [Size; 2],
-    style: Vec<Arc<dyn Style>>,
+    style: Vec<Box<dyn Style>>,
     content: Option<Box<dyn Widget<T>>>,
 }
 

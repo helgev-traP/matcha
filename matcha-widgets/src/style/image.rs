@@ -30,6 +30,7 @@ struct ImageCacheData {
 type SizeFn =
     dyn for<'a> Fn([f32; 2], [f32; 2], &'a WidgetContext) -> [f32; 2] + Send + Sync + 'static;
 
+#[derive(Clone)]
 pub struct Image {
     image: ImageSource,
     size: Arc<SizeFn>,
@@ -101,6 +102,10 @@ impl IntoImageSource for (Vec<u8>, u64) {
 // MARK: Style implementation
 
 impl Style for Image {
+    fn clone_boxed(&self) -> Box<dyn Style> {
+        Box::new(self.clone())
+    }
+
     fn is_inside(&self, position: [f32; 2], boundary_size: [f32; 2], ctx: &WidgetContext) -> bool {
         let draw_range = self.draw_range(boundary_size, ctx);
         draw_range.contains(position)
