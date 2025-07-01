@@ -18,6 +18,7 @@ pub struct Polygon {
     caches: Mutex<utils::cache::Cache<[f32; 2], Caches>>,
 }
 
+#[derive(Clone)]
 pub enum Mesh {
     TriangleStrip {
         vertices: Vec<Vertex>,
@@ -34,6 +35,7 @@ pub enum Mesh {
     },
 }
 
+#[derive(Clone)]
 pub struct Vertex {
     position: [f32; 2],
     color: Color,
@@ -45,6 +47,17 @@ struct Caches {
 }
 
 // constructor
+
+impl Clone for Polygon {
+    fn clone(&self) -> Self {
+        Self {
+            polygon: self.polygon.clone(),
+            adaptive_affine: self.adaptive_affine.clone(),
+            cache_the_mesh: self.cache_the_mesh,
+            caches: Mutex::new(utils::cache::Cache::default()),
+        }
+    }
+}
 
 impl Polygon {
     pub fn new<F>(polygon: F) -> Box<Self>
@@ -76,6 +89,10 @@ impl Polygon {
 // MARK: Style
 
 impl Style for Polygon {
+    fn clone_boxed(&self) -> Box<dyn Style> {
+        Box::new(self.clone())
+    }
+
     fn is_inside(&self, position: [f32; 2], boundary_size: [f32; 2], ctx: &WidgetContext) -> bool {
         let mut cache = self.caches.lock();
 

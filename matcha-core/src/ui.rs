@@ -18,6 +18,7 @@ pub trait Dom<T>: Sync + Any {
 // Style
 
 pub trait Style: Send + Sync {
+    fn clone_boxed(&self) -> Box<dyn Style>;
     /// is given position inside the shape of this style.
     fn is_inside(&self, position: [f32; 2], boundary_size: [f32; 2], ctx: &WidgetContext) -> bool;
     /// The y-axis in `Range2D` is points upward.
@@ -34,6 +35,12 @@ pub trait Style: Send + Sync {
         offset: [f32; 2],
         ctx: &WidgetContext,
     );
+}
+
+impl Clone for Box<dyn Style> {
+    fn clone(&self) -> Self {
+        self.clone_boxed()
+    }
 }
 
 // render tree node
