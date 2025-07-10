@@ -2,8 +2,7 @@ pub struct Cache<K: PartialEq, V> {
     data: Option<(K, V)>,
 }
 
-impl<K: PartialEq, V> Default for Cache<K, V>
-{
+impl<K: PartialEq, V> Default for Cache<K, V> {
     fn default() -> Self {
         Self::new()
     }

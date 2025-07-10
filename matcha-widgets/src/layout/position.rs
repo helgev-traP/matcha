@@ -114,7 +114,7 @@ impl<T: Send + 'static> Widget<T> for PositionNode {
     }
 
     // if redraw is needed
-    fn updated(&self) -> bool {
+    fn need_rerendering(&self) -> bool {
         todo!()
     }
 

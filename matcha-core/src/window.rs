@@ -18,7 +18,7 @@ use super::{
 
 mod benchmark;
 mod error;
-pub(crate) mod gpu_context;
+pub(crate) mod gpu_state;
 mod keyboard_state;
 mod mouse_state;
 
@@ -44,7 +44,7 @@ pub struct Window<
 
     // --- rendering context ---
     winit_window: Option<Arc<winit::window::Window>>,
-    gpu_state: Option<gpu_context::GpuContext<'a>>,
+    gpu_state: Option<gpu_state::GpuState<'a>>,
 
     // --- UI context ---
     root_component: Component<Model, Message, Response, IR>,
@@ -415,7 +415,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, 
 
         // --- prepare gpu ---
 
-        let gpu_state = self.tokio_runtime.block_on(gpu_context::GpuContext::new(
+        let gpu_state = self.tokio_runtime.block_on(gpu_state::GpuState::new(
             self.winit_window.as_ref().unwrap().clone(),
             self.performance,
             wgpu::TextureFormat::Rgba8UnormSrgb,

@@ -242,10 +242,10 @@ where
             .unwrap_or_default()
     }
 
-    fn updated(&self) -> bool {
+    fn need_rerendering(&self) -> bool {
         self.content
             .as_ref()
-            .map(|content| content.updated())
+            .map(|content| content.need_rerendering())
             .unwrap_or(false)
     }
 

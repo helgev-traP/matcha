@@ -58,10 +58,7 @@ impl LineStripColor {
             target_size,
             target_format,
         }: TargetData,
-        RenderData {
-            position,
-            vertices,
-        }: RenderData,
+        RenderData { position, vertices }: RenderData,
         ctx: &WidgetContext,
     ) {
         let LineStripColorImpl {

@@ -47,7 +47,8 @@ impl ChildSize<'_> {
     }
 }
 
-type SizeFn = dyn Fn([Option<f32>; 2], &mut ChildSize, &WidgetContext) -> f32 + Send + Sync + 'static;
+type SizeFn =
+    dyn Fn([Option<f32>; 2], &mut ChildSize, &WidgetContext) -> f32 + Send + Sync + 'static;
 
 /// Calculate size from parent size child size and context.
 /// `Size::Grow` will be treated as same size as parent size in widget that have only one child.

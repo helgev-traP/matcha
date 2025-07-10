@@ -7,6 +7,7 @@ publish = false
 [dependencies]
 # self
 utils = { workspace = true }
+texture-atlas = { workspace = true }
 
 # async runtime, utility
 tokio = { workspace = true }
