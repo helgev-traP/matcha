@@ -120,7 +120,7 @@ impl<T: Send + 'static> Widget<T> for SpaceNode {
     }
 
     // if redraw is needed
-    fn updated(&self) -> bool {
+    fn need_rerendering(&self) -> bool {
         false
     }
 

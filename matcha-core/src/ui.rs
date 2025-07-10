@@ -97,7 +97,7 @@ pub trait Widget<T>: Send {
         context: &WidgetContext,
     ) -> CoverRange<f32>;
 
-    fn updated(&self) -> bool;
+    fn need_rerendering(&self) -> bool;
 
     fn render(
         &mut self,
@@ -153,7 +153,7 @@ impl<'a> Background<'a> {
 
 #[derive(Clone)]
 pub struct Object {
-    pub texture: Arc<wgpu::Texture>,
+    pub texture: texture_atlas::Texture,
     pub uv_vertices: Vec<UvVertex>,
     pub indices: Vec<u16>,
     pub transform: nalgebra::Matrix4<f32>,

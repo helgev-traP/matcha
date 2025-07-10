@@ -4,7 +4,7 @@ use crate::common_resource::CommonResource;
 
 use super::context::WidgetContext;
 
-pub struct GpuContext<'a> {
+pub struct GpuState<'a> {
     // gpu device
     _instance: wgpu::Instance,
     _adapter: wgpu::Adapter,
@@ -22,11 +22,14 @@ pub struct GpuContext<'a> {
     // common texture format
     texture_format: wgpu::TextureFormat,
 
-    // custom renderers
+    // custom resource
     common_resource: CommonResource,
+
+    // texture atlas
+    // texture_atlas: texture_atlas::TextureAtlas,
 }
 
-impl GpuContext<'_> {
+impl GpuState<'_> {
     pub async fn new(
         winit_window: Arc<winit::window::Window>,
         power_preference: wgpu::PowerPreference,
@@ -121,7 +124,7 @@ impl GpuContext<'_> {
     }
 }
 
-impl GpuContext<'_> {
+impl GpuState<'_> {
     pub const fn widget_context(&self, font_size: f32) -> WidgetContext {
         WidgetContext::new(self, font_size)
     }

@@ -26,6 +26,20 @@ impl Buffer {
         self
     }
 
+    pub fn is_inside(
+        &self,
+        position: [f32; 2],
+        boundary_size: [f32; 2],
+        ctx: &WidgetContext,
+    ) -> bool {
+        for style in &self.style {
+            if style.is_inside(position, boundary_size, ctx) {
+                return true;
+            }
+        }
+        false
+    }
+
     pub fn render(
         &mut self,
         boundary: [f32; 2],

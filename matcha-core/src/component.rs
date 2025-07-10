@@ -312,8 +312,8 @@ impl<Model: Sync + Send + 'static, Response: 'static, InnerResponse: 'static> Wi
         self.widget.cover_range(parent_size, context)
     }
 
-    fn updated(&self) -> bool {
-        self.widget.updated()
+    fn need_rerendering(&self) -> bool {
+        self.widget.need_rerendering()
     }
 
     fn render(
@@ -325,7 +325,13 @@ impl<Model: Sync + Send + 'static, Response: 'static, InnerResponse: 'static> Wi
         background: Background,
         context: &WidgetContext,
     ) -> Vec<Object> {
-        self.widget
-            .render(render_pass, target_size, target_format, parent_size, background, context)
+        self.widget.render(
+            render_pass,
+            target_size,
+            target_format,
+            parent_size,
+            background,
+            context,
+        )
     }
 }

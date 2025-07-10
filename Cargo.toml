@@ -1,5 +1,5 @@
 [workspace]
-members = ["main", "matcha-core", "matcha-widgets", "renderer", "text-render", "utils"]
+members = ["main", "matcha-core", "matcha-widgets", "renderer", "text-render", "utils", "texture-atlas"]
 
 [workspace.package]
 version = "0.0.5"
@@ -11,6 +11,7 @@ matcha-core = { path = "matcha-core" }
 matcha-widgets = { path = "matcha-widgets" }
 text-render = { path = "text-render" }
 utils = { path = "utils" }
+texture-atlas = { path = "texture-atlas" }
 
 # async runtime, utilities
 tokio = { version = "1", features = ["full"] }
@@ -42,8 +43,12 @@ bitflags = "2.6"
 num = "0.4"
 fxhash = "0.2"
 dashmap = "6.1"
+
 # lru = "0.14.0"
 moka = { version = "0.12", features = ["sync"] }
+
+# error handling
+thiserror = "2.0"
 
 # interpolation crate
 # todo: maybe useful.

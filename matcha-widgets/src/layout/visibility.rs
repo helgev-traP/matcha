@@ -209,10 +209,10 @@ where
         }
     }
 
-    fn updated(&self) -> bool {
+    fn need_rerendering(&self) -> bool {
         self.content
             .as_ref()
-            .map(|content| content.updated())
+            .map(|content| content.need_rerendering())
             .unwrap_or(false)
     }
 
@@ -229,7 +229,16 @@ where
             VisibilityState::Visible => self
                 .content
                 .as_mut()
-                .map(|content| content.render(render_pass, target_size, target_format, parent_size, background, ctx))
+                .map(|content| {
+                    content.render(
+                        render_pass,
+                        target_size,
+                        target_format,
+                        parent_size,
+                        background,
+                        ctx,
+                    )
+                })
                 .unwrap_or_default(),
             VisibilityState::Hidden | VisibilityState::None => vec![],
         }

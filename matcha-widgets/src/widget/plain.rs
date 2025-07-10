@@ -9,7 +9,10 @@ use matcha_core::{
     ui::{Background, Dom, DomComPareResult, Object, Style, UpdateWidgetError, Widget},
 };
 
-use crate::types::size::{ChildSize, Size};
+use crate::{
+    buffer::Buffer,
+    types::size::{ChildSize, Size},
+};
 
 // todo: more documentation
 
@@ -45,11 +48,12 @@ impl<T: Send + 'static> Dom<T> for Plain<T> {
         Box::new(PlainNode {
             label: self.label.clone(),
             size: self.size.clone(),
-            style: self.style.clone(),
+            buffer: Buffer::new(self.style.clone()),
             content: self
                 .content
                 .as_ref()
                 .map(|content| content.build_widget_tree()),
+            need_rerendering: true,
         })
     }
 
@@ -67,8 +71,10 @@ impl<T: Send + 'static> Dom<T> for Plain<T> {
 pub struct PlainNode<T> {
     label: Option<String>,
     size: [Size; 2],
-    style: Vec<Box<dyn Style>>,
+    buffer: Buffer,
     content: Option<Box<dyn Widget<T>>>,
+
+    need_rerendering: bool,
 }
 
 // MARK: Widget trait
@@ -122,19 +128,10 @@ impl<T: Send + 'static> Widget<T> for PlainNode<T> {
         parent_size: [Option<f32>; 2],
         ctx: &WidgetContext,
     ) -> bool {
-        // let px_size = Widget::<T>::px_size(self, parent_size, context);
-
-        // !(position[0] < 0.0
-        //     || position[0] > px_size[0]
-        //     || position[1] < 0.0
-        //     || position[1] > px_size[1])
-
         let px_size = self.px_size(parent_size, ctx);
 
-        for style in &self.style {
-            if style.is_inside(position, px_size, ctx) {
-                return true;
-            }
+        if self.buffer.is_inside(position, px_size, ctx) {
+            return true;
         }
 
         if let Some(content) = &mut self.content {
@@ -181,8 +178,8 @@ impl<T: Send + 'static> Widget<T> for PlainNode<T> {
     }
 
     // if redraw is needed
-    fn updated(&self) -> bool {
-        todo!()
+    fn need_rerendering(&self) -> bool {
+        self.need_rerendering
     }
 
     // render
@@ -195,6 +192,9 @@ impl<T: Send + 'static> Widget<T> for PlainNode<T> {
         background: Background,
         ctx: &WidgetContext,
     ) -> Vec<Object> {
+        let px_size = self.px_size(parent_size, ctx);
+
+        // render the buffer
         todo!()
     }
 }
