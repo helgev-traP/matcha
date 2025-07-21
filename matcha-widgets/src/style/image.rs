@@ -161,7 +161,7 @@ impl Style for Image {
             let max_point = relative_position.max_point();
 
             let texture_copy_renderer =
-                ctx.common_resource()
+                ctx.any_resource()
                     .get_or_insert_default::<matcha_core::renderer::texture_copy::TextureCopy>();
 
             texture_copy_renderer.render(

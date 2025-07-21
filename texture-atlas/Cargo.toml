@@ -11,6 +11,7 @@ parking_lot = { workspace = true }
 uuid = { version = "1.17.0", features = ["v4"] } # internal use only
 dashmap = { workspace = true }
 thiserror = { workspace = true }
+fortuples = "=0.9.1" # internal use only
 
 [dev-dependencies]
 pollster = { workspace = true }

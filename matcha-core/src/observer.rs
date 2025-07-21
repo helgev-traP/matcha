@@ -1,10 +1,42 @@
 use std::sync::{Arc, atomic::AtomicBool};
 
-pub fn create_observer_ch() -> (ObserverSender, ObserverReceiver) {
-    let flag = Arc::new(AtomicBool::new(false));
-    let sender = ObserverSender::new(&flag);
-    let receiver = ObserverReceiver::new(&flag);
-    (sender, receiver)
+pub struct Observer {
+    // default is false
+    // when the flag is set to true, then dom update is triggered
+    flag: Arc<AtomicBool>,
+}
+
+impl Observer {
+    pub(crate) fn new() -> Self {
+        Self {
+            flag: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    /// Creates a new Observer that is used to trigger rendering.
+    pub(crate) fn new_render_trigger() -> Self {
+        Self {
+            flag: Arc::new(AtomicBool::new(true)),
+        }
+    }
+
+    pub fn sender(&self) -> ObserverSender {
+        ObserverSender {
+            flag: self.flag.clone(),
+        }
+    }
+}
+
+impl Observer {
+    pub(crate) fn is_updated(&self) -> bool {
+        self.flag.load(std::sync::atomic::Ordering::Acquire)
+    }
+
+    pub(crate) async fn wait_for_update(&self) {
+        while !self.is_updated() {
+            tokio::task::yield_now().await;
+        }
+    }
 }
 
 pub struct ObserverSender {
@@ -12,101 +44,7 @@ pub struct ObserverSender {
 }
 
 impl ObserverSender {
-    fn new(flag: &Arc<AtomicBool>) -> Self {
-        Self { flag: flag.clone() }
-    }
-
     pub fn send_update(&mut self) {
         self.flag.store(true, std::sync::atomic::Ordering::Release);
     }
 }
-
-pub struct ObserverReceiver {
-    flag: Arc<AtomicBool>,
-}
-
-impl ObserverReceiver {
-    fn new(flag: &Arc<AtomicBool>) -> Self {
-        Self { flag: flag.clone() }
-    }
-
-    pub fn is_updated(&mut self) -> bool {
-        self.flag.load(std::sync::atomic::Ordering::Acquire)
-    }
-}
-
-impl Future for ObserverReceiver {
-    type Output = ();
-
-    fn poll(
-        mut self: std::pin::Pin<&mut Self>,
-        _cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Self::Output> {
-        if self.is_updated() {
-            std::task::Poll::Ready(())
-        } else {
-            std::task::Poll::Pending
-        }
-    }
-}
-
-// MARK: observer
-
-#[derive(Default)]
-pub struct Observer {
-    receivers: Vec<ObserverReceiver>,
-}
-
-impl Observer {
-    pub fn new() -> Self {
-        Self {
-            receivers: Vec::new(),
-        }
-    }
-
-    pub fn new_render_trigger() -> Self {
-        let (mut sender, receiver) = create_observer_ch();
-        sender.send_update();
-        Self {
-            receivers: vec![receiver],
-        }
-    }
-
-    pub fn add_receiver(&mut self, receiver: ObserverReceiver) {
-        self.receivers.push(receiver);
-    }
-
-    pub fn extend(&mut self, other: Observer) {
-        self.receivers.extend(other.receivers);
-    }
-
-    pub fn join(mut self, other: Observer) -> Self {
-        self.extend(other);
-        self
-    }
-
-    pub fn is_updated(&mut self) -> bool {
-        self.receivers
-            .iter_mut()
-            .any(|receiver| receiver.is_updated())
-    }
-}
-
-/// wait for the observer to receive an component update.
-impl Future for Observer {
-    type Output = ();
-
-    fn poll(
-        mut self: std::pin::Pin<&mut Self>,
-        _cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Self::Output> {
-        if self.is_updated() {
-            std::task::Poll::Ready(())
-        } else {
-            std::task::Poll::Pending
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {}

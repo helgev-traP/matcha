@@ -1,16 +1,16 @@
-use super::{component::Component, types::color::Color, window::Window};
+use super::{component::Component, types::color::Color, winit_instance::WinitInstance};
 
-pub struct App<'a, Model, Message, Response, IR = Response>
+pub struct App<Model, Message, Response, IR = Response>
 where
     Model: Send + Sync + 'static,
     Message: 'static,
     Response: 'static,
     IR: 'static,
 {
-    window: Window<'a, Model, Message, Response, IR>,
+    winit_app: WinitInstance<Model, Message, Response, IR>,
 }
 
-impl<Model, Message, Response, IR> App<'_, Model, Message, Response, IR>
+impl<Model, Message, Response, IR> App<Model, Message, Response, IR>
 where
     Model: Send + Sync + 'static,
     Message: 'static,
@@ -19,17 +19,17 @@ where
 {
     pub fn new(component: Component<Model, Message, Response, IR>) -> Self {
         Self {
-            window: Window::new(component),
+            winit_app: WinitInstance::new(component),
         }
     }
 
     pub fn title(mut self, title: &str) -> Self {
-        self.window.title(title);
+        self.winit_app.title(title);
         self
     }
 
     pub fn base_color(mut self, color: Color) -> Self {
-        self.window.base_color(color);
+        self.winit_app.base_color(color);
         self
     }
 
@@ -38,6 +38,6 @@ where
             .build()
             .unwrap();
         event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
-        let _ = event_loop.run_app(&mut self.window);
+        let _ = event_loop.run_app(&mut self.winit_app);
     }
 }

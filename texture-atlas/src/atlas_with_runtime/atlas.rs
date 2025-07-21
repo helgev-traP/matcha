@@ -316,7 +316,7 @@ impl TextureAtlas {
     pub fn usage(&self) -> usize {
         match &*self.state.read() {
             TextureAtlasState::Solid(atlas) => atlas.usage(),
-            TextureAtlasState::Resize(atlas) => atlas.usage()
+            TextureAtlasState::Resize(atlas) => atlas.usage(),
         }
     }
 
@@ -479,6 +479,7 @@ mod helper {
             let texture = device.create_texture(&texture_descriptor);
             let texture_view = texture.create_view(&wgpu::TextureViewDescriptor {
                 label: Some(&texture_view_label),
+                dimension: Some(wgpu::TextureViewDimension::D2Array),
                 ..wgpu::TextureViewDescriptor::default()
             });
             textures.push(texture);

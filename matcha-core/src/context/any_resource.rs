@@ -3,39 +3,17 @@ use std::{
     sync::Arc,
 };
 
-// note: consider using `dashmap` or `scc` if performance is an issue
-
 use dashmap::DashMap;
 
 #[derive(Default)]
-pub struct CommonResource {
-    // resource: Mutex<FxHashMap<TypeId, Arc<dyn Any + Send + Sync>>>,
+pub struct AnyResource {
     resource: DashMap<TypeId, Arc<dyn Any + Send + Sync>, fxhash::FxBuildHasher>,
 }
 
-impl CommonResource {
+impl AnyResource {
     pub fn new() -> Self {
         Default::default()
     }
-
-    // insert() and get() methods are not recommended for public use
-
-    // pub fn insert<T>(&self, renderer: T)
-    // where
-    //     T: Send + Sync + 'static,
-    // {
-    //     self.resource
-    //         .insert(TypeId::of::<T>(), Arc::new(renderer));
-    // }
-
-    // pub fn get<T>(&self) -> Option<Arc<T>>
-    // where
-    //     T: Send + Sync + 'static,
-    // {
-    //     self.resource
-    //         .get(&TypeId::of::<T>())
-    //         .and_then(|v| v.downcast_ref::<Arc<T>>().cloned())
-    // }
 
     pub fn get_or_insert<T>(&self, v: T) -> Arc<T>
     where
@@ -78,7 +56,7 @@ mod tests {
 
     #[test]
     fn test_common_resource() {
-        let resource = CommonResource::new();
+        let resource = AnyResource::new();
 
         let a = resource.get_or_insert(TypeA);
         let b = resource.get_or_insert_with(|| TypeB);

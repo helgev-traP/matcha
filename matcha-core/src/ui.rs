@@ -1,18 +1,102 @@
 use std::{any::Any, sync::Arc};
 
-use crate::types::range::Range2D;
-
-use super::{
-    context::WidgetContext, events::Event, observer::Observer, types::range::CoverRange,
-    vertex::UvVertex,
+use crate::{
+    context::{WindowContext, any_resource::AnyResource, gpu::Gpu, window_surface::WindowSurface},
+    types::range::Range2D,
 };
+
+use super::{events::Event, observer::Observer, types::range::CoverRange};
+
+#[derive(Clone)]
+pub struct WidgetContext<'a> {
+    gpu: &'a Gpu,
+    window_surface: &'a WindowSurface,
+    window_context: &'a WindowContext,
+    root_font_size: f32,
+    font_size: f32,
+}
+
+impl<'a> WidgetContext<'a> {
+    pub(crate) const fn new(
+        gpu: &'a Gpu,
+        window_surface: &'a WindowSurface,
+        window_context: &'a WindowContext,
+        root_font_size: f32,
+    ) -> Self {
+        Self {
+            gpu,
+            window_surface,
+            window_context,
+            root_font_size,
+            font_size: root_font_size,
+        }
+    }
+
+    pub fn device(&self) -> &Arc<wgpu::Device> {
+        self.gpu.device()
+    }
+
+    pub fn queue(&self) -> &Arc<wgpu::Queue> {
+        self.gpu.queue()
+    }
+
+    pub fn make_encoder(&self) -> wgpu::CommandEncoder {
+        self.gpu
+            .device()
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Command Encoder created by WidgetContext"),
+            })
+    }
+
+    pub fn any_resource(&self) -> &AnyResource {
+        self.window_context.resource()
+    }
+
+    pub fn surface_format(&self) -> wgpu::TextureFormat {
+        self.window_surface.format()
+    }
+
+    pub fn texture_format(&self) -> wgpu::TextureFormat {
+        self.window_context.texture_format()
+    }
+
+    pub fn dpi(&self) -> f64 {
+        self.window_surface.dpi()
+    }
+
+    pub fn viewport_size(&self) -> [u32; 2] {
+        self.window_surface.size()
+    }
+}
+
+impl WidgetContext<'_> {
+    pub fn font_size(&self) -> f32 {
+        self.font_size
+    }
+
+    pub fn root_font_size(&self) -> f32 {
+        self.root_font_size
+    }
+}
+
+impl WidgetContext<'_> {
+    pub const fn with_font_size(&self, font_size: f32) -> Self {
+        Self {
+            gpu: self.gpu,
+            window_surface: self.window_surface,
+            window_context: self.window_context,
+            root_font_size: self.root_font_size,
+            font_size,
+        }
+    }
+}
 
 // dom tree node
 
 #[async_trait::async_trait]
 pub trait Dom<T>: Sync + Any {
     fn build_widget_tree(&self) -> Box<dyn Widget<T>>;
-    async fn collect_observer(&self) -> Observer;
+    async fn set_observer(&self, observer: &Observer);
 }
 
 // Style
@@ -107,7 +191,7 @@ pub trait Widget<T>: Send {
         parent_size: [Option<f32>; 2],
         background: Background,
         ctx: &WidgetContext,
-    ) -> Vec<Object>;
+    ) -> Object;
 
     /// Updates the GPU device and queue for rendering purposes.
     /// This method is a placeholder and should be implemented to handle GPU resource updates.
@@ -153,10 +237,13 @@ impl<'a> Background<'a> {
 
 #[derive(Clone)]
 pub struct Object {
-    pub texture: texture_atlas::Texture,
-    pub uv_vertices: Vec<UvVertex>,
-    pub indices: Vec<u16>,
-    pub transform: nalgebra::Matrix4<f32>,
+    texture: (),
+    texture_position: Range2D<f32>,
+    stencil: Option<()>,
+    stencil_position: Option<Range2D<f32>>,
+    transform: nalgebra::Matrix4<f32>,
+
+    child_elements: Vec<Object>,
 }
 
 impl Object {

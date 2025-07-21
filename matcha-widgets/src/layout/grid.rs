@@ -105,7 +105,7 @@ impl<T: Send + 'static> Dom<T> for Grid<T> {
         todo!()
     }
 
-    async fn collect_observer(&self) -> Observer {
+    async fn set_observer(&self) -> Observer {
         todo!()
     }
 }
