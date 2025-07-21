@@ -93,11 +93,11 @@ where
         })
     }
 
-    async fn collect_observer(&self) -> Observer {
+    async fn set_observer(&self) -> Observer {
         match self.visible {
             VisibilityState::Visible => {
                 if let Some(content) = &self.content {
-                    content.collect_observer().await
+                    content.set_observer().await
                 } else {
                     Observer::default()
                 }

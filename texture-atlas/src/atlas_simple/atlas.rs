@@ -1,9 +1,9 @@
+use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 
-use dashmap::DashMap;
 use euclid::Box2D;
 use guillotiere::{AllocId, AtlasAllocator, Size, euclid};
-use parking_lot::{Mutex, RwLock};
+use parking_lot::Mutex;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -19,7 +19,7 @@ struct TextureInner {
     // allocation info
     texture_id: TextureId,
     // interaction with the atlas
-    atlas: Weak<RwLock<TextureAtlas>>,
+    atlas: Weak<Mutex<TextureAtlas>>,
     // It may be useful to store some information about the texture that will not change during atlas resizing
     size: [u32; 2],                    // size of the texture in pixels
     formats: Vec<wgpu::TextureFormat>, // formats of the texture
@@ -38,6 +38,41 @@ impl Texture {
 
     pub fn formats(&self) -> &[wgpu::TextureFormat] {
         &self.inner.formats
+    }
+
+    pub fn atlas_pointer(&self) -> Option<usize> {
+        self.inner
+            .atlas
+            .upgrade()
+            .map(|arc| Arc::as_ptr(&arc) as usize)
+    }
+
+    pub fn translate_uv(&self, uvs: &[[f32; 2]]) -> Result<Vec<[f32; 2]>, TextureError> {
+        // Get the texture location in the atlas
+        let Some(atlas) = self.inner.atlas.upgrade() else {
+            return Err(TextureError::AtlasGone);
+        };
+        let atlas = atlas.lock();
+        let Some(location) = atlas.get_location(self.inner.texture_id) else {
+            return Err(TextureError::TextureNotFoundInAtlas);
+        };
+        let x_max = location.uv.max.x;
+        let y_max = location.uv.max.y;
+        let x_min = location.uv.min.x;
+        let y_min = location.uv.min.y;
+
+        // Translate the vertices to the texture area
+        let translated_vertices = uvs
+            .iter()
+            .map(|&[x, y]| {
+                [
+                    (x_min + (x * (x_max - x_min))).clamp(0.0, 1.0),
+                    (y_min + (y * (y_max - y_min))).clamp(0.0, 1.0),
+                ]
+            })
+            .collect::<Vec<_>>();
+
+        Ok(translated_vertices)
     }
 
     pub fn write_data(&self, queue: &wgpu::Queue, data: &[&[u8]]) -> Result<(), TextureError> {
@@ -63,7 +98,7 @@ impl Texture {
         let Some(atlas) = self.inner.atlas.upgrade() else {
             return Err(TextureError::AtlasGone);
         };
-        let atlas = atlas.read();
+        let atlas = atlas.lock();
 
         let textures = atlas.textures();
         let Some(location) = atlas.get_location(self.inner.texture_id) else {
@@ -134,7 +169,7 @@ impl Texture {
         let Some(atlas) = self.inner.atlas.upgrade() else {
             return Err(TextureError::AtlasGone);
         };
-        let atlas = atlas.read();
+        let atlas = atlas.lock();
         let Some(location) = atlas.get_location(self.inner.texture_id) else {
             return Err(TextureError::TextureNotFoundInAtlas);
         };
@@ -160,7 +195,7 @@ impl Texture {
         let Some(atlas) = self.inner.atlas.upgrade() else {
             return Err(TextureError::AtlasGone);
         };
-        let atlas = atlas.read();
+        let atlas = atlas.lock();
         let texture_views = atlas.texture_views();
         let Some(location) = atlas.get_location(self.inner.texture_id) else {
             return Err(TextureError::TextureNotFoundInAtlas);
@@ -205,20 +240,28 @@ impl Texture {
         let Some(atlas) = self.inner.atlas.upgrade() else {
             return Err(TextureError::AtlasGone);
         };
-        let atlas = atlas.read();
+        let atlas = atlas.lock();
         let Some(location) = atlas.get_location(self.inner.texture_id) else {
             return Err(TextureError::TextureNotFoundInAtlas);
         };
 
         Ok(location.uv)
     }
+
+    // pub fn with_data<Init, F>(&self, init: Init, f: F) -> Result<(), TextureError>
+    // where
+    //     Init: FnOnce(&Texture) -> Result<(), TextureError>,
+    //     F: FnOnce(&Texture) -> Result<(), TextureError>,
+    // {
+    //     todo!()
+    // }
 }
 
 // Ensure the texture area will be deallocated when the texture is dropped.
 impl Drop for TextureInner {
     fn drop(&mut self) {
         if let Some(atlas) = self.atlas.upgrade() {
-            match atlas.read().deallocate(self.texture_id) {
+            match atlas.lock().deallocate(self.texture_id) {
                 Ok(_) => {
                     // Successfully deallocated
                 }
@@ -263,14 +306,14 @@ pub struct TextureAtlas {
 
     state: TextureAtlasState,
 
-    weak_self: Weak<RwLock<Self>>,
+    weak_self: Weak<Mutex<Self>>,
 }
 
 struct TextureAtlasState {
-    allocators: Vec<Mutex<AtlasAllocator>>,
-    texture_id_to_location: DashMap<TextureId, TextureLocation>,
-    texture_id_to_alloc_id: DashMap<TextureId, AllocId>,
-    usage: std::sync::atomic::AtomicUsize,
+    allocators: Vec<AtlasAllocator>,
+    texture_id_to_location: HashMap<TextureId, TextureLocation>,
+    texture_id_to_alloc_id: HashMap<TextureId, AllocId>,
+    usage: usize,
 }
 
 /// Constructor and information methods.
@@ -279,7 +322,7 @@ impl TextureAtlas {
         device: &wgpu::Device,
         size: wgpu::Extent3d,
         formats: &[wgpu::TextureFormat],
-    ) -> Arc<RwLock<Self>> {
+    ) -> Arc<Mutex<Self>> {
         let (textures, texture_views) = Self::create_texture_and_view(device, formats, size);
 
         // Initialize the state with an empty allocator and allocation map.
@@ -287,15 +330,14 @@ impl TextureAtlas {
             allocators: (0..size.depth_or_array_layers)
                 .map(|_| Size::new(size.width as i32, size.height as i32))
                 .map(AtlasAllocator::new)
-                .map(Mutex::new)
                 .collect(),
-            texture_id_to_location: DashMap::new(),
-            texture_id_to_alloc_id: DashMap::new(),
-            usage: std::sync::atomic::AtomicUsize::new(0),
+            texture_id_to_location: HashMap::new(),
+            texture_id_to_alloc_id: HashMap::new(),
+            usage: 0,
         };
 
         Arc::new_cyclic(|weak_self| {
-            RwLock::new(Self {
+            Mutex::new(Self {
                 textures,
                 texture_views,
                 size,
@@ -321,15 +363,15 @@ impl TextureAtlas {
     }
 
     pub fn usage(&self) -> usize {
-        self.state.usage.load(std::sync::atomic::Ordering::SeqCst)
+        self.state.usage
     }
 
     // todo: we can optimize this performance.
     pub fn max_allocation_size(&self) -> [u32; 2] {
         let mut max_size = [0; 2];
 
-        for entry in self.state.texture_id_to_location.iter() {
-            let size = entry.value().size();
+        for location in self.state.texture_id_to_location.values() {
+            let size = location.size();
             max_size[0] = max_size[0].max(size[0]);
             max_size[1] = max_size[1].max(size[1]);
         }
@@ -340,11 +382,21 @@ impl TextureAtlas {
 /// TextureAtlas allocation and deallocation
 impl TextureAtlas {
     /// Allocate a texture in the atlas.
-    pub fn allocate(&self, size: [u32; 2]) -> Result<Texture, TextureAtlasError> {
+    pub fn allocate(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        size: [u32; 2],
+    ) -> Result<Texture, TextureAtlasError> {
+        // Check if size is smaller than the atlas size
+        if size[0] > self.size.width || size[1] > self.size.height {
+            return Err(TextureAtlasError::AllocationFailedTooLarge);
+        }
+
         let size = Size::new(size[0] as i32, size[1] as i32);
 
-        for (page_index, allocator) in self.state.allocators.iter().enumerate() {
-            if let Some(alloc) = allocator.lock().allocate(size) {
+        for (page_index, allocator) in self.state.allocators.iter_mut().enumerate() {
+            if let Some(alloc) = allocator.allocate(size) {
                 let bounds = alloc.rectangle;
                 let uvs = euclid::Box2D::new(
                     euclid::Point2D::new(
@@ -384,48 +436,89 @@ impl TextureAtlas {
                     .texture_id_to_alloc_id
                     .insert(texture_id, alloc.id);
                 // Update usage
-                // use `SeqCst` for safety, just for now. we can optimize this later.
-                self.state.usage.fetch_add(
-                    location.bounds.area() as usize,
-                    std::sync::atomic::Ordering::SeqCst,
-                );
+                self.state.usage += location.bounds.area() as usize;
 
                 // Return the allocated texture
                 return Ok(texture);
             }
         }
 
-        Err(TextureAtlasError::AllocationFailedNotEnoughSpace)
+        self.add_one_page(device, queue);
+
+        // Retry allocation after adding a new page
+        let page_index = self.state.allocators.len() - 1;
+        let allocator = &mut self.state.allocators[page_index];
+        if let Some(alloc) = allocator.allocate(size) {
+            let bounds = alloc.rectangle;
+            let uvs = euclid::Box2D::new(
+                euclid::Point2D::new(
+                    (bounds.min.x as f32) / (self.size.width as f32),
+                    (bounds.min.y as f32) / (self.size.height as f32),
+                ),
+                euclid::Point2D::new(
+                    (bounds.max.x as f32) / (self.size.width as f32),
+                    (bounds.max.y as f32) / (self.size.height as f32),
+                ),
+            );
+            let location = TextureLocation {
+                page_index: page_index as u32,
+                bounds,
+                uv: uvs,
+            };
+
+            // Create a new TextureId and Texture
+            let texture_id = TextureId {
+                texture_uuid: Uuid::new_v4(),
+            };
+            let texture_inner = TextureInner {
+                texture_id,
+                atlas: self.weak_self.clone(),
+                size: [size.width as u32, size.height as u32],
+                formats: self.formats.clone(),
+            };
+            let texture = Texture {
+                inner: Arc::new(texture_inner),
+            };
+
+            // Store the texture location and allocation id in the atlas state.
+            self.state
+                .texture_id_to_location
+                .insert(texture_id, location);
+            self.state
+                .texture_id_to_alloc_id
+                .insert(texture_id, alloc.id);
+            // Update usage
+            self.state.usage += location.bounds.area() as usize;
+
+            // Return the allocated texture
+            Ok(texture)
+        } else {
+            panic!("We checked for enough space at the beginning, so this should never happen.");
+        }
     }
 
     /// Deallocate a texture from the atlas.
     /// This will be called automatically when the `TextureInner` is dropped.
-    fn deallocate(&self, id: TextureId) -> Result<(), DeallocationErrorTextureNotFound> {
+    fn deallocate(&mut self, id: TextureId) -> Result<(), DeallocationErrorTextureNotFound> {
         // Find the texture location and remove it from the id-to-location map.
-        let (_, location) = self
+        let location = self
             .state
             .texture_id_to_location
             .remove(&id)
             .ok_or(DeallocationErrorTextureNotFound)?;
 
         // Find the allocation id and remove it from the id-to-alloc-id map.
-        let (_, alloc_id) = self
+        let alloc_id = self
             .state
             .texture_id_to_alloc_id
             .remove(&id)
             .ok_or(DeallocationErrorTextureNotFound)?;
 
         // Deallocate the texture from the allocator.
-        self.state.allocators[location.page_index as usize]
-            .lock()
-            .deallocate(alloc_id);
+        self.state.allocators[location.page_index as usize].deallocate(alloc_id);
 
         // Update usage
-        // use `SeqCst` for safety, just for now. we can optimize this later.
-        self.state.usage.fetch_sub(
-            location.area() as usize,
-            std::sync::atomic::Ordering::SeqCst,
-        );
+        self.state.usage -= location.area() as usize;
 
         Ok(())
     }
@@ -433,214 +526,61 @@ impl TextureAtlas {
 
 /// Resize the atlas to a new size.
 impl TextureAtlas {
-    pub fn resize(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        new_size: wgpu::Extent3d,
-        allow_data_loss: bool,
-        new_allocation: Option<[u32; 2]>,
-    ) -> Result<Option<Texture>, TextureAtlasError> {
-        // mutable reference ensures we can modify the atlas state without threading issues.
-
-        // new allocator and allocation map
-        let mut new_allocators = (0..new_size.depth_or_array_layers)
-            .map(|_| Size::new(new_size.width as i32, new_size.height as i32))
-            .map(AtlasAllocator::new)
-            .map(Mutex::new)
-            .collect::<Vec<_>>();
-
-        // Re-allocate existing textures
-        let (new_texture_id_to_location, new_texture_id_to_alloc_id, mut new_usage) =
-            self.reallocate_existing(&mut new_allocators, new_size, allow_data_loss)?;
-
-        // Allocate for the new texture if requested
-        let return_texture = if let Some(size) = new_allocation {
-            match self.allocate_new(&mut new_allocators, new_size, size)? {
-                Some(new_texture_data) => Some(new_texture_data),
-                None => {
-                    if !allow_data_loss {
-                        return Err(TextureAtlasError::ResizeFailedNotEnoughSpace);
-                    }
-                    None
-                }
-            }
-        } else {
-            None
+    fn add_one_page(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+        let new_size = wgpu::Extent3d {
+            width: self.size.width,
+            height: self.size.height,
+            depth_or_array_layers: self.size.depth_or_array_layers + 1,
         };
 
-        // Copy data from old textures to new textures
         let (new_textures, new_texture_views) =
             Self::create_texture_and_view(device, &self.formats, new_size);
 
-        let location_map = new_texture_id_to_location.iter().map(|entry| {
-            let id = entry.key();
-            let new_location = entry.value();
-            let old_location = self
-                .state
-                .texture_id_to_location
-                .get(id)
-                .expect("New allocation map was constructed from old allocation map, so it should contain all ids");
-            (*old_location, *new_location)
+        self.state.allocators.push(AtlasAllocator::new(Size::new(
+            new_size.width as i32,
+            new_size.height as i32,
+        )));
+
+        // Copy existing texture data to the new textures.
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("TextureAtlas Resize Encoder"),
         });
 
-        let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("TextureAtlas Resize Command Encoder"),
-        });
+        for (old_texture, new_texture) in self.textures.iter().zip(new_textures.iter()) {
+            encoder.copy_texture_to_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: old_texture,
+                    mip_level: 0,
+                    aspect: wgpu::TextureAspect::All,
+                    origin: wgpu::Origin3d { x: 0, y: 0, z: 0 },
+                },
+                wgpu::TexelCopyTextureInfo {
+                    texture: new_texture,
+                    mip_level: 0,
+                    aspect: wgpu::TextureAspect::All,
+                    origin: wgpu::Origin3d { x: 0, y: 0, z: 0 },
+                },
+                wgpu::Extent3d {
+                    width: self.size.width,
+                    height: self.size.width,
+                    depth_or_array_layers: self.size.depth_or_array_layers,
+                },
+            );
+        }
 
-        Self::copy_texture_data(
-            &mut command_encoder,
-            &self.textures,
-            &self.texture_views,
-            &new_textures,
-            &new_texture_views,
-            location_map,
-        );
+        queue.submit(Some(encoder.finish()));
 
-        // Submit the command encoder to copy data
-        queue.submit(Some(command_encoder.finish()));
-
-        // Update the atlas state
-        self.textures = new_textures;
-        self.texture_views = new_texture_views;
+        // Update the atlas state with the new textures and views.
+        self.textures.extend(new_textures);
+        self.texture_views.extend(new_texture_views);
         self.size = new_size;
-
-        if let Some((ref texture, location, alloc_id)) = return_texture {
-            new_texture_id_to_location.insert(texture.inner.texture_id, location);
-            new_texture_id_to_alloc_id.insert(texture.inner.texture_id, alloc_id);
-            new_usage += location.bounds.area() as usize;
-        }
-
-        self.state.allocators = new_allocators;
-        self.state.texture_id_to_location = new_texture_id_to_location;
-        self.state.texture_id_to_alloc_id = new_texture_id_to_alloc_id;
-        self.state.usage = std::sync::atomic::AtomicUsize::new(new_usage);
-
-        Ok(return_texture.map(|(texture, _, _)| texture))
-    }
-
-    #[allow(clippy::type_complexity)] // This function is for internal use only, so I think it's not a problem.
-    fn reallocate_existing(
-        &self,
-        new_allocators: &mut [Mutex<AtlasAllocator>],
-        new_atlas_size: wgpu::Extent3d,
-        allow_data_loss: bool,
-    ) -> Result<
-        (
-            DashMap<TextureId, TextureLocation>,
-            DashMap<TextureId, AllocId>,
-            usize,
-        ),
-        TextureAtlasError,
-    > {
-        let new_texture_id_to_location = DashMap::new();
-        let new_texture_id_to_alloc_id = DashMap::new();
-        let mut new_usage = 0;
-
-        'for_each_textures: for (texture_id, size) in self
-            .state
-            .texture_id_to_location
-            .iter()
-            .map(|entry| (*entry.key(), entry.value().size()))
-        {
-            let allocate_request = Size::new(size[0] as i32, size[1] as i32);
-
-            for (page_index, allocator) in new_allocators.iter_mut().enumerate() {
-                if let Some(alloc) = allocator.lock().allocate(allocate_request) {
-                    let bounds = alloc.rectangle;
-                    let uvs = euclid::Box2D::new(
-                        euclid::Point2D::new(
-                            (bounds.min.x as f32) / (new_atlas_size.width as f32),
-                            (bounds.min.y as f32) / (new_atlas_size.height as f32),
-                        ),
-                        euclid::Point2D::new(
-                            (bounds.max.x as f32) / (new_atlas_size.width as f32),
-                            (bounds.max.y as f32) / (new_atlas_size.height as f32),
-                        ),
-                    );
-
-                    let location = TextureLocation {
-                        page_index: page_index as u32,
-                        bounds,
-                        uv: uvs,
-                    };
-
-                    new_texture_id_to_location.insert(texture_id, location);
-                    new_texture_id_to_alloc_id.insert(texture_id, alloc.id);
-                    new_usage += location.bounds.area() as usize;
-                    continue 'for_each_textures;
-                }
-            }
-
-            // If we reach here, it means we couldn't allocate the texture in any page.
-            if !allow_data_loss {
-                return Err(TextureAtlasError::ResizeFailedNotEnoughSpace);
-            }
-        }
-
-        Ok((
-            new_texture_id_to_location,
-            new_texture_id_to_alloc_id,
-            new_usage,
-        ))
-    }
-
-    fn allocate_new(
-        &self,
-        new_allocators: &mut [Mutex<AtlasAllocator>],
-        new_atlas_size: wgpu::Extent3d,
-        size: [u32; 2],
-    ) -> Result<Option<(Texture, TextureLocation, AllocId)>, TextureAtlasError> {
-        let allocate_request = Size::new(size[0] as i32, size[1] as i32);
-
-        for (page_index, allocator) in new_allocators.iter_mut().enumerate() {
-            if let Some(alloc) = allocator.lock().allocate(allocate_request) {
-                let bounds = alloc.rectangle;
-                let uvs = euclid::Box2D::new(
-                    euclid::Point2D::new(
-                        (bounds.min.x as f32) / (new_atlas_size.width as f32),
-                        (bounds.min.y as f32) / (new_atlas_size.height as f32),
-                    ),
-                    euclid::Point2D::new(
-                        (bounds.max.x as f32) / (new_atlas_size.width as f32),
-                        (bounds.max.y as f32) / (new_atlas_size.height as f32),
-                    ),
-                );
-
-                let location = TextureLocation {
-                    page_index: page_index as u32,
-                    bounds,
-                    uv: uvs,
-                };
-
-                // Create a new TextureId and Texture
-                let texture_id = TextureId {
-                    texture_uuid: Uuid::new_v4(),
-                };
-                let texture = Texture {
-                    inner: Arc::new(TextureInner {
-                        texture_id,
-                        atlas: self.weak_self.clone(),
-                        size,
-                        formats: self.formats.clone(),
-                    }),
-                };
-
-                return Ok(Some((texture, location, alloc.id)));
-            }
-        }
-
-        Ok(None)
     }
 }
 
 // for internal use only
 impl TextureAtlas {
     fn get_location(&self, id: TextureId) -> Option<TextureLocation> {
-        self.state
-            .texture_id_to_location
-            .get(&id)
-            .map(|entry| *entry.value())
+        self.state.texture_id_to_location.get(&id).copied()
     }
 
     fn textures(&self) -> &[wgpu::Texture] {
@@ -682,6 +622,7 @@ impl TextureAtlas {
             let texture = device.create_texture(&texture_descriptor);
             let texture_view = texture.create_view(&wgpu::TextureViewDescriptor {
                 label: Some(&texture_view_label),
+                dimension: Some(wgpu::TextureViewDimension::D2Array),
                 ..wgpu::TextureViewDescriptor::default()
             });
             textures.push(texture);
@@ -689,54 +630,6 @@ impl TextureAtlas {
         }
 
         (textures, texture_views)
-    }
-
-    // Leave unused args to make refactoring easier.
-    fn copy_texture_data(
-        encoder: &mut wgpu::CommandEncoder,
-        old_textures: &[wgpu::Texture],
-        _old_texture_views: &[wgpu::TextureView],
-        new_textures: &[wgpu::Texture],
-        _new_texture_views: &[wgpu::TextureView],
-        location_map: impl Iterator<Item = (TextureLocation, TextureLocation)>,
-    ) {
-        for (old_location, new_location) in location_map {
-            for (old_texture, new_texture) in old_textures.iter().zip(new_textures.iter()) {
-                let old_origin = wgpu::Origin3d {
-                    x: old_location.bounds.min.x as u32,
-                    y: old_location.bounds.min.y as u32,
-                    z: old_location.page_index,
-                };
-
-                let new_origin = wgpu::Origin3d {
-                    x: new_location.bounds.min.x as u32,
-                    y: new_location.bounds.min.y as u32,
-                    z: new_location.page_index,
-                };
-
-                let size = old_location.size();
-
-                encoder.copy_texture_to_texture(
-                    wgpu::TexelCopyTextureInfo {
-                        texture: old_texture,
-                        mip_level: 0,
-                        origin: old_origin,
-                        aspect: wgpu::TextureAspect::All,
-                    },
-                    wgpu::TexelCopyTextureInfo {
-                        texture: new_texture,
-                        mip_level: 0,
-                        origin: new_origin,
-                        aspect: wgpu::TextureAspect::All,
-                    },
-                    wgpu::Extent3d {
-                        width: size[0],
-                        height: size[1],
-                        depth_or_array_layers: 1,
-                    },
-                );
-            }
-        }
     }
 }
 
@@ -761,6 +654,8 @@ pub enum TextureAtlasError {
     AllocationFailedNotEnoughSpace,
     #[error("Resizing the atlas failed because there was not enough space for all the textures.")]
     ResizeFailedNotEnoughSpace,
+    #[error("Allocation failed because the requested size is too large for the atlas.")]
+    AllocationFailedTooLarge,
 }
 
 #[cfg(test)]
@@ -797,7 +692,7 @@ mod tests {
     impl Texture {
         fn location(&self) -> Option<TextureLocation> {
             let atlas = self.inner.atlas.upgrade()?;
-            let atlas = atlas.read();
+            let atlas = atlas.lock();
             atlas.get_location(self.inner.texture_id)
         }
     }
@@ -814,7 +709,7 @@ mod tests {
             };
             let formats = &[wgpu::TextureFormat::Rgba8UnormSrgb];
             let atlas = TextureAtlas::new(&device, size, formats);
-            let atlas = atlas.read();
+            let atlas = atlas.lock();
 
             assert_eq!(atlas.size(), size);
             assert_eq!(atlas.formats(), formats);
@@ -838,7 +733,7 @@ mod tests {
     #[test]
     fn test_texture_allocation_and_deallocation() {
         pollster::block_on(async {
-            let (device, _queue) = setup_wgpu().await;
+            let (device, queue) = setup_wgpu().await;
             let size = wgpu::Extent3d {
                 width: 64,
                 height: 64,
@@ -848,32 +743,33 @@ mod tests {
             let atlas = TextureAtlas::new(&device, size, formats);
 
             // Allocate one texture
-            let texture1 = atlas.read().allocate([32, 32]).unwrap();
-            assert_eq!(atlas.read().allocation_count(), 1);
-            assert_eq!(atlas.read().usage(), 32 * 32);
+            let texture1 = atlas.lock().allocate(&device, &queue, [32, 32]).unwrap();
+            assert_eq!(atlas.lock().allocation_count(), 1);
+            assert_eq!(atlas.lock().usage(), 32 * 32);
 
             // Allocate another texture
-            let texture2 = atlas.read().allocate([16, 16]).unwrap();
-            assert_eq!(atlas.read().allocation_count(), 2);
-            assert_eq!(atlas.read().usage(), 32 * 32 + 16 * 16);
+            let texture2 = atlas.lock().allocate(&device, &queue, [16, 16]).unwrap();
+            assert_eq!(atlas.lock().allocation_count(), 2);
+            assert_eq!(atlas.lock().usage(), 32 * 32 + 16 * 16);
 
             // Deallocate one texture
             drop(texture1);
-            assert_eq!(atlas.read().allocation_count(), 1);
-            assert_eq!(atlas.read().usage(), 16 * 16);
+            assert_eq!(atlas.lock().allocation_count(), 1);
+            assert_eq!(atlas.lock().usage(), 16 * 16);
 
             // Deallocate the other texture
             drop(texture2);
-            assert_eq!(atlas.read().allocation_count(), 0);
-            assert_eq!(atlas.read().usage(), 0);
+            assert_eq!(atlas.lock().allocation_count(), 0);
+            assert_eq!(atlas.lock().usage(), 0);
         });
     }
 
+    /*
     /// Tests that the atlas correctly returns an error when there is not enough space for a new allocation.
     #[test]
     fn test_allocation_failure() {
         pollster::block_on(async {
-            let (device, _queue) = setup_wgpu().await;
+            let (device, queue) = setup_wgpu().await;
             let size = wgpu::Extent3d {
                 width: 32,
                 height: 32,
@@ -883,22 +779,24 @@ mod tests {
             let atlas = TextureAtlas::new(&device, size, formats);
 
             // This should succeed
-            let _texture1 = atlas.read().allocate([32, 32]).unwrap();
+            let _texture1 = atlas.lock().allocate(&device, &queue, [32, 32]).unwrap();
 
             // This should fail
-            let result = atlas.read().allocate([1, 1]);
+            let result = atlas.lock().allocate(&device, &queue, [1, 1]);
+
             assert!(matches!(
                 result,
                 Err(TextureAtlasError::AllocationFailedNotEnoughSpace)
             ));
         });
     }
+    */
 
     /// Tests if the space freed by a deallocated texture can be reused by a new allocation.
     #[test]
     fn test_reuse_deallocated_space() {
         pollster::block_on(async {
-            let (device, _queue) = setup_wgpu().await;
+            let (device, queue) = setup_wgpu().await;
             let size = wgpu::Extent3d {
                 width: 64,
                 height: 64,
@@ -907,110 +805,15 @@ mod tests {
             let formats = &[wgpu::TextureFormat::Rgba8UnormSrgb];
             let atlas = TextureAtlas::new(&device, size, formats);
 
-            let texture1 = atlas.read().allocate([64, 64]).unwrap();
-            assert_eq!(atlas.read().allocation_count(), 1);
+            let texture1 = atlas.lock().allocate(&device, &queue, [64, 64]).unwrap();
+            assert_eq!(atlas.lock().allocation_count(), 1);
 
             drop(texture1);
-            assert_eq!(atlas.read().allocation_count(), 0);
+            assert_eq!(atlas.lock().allocation_count(), 0);
 
             // Should be able to allocate again in the same space
-            let _texture2 = atlas.read().allocate([64, 64]).unwrap();
-            assert_eq!(atlas.read().allocation_count(), 1);
-        });
-    }
-
-    /// Tests if the atlas can be resized to a larger size, preserving existing allocations.
-    #[test]
-    fn test_atlas_resize_grow() {
-        pollster::block_on(async {
-            let (device, queue) = setup_wgpu().await;
-            let initial_size = wgpu::Extent3d {
-                width: 64,
-                height: 64,
-                depth_or_array_layers: 1,
-            };
-            let formats = &[wgpu::TextureFormat::Rgba8UnormSrgb];
-            let atlas = TextureAtlas::new(&device, initial_size, formats);
-
-            let _texture1 = atlas.read().allocate([32, 32]).unwrap();
-            assert_eq!(atlas.read().allocation_count(), 1);
-
-            let new_size = wgpu::Extent3d {
-                width: 128,
-                height: 128,
-                depth_or_array_layers: 1,
-            };
-            atlas
-                .write()
-                .resize(&device, &queue, new_size, false, None)
-                .unwrap();
-
-            assert_eq!(atlas.read().size(), new_size);
-            assert_eq!(atlas.read().allocation_count(), 1);
-        });
-    }
-
-    /// Tests that resizing the atlas to a smaller size fails if existing textures do not fit
-    /// and `allow_data_loss` is false.
-    #[test]
-    fn test_atlas_resize_shrink_fail() {
-        pollster::block_on(async {
-            let (device, queue) = setup_wgpu().await;
-            let initial_size = wgpu::Extent3d {
-                width: 64,
-                height: 64,
-                depth_or_array_layers: 1,
-            };
-            let formats = &[wgpu::TextureFormat::Rgba8UnormSrgb];
-            let atlas = TextureAtlas::new(&device, initial_size, formats);
-
-            let _texture1 = atlas.read().allocate([64, 64]).unwrap();
-
-            let new_size = wgpu::Extent3d {
-                width: 32,
-                height: 32,
-                depth_or_array_layers: 1,
-            };
-            let result = atlas.write().resize(&device, &queue, new_size, false, None);
-
-            assert!(matches!(
-                result,
-                Err(TextureAtlasError::ResizeFailedNotEnoughSpace)
-            ));
-            // Ensure state is unchanged
-            assert_eq!(atlas.read().size(), initial_size);
-            assert_eq!(atlas.read().allocation_count(), 1);
-        });
-    }
-
-    /// Tests that resizing the atlas to a smaller size succeeds with data loss
-    /// if `allow_data_loss` is true, discarding textures that no longer fit.
-    #[test]
-    fn test_atlas_resize_shrink_with_data_loss() {
-        pollster::block_on(async {
-            let (device, queue) = setup_wgpu().await;
-            let initial_size = wgpu::Extent3d {
-                width: 64,
-                height: 64,
-                depth_or_array_layers: 1,
-            };
-            let formats = &[wgpu::TextureFormat::Rgba8UnormSrgb];
-            let atlas = TextureAtlas::new(&device, initial_size, formats);
-
-            let _texture1 = atlas.read().allocate([40, 40]).unwrap();
-
-            let new_size = wgpu::Extent3d {
-                width: 32,
-                height: 32,
-                depth_or_array_layers: 1,
-            };
-            atlas
-                .write()
-                .resize(&device, &queue, new_size, true, None)
-                .unwrap();
-
-            assert_eq!(atlas.read().size(), new_size);
-            assert_eq!(atlas.read().allocation_count(), 0); // texture should be gone
+            let _texture2 = atlas.lock().allocate(&device, &queue, [64, 64]).unwrap();
+            assert_eq!(atlas.lock().allocation_count(), 1);
         });
     }
 
@@ -1018,7 +821,7 @@ mod tests {
     #[test]
     fn test_texture_uv() {
         pollster::block_on(async {
-            let (device, _queue) = setup_wgpu().await;
+            let (device, queue) = setup_wgpu().await;
             let size = wgpu::Extent3d {
                 width: 128,
                 height: 128,
@@ -1027,7 +830,7 @@ mod tests {
             let formats = &[wgpu::TextureFormat::Rgba8UnormSrgb];
             let atlas = TextureAtlas::new(&device, size, formats);
 
-            let texture = atlas.read().allocate([32, 64]).unwrap();
+            let texture = atlas.lock().allocate(&device, &queue, [32, 64]).unwrap();
             let uv = texture.uv().unwrap();
 
             assert!(uv.min.x >= 0.0 && uv.min.x < 1.0);
@@ -1046,7 +849,7 @@ mod tests {
     #[test]
     fn test_texture_error_when_atlas_gone() {
         pollster::block_on(async {
-            let (device, _queue) = setup_wgpu().await;
+            let (device, queue) = setup_wgpu().await;
             let size = wgpu::Extent3d {
                 width: 128,
                 height: 128,
@@ -1055,7 +858,7 @@ mod tests {
             let formats = &[wgpu::TextureFormat::Rgba8UnormSrgb];
             let atlas = TextureAtlas::new(&device, size, formats);
 
-            let texture = atlas.read().allocate([32, 32]).unwrap();
+            let texture = atlas.lock().allocate(&device, &queue, [32, 32]).unwrap();
 
             drop(atlas);
 
@@ -1078,8 +881,8 @@ mod tests {
             let atlas = TextureAtlas::new(&device, atlas_size, &[texture_format]);
 
             // Allocate two textures to ensure the second one is not at the origin
-            let _texture1 = atlas.read().allocate([10, 10]).unwrap();
-            let texture2 = atlas.read().allocate([17, 17]).unwrap(); // Use non-aligned size
+            let _texture1 = atlas.lock().allocate(&device, &queue, [10, 10]).unwrap();
+            let texture2 = atlas.lock().allocate(&device, &queue, [17, 17]).unwrap(); // Use non-aligned size
 
             let texture_size = texture2.size();
             let location = texture2.location().unwrap();
@@ -1115,7 +918,7 @@ mod tests {
             };
             encoder.copy_texture_to_buffer(
                 wgpu::TexelCopyTextureInfo {
-                    texture: &atlas.read().textures()[0],
+                    texture: &atlas.lock().textures()[0],
                     mip_level: 0,
                     origin: wgpu::Origin3d {
                         x: location.bounds.min.x as u32,

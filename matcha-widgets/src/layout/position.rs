@@ -23,7 +23,7 @@ impl<T: Send + 'static> Dom<T> for Position {
         })
     }
 
-    async fn collect_observer(&self) -> Observer {
+    async fn set_observer(&self) -> Observer {
         // If your widget has any child widgets,
         // you should collect their observers for matcha ui system to catch child component updates.
 

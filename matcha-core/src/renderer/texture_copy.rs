@@ -1,4 +1,4 @@
-use crate::context::WidgetContext;
+use crate::ui::WidgetContext;
 use nalgebra::Matrix4;
 use wgpu::PipelineCompilationOptions;
 

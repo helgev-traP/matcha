@@ -5,8 +5,9 @@ use std::{
 
 use tokio::sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
+use crate::ui::WidgetContext;
+
 use super::{
-    context::WidgetContext,
     observer::{ObserverReceiver, ObserverSender, create_observer_ch},
     types::range::CoverRange,
     ui::{Background, Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
@@ -215,8 +216,8 @@ impl<Model: Sync + Send + 'static, Response: 'static, InnerResponse: 'static> Do
         })
     }
 
-    async fn collect_observer(&self) -> super::observer::Observer {
-        let mut observer = self.dom.collect_observer().await;
+    async fn set_observer(&self) -> super::observer::Observer {
+        let mut observer = self.dom.set_observer().await;
         observer.add_receiver(self.update_flag.make_observer().await);
         observer
     }

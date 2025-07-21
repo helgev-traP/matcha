@@ -1,15 +1,23 @@
 use std::{fmt::Debug, sync::Arc};
 
-use nalgebra::base;
-use wgpu::util::DeviceExt;
+use vello::kurbo::common;
+use winit::window::Window;
 
-use crate::renderer::PrincipleRenderer;
+use crate::{
+    context::{
+        WindowContext,
+        window_surface::{self, WindowSurface},
+    },
+    ui::WidgetContext,
+};
 
 use super::{
     component::Component,
-    context,
+    context::gpu::Gpu,
+    device::{keyboard_state::KeyboardState, mouse_state::MouseState},
     events::Event,
     observer::Observer,
+    renderer::ObjectRenderer,
     types::color::Color,
     ui::{Background, Widget},
 };
@@ -18,14 +26,10 @@ use super::{
 
 mod benchmark;
 mod error;
-pub(crate) mod gpu_state;
-mod keyboard_state;
-mod mouse_state;
 
 // MARK: Window
 
-pub struct Window<
-    'a,
+pub struct WinitInstance<
     Model: Send + Sync + 'static,
     Message: 'static,
     Response: 'static,
@@ -43,8 +47,9 @@ pub struct Window<
     base_color: Color,
 
     // --- rendering context ---
-    winit_window: Option<Arc<winit::window::Window>>,
-    gpu_state: Option<gpu_state::GpuState<'a>>,
+    gpu: Option<Gpu>,
+    window_surface: Option<WindowSurface>,
+    window_context: Option<WindowContext>,
 
     // --- UI context ---
     root_component: Component<Model, Message, Response, IR>,
@@ -52,8 +57,8 @@ pub struct Window<
     observer: Observer,
 
     // --- raw event handling ---
-    mouse_state: Option<mouse_state::MouseState>,
-    keyboard_state: Option<keyboard_state::KeyboardState>,
+    mouse_state: Option<MouseState>,
+    keyboard_state: Option<KeyboardState>,
 
     // --- event handling settings ---
     scroll_pixel_per_line: f32,
@@ -70,7 +75,7 @@ pub struct Window<
 
 // build chain
 impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'static>
-    Window<'_, Model, Message, Response, IR>
+    WinitInstance<Model, Message, Response, IR>
 {
     pub fn new(component: Component<Model, Message, Response, IR>) -> Self {
         let tokio_runtime = tokio::runtime::Builder::new_multi_thread()
@@ -87,11 +92,12 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
             maximized: false,
             full_screen: false,
             base_color: Color::default(),
-            winit_window: None,
-            gpu_state: None,
+            gpu: None,
+            window_surface: None,
+            window_context: None,
             root_component: component,
             root_widget: None,
-            observer: Observer::default(),
+            observer: Observer::new(),
             mouse_state: None,
             keyboard_state: None,
             scroll_pixel_per_line: 40.0,
@@ -125,12 +131,16 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
 // MARK: render
 
 impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'static>
-    Window<'_, Model, Message, Response, IR>
+    WinitInstance<Model, Message, Response, IR>
 {
     fn render(&mut self) -> Result<(), error::RenderError> {
         // ensure that rendering context is available.
-        let Some(gpu_state) = self.gpu_state.as_ref() else {
+        let Some(gpu) = self.gpu.as_ref() else {
             return Err(error::RenderError::Gpu);
+        };
+
+        let Some(window_surface) = self.window_surface.as_ref() else {
+            return Err(error::RenderError::WindowSurface);
         };
 
         let Some(root_widget) = self.root_widget.as_mut() else {
@@ -148,18 +158,18 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
         // rendering
 
         // get surface texture
-        let surface_texture = gpu_state.get_current_texture();
+        let surface_texture = window_surface.get_current_texture();
         let surface_view = surface_texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
         // viewport size
-        let viewport_size = gpu_state.viewport_size();
+        let viewport_size = window_surface.size();
         let viewport_size = [viewport_size[0] as f32, viewport_size[1] as f32];
 
         // start benchmark
         benchmarker.with_benchmark(|| {
-            let ctx = gpu_state.widget_context(self.default_font_size);
+            let ctx = gpu.widget_context(self.default_font_size);
 
             let mut command_encoder = ctx.make_encoder();
 
@@ -189,28 +199,27 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
                 let render_result = root_widget.render(
                     &mut render_pass,
                     [viewport_size[0] as u32, viewport_size[1] as u32],
-                    gpu_state.surface_format(),
+                    window_surface.format(),
                     [Some(viewport_size[0]), Some(viewport_size[1])],
                     Background::new(&surface_view, [0.0, 0.0]),
                     &ctx,
                 );
 
-                gpu_state
-                    .common_resource()
-                    .get_or_insert_with::<PrincipleRenderer, _>(|| PrincipleRenderer::new(&ctx))
-                    .render_to_surface(
-                        gpu_state.device(),
-                        gpu_state.queue(),
+                gpu.common_resource()
+                    .get_or_insert_with::<ObjectRenderer, _>(|| ObjectRenderer::new(&ctx))
+                    .render(
+                        gpu.device(),
+                        gpu.queue(),
                         &surface_view,
                         viewport_size,
                         render_result,
                         None,
+                        window_surface.format(),
                     );
             }
 
             // submit command encoder
-            gpu_state
-                .queue()
+            gpu.queue()
                 .submit(std::iter::once(command_encoder.finish()));
         });
 
@@ -241,7 +250,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
 // MARK: process_raw_event
 
 impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'static>
-    Window<'_, Model, Message, Response, IR>
+    WinitInstance<Model, Message, Response, IR>
 {
     fn process_raw_event(
         &mut self,
@@ -259,7 +268,10 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
                 Event::default()
             }
             winit::event::WindowEvent::Resized(size) => {
-                self.gpu_state.as_mut().unwrap().resize(size);
+                let gpu = self.gpu.as_ref().unwrap();
+                let window_surface = self.window_surface.as_mut().unwrap();
+                window_surface.resize(size, gpu);
+                self.observer = Observer::new_render_trigger();
                 Event::default()
             }
             // mouse
@@ -349,7 +361,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
 // MARK: polling to render
 
 impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'static>
-    Window<'_, Model, Message, Response, IR>
+    WinitInstance<Model, Message, Response, IR>
 {
     pub fn poll(&mut self) {
         // DOM and Widget updates, as well as re-rendering, will only execute in this function
@@ -362,7 +374,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
                 let dom = self.root_component.view().await;
 
                 // re-collect observers
-                self.observer = dom.collect_observer().await;
+                dom.set_observer(&self.observer).await;
 
                 // update widget tree
 
@@ -385,58 +397,70 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
 
 // winit event handler
 impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, IR: 'static>
-    winit::application::ApplicationHandler<Message> for Window<'_, Model, Message, Response, IR>
+    winit::application::ApplicationHandler<Message>
+    for WinitInstance<Model, Message, Response, IR>
 {
     // MARK: resumed
 
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        // --- prepare gpu ---
+
+        let gpu = match self.tokio_runtime.block_on(Gpu::new(self.performance)) {
+            Ok(gpu) => gpu,
+            Err(e) => {
+                eprintln!("Failed to create GPU instance: {}", e);
+                event_loop.exit(); // Exit event loop.
+                return;
+            }
+        };
+        let gpu = self.gpu.insert(gpu);
+
         // --- create window ---
-        let winit_window = Arc::new(
-            event_loop
-                .create_window(winit::window::WindowAttributes::default())
-                .unwrap(),
-        );
+
+        let winit_window = event_loop
+            .create_window(winit::window::WindowAttributes::default())
+            .unwrap();
+        let window_surface = self
+            .window_surface
+            .insert(WindowSurface::new(winit_window, gpu));
 
         // set window initial settings
-        winit_window.set_title(&self.window_title);
-        let _ = winit_window.request_inner_size(winit::dpi::PhysicalSize::new(
-            self.init_size[0],
-            self.init_size[1],
-        ));
+
+        window_surface.window().set_title(&self.window_title);
+        let _ = window_surface
+            .window()
+            .request_inner_size(winit::dpi::PhysicalSize::new(
+                self.init_size[0],
+                self.init_size[1],
+            ));
         if self.maximized {
-            winit_window.set_maximized(true);
+            window_surface.window().set_maximized(true);
         }
         if self.full_screen {
-            winit_window.set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
+            window_surface
+                .window()
+                .set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
         }
-        self.winit_window = Some(winit_window);
 
         event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
 
-        // --- prepare gpu ---
+        // --- create window context ---
 
-        let gpu_state = self.tokio_runtime.block_on(gpu_state::GpuState::new(
-            self.winit_window.as_ref().unwrap().clone(),
-            self.performance,
-            wgpu::TextureFormat::Rgba8UnormSrgb,
-        ));
-        self.gpu_state = Some(gpu_state);
+        self.window_context = Some(WindowContext::new(window_surface.format()));
 
         // --- init input context ---
         {
             // todo: calculate double click and long press duration from monitor refresh rate
 
-            self.mouse_state = Some(mouse_state::MouseState::new(12, 60).unwrap());
-            self.keyboard_state = Some(keyboard_state::KeyboardState::new());
+            self.mouse_state = Some(MouseState::new(12, 60).unwrap());
+            self.keyboard_state = Some(KeyboardState::new());
         }
 
         // --- prepare benchmark monitoring ---
 
         {
-            let rate = self
-                .winit_window
-                .as_ref()
-                .unwrap()
+            let rate = window_surface
+                .window()
                 .current_monitor()
                 .unwrap()
                 .refresh_rate_millihertz()
@@ -467,17 +491,18 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, 
         // when root widget exists
         if let Some(root_widget) = self.root_widget.as_mut() {
             // get response from widget tree
-            let window_size = self.gpu_state.as_ref().unwrap().viewport_size();
+            let window_surface = self.window_surface.as_ref().unwrap();
+            let window_size = window_surface.size();
             let window_size = [window_size[0] as f32, window_size[1] as f32];
+
+            let gpu = self.gpu.as_ref().unwrap();
+
+            let window_context = self.window_context.as_ref().unwrap();
 
             let response = root_widget.widget_event(
                 &event,
                 [Some(window_size[0]), Some(window_size[1])],
-                &self
-                    .gpu_state
-                    .as_ref()
-                    .unwrap()
-                    .widget_context(self.default_font_size),
+                &WidgetContext::new(gpu, window_surface, window_context, self.default_font_size),
             );
 
             if let Some(user_event) = response {

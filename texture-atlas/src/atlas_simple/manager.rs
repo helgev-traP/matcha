@@ -1,11 +1,10 @@
-use core::panic;
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::rc::Rc;
+use std::sync::Arc;
 
+use dashmap::DashMap;
+use parking_lot::Mutex;
 use thiserror::Error;
 
-use super::atlas::{Texture, TextureAtlas, TextureAtlasError};
+use crate::atlas_simple::{Texture, TextureAtlas, TextureAtlasError};
 
 pub struct MemoryAllocateStrategy {
     pub initial_pages: u32,
@@ -16,19 +15,19 @@ pub struct MemoryAllocateStrategy {
 }
 
 pub struct AtlasManager {
-    device: Rc<wgpu::Device>,
-    queue: Rc<wgpu::Queue>,
+    device: Arc<wgpu::Device>,
+    queue: Arc<wgpu::Queue>,
 
     max_size_of_3d_texture: wgpu::Extent3d,
     memory_strategy: MemoryAllocateStrategy,
 
-    atlases: HashMap<Vec<wgpu::TextureFormat>, Rc<RefCell<TextureAtlas>>>,
+    atlases: DashMap<Vec<wgpu::TextureFormat>, Arc<Mutex<TextureAtlas>>>,
 }
 
 impl AtlasManager {
     pub fn new(
-        device: Rc<wgpu::Device>,
-        queue: Rc<wgpu::Queue>,
+        device: Arc<wgpu::Device>,
+        queue: Arc<wgpu::Queue>,
         memory_strategy: MemoryAllocateStrategy,
         max_size_of_3d_texture: wgpu::Extent3d,
     ) -> Self {
@@ -37,12 +36,12 @@ impl AtlasManager {
             queue,
             max_size_of_3d_texture,
             memory_strategy,
-            atlases: HashMap::new(),
+            atlases: DashMap::new(),
         }
     }
 
     pub fn add_format_set(
-        &mut self,
+        &self,
         formats: Vec<wgpu::TextureFormat>,
     ) -> Result<(), AtlasManagerError> {
         if formats.is_empty() {
@@ -67,7 +66,7 @@ impl AtlasManager {
     }
 
     pub fn allocate(
-        &mut self,
+        &self,
         size: [u32; 2],
         formats: &[wgpu::TextureFormat],
     ) -> Result<Texture, AtlasManagerError> {
@@ -80,82 +79,16 @@ impl AtlasManager {
             return Err(AtlasManagerError::InvalidTextureSize);
         }
 
-        let atlas_rc = self
+        let atlas_entry = self
             .atlases
-            .get_mut(formats)
+            .get(formats)
             .ok_or(AtlasManagerError::FormatSetNotFound)?;
+        let mut atlas = atlas_entry.lock();
 
-        // Check if proactive resize is needed
-        let allocation_area = (size[0] * size[1]) as usize;
-        let mut resize = None;
-        if let Some(resize_threshold) = self.memory_strategy.resize_threshold {
-            let atlas = atlas_rc.borrow();
-            let atlas_size = atlas.size();
-            let capacity = atlas.capacity();
-            let usage = atlas.usage();
-
-            if ((usage + allocation_area) as f32 / capacity as f32 > resize_threshold)
-                && (atlas_size.depth_or_array_layers
-                    < self.max_size_of_3d_texture.depth_or_array_layers)
-            {
-                let new_page_size = ((atlas_size.depth_or_array_layers as f32
-                    * self.memory_strategy.resize_factor)
-                    .ceil() as u32)
-                    .min(self.max_size_of_3d_texture.depth_or_array_layers);
-
-                resize = Some(wgpu::Extent3d {
-                    width: atlas_size.width,
-                    height: atlas_size.height,
-                    depth_or_array_layers: new_page_size,
-                });
-            }
-        }
-
-        if resize.is_none() {
-            // No resize needed yet, try to allocate.
-            let mut atlas = atlas_rc.borrow_mut();
-            if let Ok(texture) = atlas.allocate(size) {
-                return Ok(texture);
-            } else {
-                // Allocation failed, so we must resize.
-                let atlas_size = atlas.size();
-                if atlas_size.depth_or_array_layers
-                    >= self.max_size_of_3d_texture.depth_or_array_layers
-                {
-                    return Err(AtlasManagerError::from(
-                        TextureAtlasError::AllocationFailedNotEnoughSpace,
-                    ));
-                }
-                let new_page_size = ((atlas_size.depth_or_array_layers as f32
-                    * self.memory_strategy.resize_factor)
-                    .ceil() as u32)
-                    .min(self.max_size_of_3d_texture.depth_or_array_layers);
-
-                resize = Some(wgpu::Extent3d {
-                    width: atlas_size.width,
-                    height: atlas_size.height,
-                    depth_or_array_layers: new_page_size,
-                });
-            }
-        }
-
-        let Some(new_size) = resize else {
-            panic!(
-                "Resize was not triggered when it should have been. This is a bug in the atlas manager logic."
-            );
-        };
-
-        // Resize the atlas and allocate the texture.
-        let mut atlas = atlas_rc.borrow_mut();
-        match atlas.resize(&self.device, &self.queue, new_size, false, Some(size)) {
-            Ok(Some(texture)) => Ok(texture),
-            Ok(None) => {
-                panic!(
-                    "expected a texture to be returned after resizing when we give a size as `new_allocation`. This is a bug in the atlas manager logic."
-                );
-            }
-            Err(e) => Err(e.into()),
-        }
+        // Try to allocate directly.
+        atlas
+            .allocate(&self.device, &self.queue, size)
+            .map_err(AtlasManagerError::AtlasError)
     }
 }
 
@@ -207,16 +140,15 @@ mod tests {
         }
 
         fn get_atlas_size(&self, formats: &[wgpu::TextureFormat]) -> Option<wgpu::Extent3d> {
-            self.atlases.get(formats).map(|atlas| atlas.borrow().size())
+            self.atlases.get(formats).map(|atlas| atlas.lock().size())
         }
 
         fn get_atlas_usage(&self, formats: &[wgpu::TextureFormat]) -> Option<usize> {
-            self.atlases
-                .get(formats)
-                .map(|atlas| atlas.borrow().usage())
+            self.atlases.get(formats).map(|atlas| atlas.lock().usage())
         }
     }
 
+    /// Tests the initialization of `AtlasManager`.
     #[test]
     fn test_manager_new() {
         pollster::block_on(async {
@@ -234,12 +166,13 @@ mod tests {
                 depth_or_array_layers: 8,
             };
             let manager =
-                AtlasManager::new(Rc::new(device), Rc::new(queue), memory_strategy, max_size);
+                AtlasManager::new(Arc::new(device), Arc::new(queue), memory_strategy, max_size);
 
             assert_eq!(manager.atlas_count(), 0);
         });
     }
 
+    /// Tests adding a new format set to the manager.
     #[test]
     fn test_add_format_set() {
         pollster::block_on(async {
@@ -256,8 +189,8 @@ mod tests {
                 height: 1024,
                 depth_or_array_layers: 8,
             };
-            let mut manager =
-                AtlasManager::new(Rc::new(device), Rc::new(queue), memory_strategy, max_size);
+            let manager =
+                AtlasManager::new(Arc::new(device), Arc::new(queue), memory_strategy, max_size);
 
             let formats = vec![wgpu::TextureFormat::Rgba8UnormSrgb];
             manager.add_format_set(formats.clone()).unwrap();
@@ -270,9 +203,11 @@ mod tests {
                 2
             );
 
+            // Test adding empty format set
             let result = manager.add_format_set(vec![]);
             assert!(matches!(result, Err(AtlasManagerError::EmptyFormatSet)));
 
+            // Test adding existing format set
             let result = manager.add_format_set(formats.clone());
             assert!(matches!(
                 result,
@@ -281,6 +216,7 @@ mod tests {
         });
     }
 
+    /// Tests basic texture allocation.
     #[test]
     fn test_allocate_basic() {
         pollster::block_on(async {
@@ -297,8 +233,8 @@ mod tests {
                 height: 256,
                 depth_or_array_layers: 1,
             };
-            let mut manager =
-                AtlasManager::new(Rc::new(device), Rc::new(queue), memory_strategy, max_size);
+            let manager =
+                AtlasManager::new(Arc::new(device), Arc::new(queue), memory_strategy, max_size);
 
             let formats = vec![wgpu::TextureFormat::Rgba8UnormSrgb];
             manager.add_format_set(formats.clone()).unwrap();
@@ -309,6 +245,7 @@ mod tests {
         });
     }
 
+    /// Tests allocation with invalid texture sizes.
     #[test]
     fn test_allocate_invalid_size() {
         pollster::block_on(async {
@@ -325,26 +262,31 @@ mod tests {
                 height: 256,
                 depth_or_array_layers: 1,
             };
-            let mut manager =
-                AtlasManager::new(Rc::new(device), Rc::new(queue), memory_strategy, max_size);
+            let manager =
+                AtlasManager::new(Arc::new(device), Arc::new(queue), memory_strategy, max_size);
 
             let formats = vec![wgpu::TextureFormat::Rgba8UnormSrgb];
             manager.add_format_set(formats.clone()).unwrap();
 
+            // Zero width
             let result = manager.allocate([0, 32], &formats);
             assert!(matches!(result, Err(AtlasManagerError::InvalidTextureSize)));
 
+            // Zero height
             let result = manager.allocate([32, 0], &formats);
             assert!(matches!(result, Err(AtlasManagerError::InvalidTextureSize)));
 
+            // Exceeds max width
             let result = manager.allocate([257, 32], &formats);
             assert!(matches!(result, Err(AtlasManagerError::InvalidTextureSize)));
 
+            // Exceeds max height
             let result = manager.allocate([32, 257], &formats);
             assert!(matches!(result, Err(AtlasManagerError::InvalidTextureSize)));
         });
     }
 
+    /// Tests allocation with a non-existent format set.
     #[test]
     fn test_allocate_format_set_not_found() {
         pollster::block_on(async {
@@ -361,96 +303,12 @@ mod tests {
                 height: 256,
                 depth_or_array_layers: 1,
             };
-            let mut manager =
-                AtlasManager::new(Rc::new(device), Rc::new(queue), memory_strategy, max_size);
+            let manager =
+                AtlasManager::new(Arc::new(device), Arc::new(queue), memory_strategy, max_size);
 
             let formats = vec![wgpu::TextureFormat::Rgba8UnormSrgb];
             let result = manager.allocate([32, 32], &formats);
             assert!(matches!(result, Err(AtlasManagerError::FormatSetNotFound)));
-        });
-    }
-
-    #[test]
-    fn test_proactive_resize_only() {
-        pollster::block_on(async {
-            let (device, queue) = setup_wgpu().await;
-            let memory_strategy = MemoryAllocateStrategy {
-                initial_pages: 1,
-                resize_threshold: Some(0.1),
-                resize_factor: 2.0,
-                shrink_threshold: 0.2,
-                shrink_factor: 0.5,
-            };
-            let max_size = wgpu::Extent3d {
-                width: 64,
-                height: 64,
-                depth_or_array_layers: 4,
-            };
-            let mut manager =
-                AtlasManager::new(Rc::new(device), Rc::new(queue), memory_strategy, max_size);
-
-            let formats = vec![wgpu::TextureFormat::Rgba8UnormSrgb];
-            manager.add_format_set(formats.clone()).unwrap();
-
-            assert_eq!(
-                manager
-                    .get_atlas_size(&formats)
-                    .unwrap()
-                    .depth_or_array_layers,
-                1
-            );
-
-            let _texture = manager.allocate([32, 32], &formats).unwrap();
-
-            assert_eq!(
-                manager
-                    .get_atlas_size(&formats)
-                    .unwrap()
-                    .depth_or_array_layers,
-                2
-            );
-        });
-    }
-
-    #[test]
-    fn test_allocate_max_size_reached() {
-        pollster::block_on(async {
-            let (device, queue) = setup_wgpu().await;
-            let memory_strategy = MemoryAllocateStrategy {
-                initial_pages: 1,
-                resize_threshold: Some(0.1),
-                resize_factor: 2.0,
-                shrink_threshold: 0.2,
-                shrink_factor: 0.5,
-            };
-            let max_size = wgpu::Extent3d {
-                width: 32,
-                height: 32,
-                depth_or_array_layers: 1,
-            };
-            let mut manager =
-                AtlasManager::new(Rc::new(device), Rc::new(queue), memory_strategy, max_size);
-
-            let formats = vec![wgpu::TextureFormat::Rgba8UnormSrgb];
-            manager.add_format_set(formats.clone()).unwrap();
-
-            let _texture1 = manager.allocate([32, 32], &formats).unwrap();
-            assert_eq!(
-                manager
-                    .get_atlas_size(&formats)
-                    .unwrap()
-                    .depth_or_array_layers,
-                1
-            );
-            assert_eq!(manager.get_atlas_usage(&formats).unwrap(), 32 * 32);
-
-            let result = manager.allocate([1, 1], &formats);
-            assert!(matches!(
-                result,
-                Err(AtlasManagerError::AtlasError(
-                    TextureAtlasError::AllocationFailedNotEnoughSpace
-                ))
-            ));
         });
     }
 }

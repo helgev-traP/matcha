@@ -51,10 +51,10 @@ impl<T: Send + 'static> Dom<T> for Column<T> {
         })
     }
 
-    async fn collect_observer(&self) -> Observer {
+    async fn set_observer(&self) -> Observer {
         use futures::future::join_all;
 
-        let observers = join_all(self.items.iter().map(|dom| dom.collect_observer())).await;
+        let observers = join_all(self.items.iter().map(|dom| dom.set_observer())).await;
         observers
             .into_iter()
             .fold(Observer::default(), |obs, o| obs.join(o))
