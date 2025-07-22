@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 
-use euclid::Box2D;
+use euclid::Rect;
 use guillotiere::{AllocId, AtlasAllocator, Size, euclid};
 use parking_lot::Mutex;
 use thiserror::Error;
@@ -18,6 +18,7 @@ pub struct Texture {
 struct TextureInner {
     // allocation info
     texture_id: TextureId,
+    atlas_id: TextureAtlasId,
     // interaction with the atlas
     atlas: Weak<Mutex<TextureAtlas>>,
     // It may be useful to store some information about the texture that will not change during atlas resizing
@@ -28,6 +29,23 @@ struct TextureInner {
 /// Public API to interact with a texture.
 /// User code should not need to know about its id, location, or atlas.
 impl Texture {
+    pub fn atlas_id(&self) -> TextureAtlasId {
+        self.inner.atlas_id
+    }
+
+    pub fn position_in_atlas(&self) -> Result<(u32, Rect<f32, euclid::UnknownUnit>), TextureError> {
+        // Get the texture location in the atlas
+        let Some(atlas) = self.inner.atlas.upgrade() else {
+            return Err(TextureError::AtlasGone);
+        };
+        let atlas = atlas.lock();
+        let Some(location) = atlas.get_location(self.inner.texture_id) else {
+            return Err(TextureError::TextureNotFoundInAtlas);
+        };
+
+        Ok((location.page_index, location.uv))
+    }
+
     pub fn area(&self) -> u32 {
         self.inner.size[0] * self.inner.size[1]
     }
@@ -56,10 +74,10 @@ impl Texture {
         let Some(location) = atlas.get_location(self.inner.texture_id) else {
             return Err(TextureError::TextureNotFoundInAtlas);
         };
-        let x_max = location.uv.max.x;
-        let y_max = location.uv.max.y;
-        let x_min = location.uv.min.x;
-        let y_min = location.uv.min.y;
+        let x_max = location.uv.max_x();
+        let y_max = location.uv.max_y();
+        let x_min = location.uv.min_x();
+        let y_min = location.uv.min_y();
 
         // Translate the vertices to the texture area
         let translated_vertices = uvs
@@ -115,8 +133,8 @@ impl Texture {
             let bytes_per_row = self.inner.size[0] * bytes_per_pixel;
 
             let origin = wgpu::Origin3d {
-                x: location.bounds.min.x as u32,
-                y: location.bounds.min.y as u32,
+                x: location.bounds.min_x() as u32,
+                y: location.bounds.min_y() as u32,
                 z: location.page_index,
             };
 
@@ -176,8 +194,8 @@ impl Texture {
 
         // Set the viewport to the texture area
         render_pass.set_viewport(
-            location.bounds.min.x as f32,
-            location.bounds.min.y as f32,
+            location.bounds.min_x() as f32,
+            location.bounds.min_y() as f32,
             location.size()[0] as f32,
             location.size()[1] as f32,
             0.0,
@@ -224,8 +242,8 @@ impl Texture {
 
         // Set the viewport to the texture area
         render_pass.set_viewport(
-            location.bounds.min.x as f32,
-            location.bounds.min.y as f32,
+            location.bounds.min_x() as f32,
+            location.bounds.min_y() as f32,
             location.size()[0] as f32,
             location.size()[1] as f32,
             0.0,
@@ -235,7 +253,7 @@ impl Texture {
         Ok(render_pass)
     }
 
-    pub fn uv(&self) -> Result<Box2D<f32, euclid::UnknownUnit>, TextureError> {
+    pub fn uv(&self) -> Result<Rect<f32, euclid::UnknownUnit>, TextureError> {
         // Get the texture location in the atlas
         let Some(atlas) = self.inner.atlas.upgrade() else {
             return Err(TextureError::AtlasGone);
@@ -281,8 +299,10 @@ struct TextureId {
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct TextureLocation {
     page_index: u32,
-    bounds: euclid::Box2D<i32, euclid::UnknownUnit>,
-    uv: euclid::Box2D<f32, euclid::UnknownUnit>,
+    /// The bounds in pixels within the atlas.
+    bounds: euclid::Rect<i32, euclid::UnknownUnit>,
+    /// The bounding UV coordinates in the atlas.
+    uv: euclid::Rect<f32, euclid::UnknownUnit>,
 }
 
 impl TextureLocation {
@@ -292,13 +312,28 @@ impl TextureLocation {
 
     fn size(&self) -> [u32; 2] {
         [
-            (self.bounds.max.x - self.bounds.min.x) as u32,
-            (self.bounds.max.y - self.bounds.min.y) as u32,
+            (self.bounds.max_x() - self.bounds.min_x()) as u32,
+            (self.bounds.max_y() - self.bounds.min_y()) as u32,
         ]
     }
 }
 
+static ATLAS_ID: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TextureAtlasId {
+    id: usize,
+}
+
+impl TextureAtlasId {
+    fn new() -> Self {
+        let id = ATLAS_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        Self { id }
+    }
+}
+
 pub struct TextureAtlas {
+    id: TextureAtlasId,
+
     textures: Vec<wgpu::Texture>,
     texture_views: Vec<wgpu::TextureView>,
     size: wgpu::Extent3d,
@@ -338,6 +373,7 @@ impl TextureAtlas {
 
         Arc::new_cyclic(|weak_self| {
             Mutex::new(Self {
+                id: TextureAtlasId::new(),
                 textures,
                 texture_views,
                 size,
@@ -397,15 +433,15 @@ impl TextureAtlas {
 
         for (page_index, allocator) in self.state.allocators.iter_mut().enumerate() {
             if let Some(alloc) = allocator.allocate(size) {
-                let bounds = alloc.rectangle;
-                let uvs = euclid::Box2D::new(
+                let bounds = alloc.rectangle.to_rect();
+                let uvs = euclid::Rect::new(
                     euclid::Point2D::new(
-                        (bounds.min.x as f32) / (self.size.width as f32),
-                        (bounds.min.y as f32) / (self.size.height as f32),
+                        (bounds.min_x() as f32) / (self.size.width as f32),
+                        (bounds.min_y() as f32) / (self.size.height as f32),
                     ),
-                    euclid::Point2D::new(
-                        (bounds.max.x as f32) / (self.size.width as f32),
-                        (bounds.max.y as f32) / (self.size.height as f32),
+                    euclid::Size2D::new(
+                        (bounds.width() as f32) / (self.size.width as f32),
+                        (bounds.height() as f32) / (self.size.height as f32),
                     ),
                 );
                 let location = TextureLocation {
@@ -420,6 +456,7 @@ impl TextureAtlas {
                 };
                 let texture_inner = TextureInner {
                     texture_id,
+                    atlas_id: self.id,
                     atlas: self.weak_self.clone(),
                     size: [size.width as u32, size.height as u32],
                     formats: self.formats.clone(),
@@ -449,15 +486,15 @@ impl TextureAtlas {
         let page_index = self.state.allocators.len() - 1;
         let allocator = &mut self.state.allocators[page_index];
         if let Some(alloc) = allocator.allocate(size) {
-            let bounds = alloc.rectangle;
-            let uvs = euclid::Box2D::new(
+            let bounds = alloc.rectangle.to_rect();
+            let uvs = euclid::Rect::new(
                 euclid::Point2D::new(
-                    (bounds.min.x as f32) / (self.size.width as f32),
-                    (bounds.min.y as f32) / (self.size.height as f32),
+                    (bounds.min_x() as f32) / (self.size.width as f32),
+                    (bounds.min_y() as f32) / (self.size.height as f32),
                 ),
-                euclid::Point2D::new(
-                    (bounds.max.x as f32) / (self.size.width as f32),
-                    (bounds.max.y as f32) / (self.size.height as f32),
+                euclid::Size2D::new(
+                    (bounds.width() as f32) / (self.size.width as f32),
+                    (bounds.height() as f32) / (self.size.height as f32),
                 ),
             );
             let location = TextureLocation {
@@ -472,6 +509,7 @@ impl TextureAtlas {
             };
             let texture_inner = TextureInner {
                 texture_id,
+                atlas_id: self.id,
                 atlas: self.weak_self.clone(),
                 size: [size.width as u32, size.height as u32],
                 formats: self.formats.clone(),
@@ -833,10 +871,10 @@ mod tests {
             let texture = atlas.lock().allocate(&device, &queue, [32, 64]).unwrap();
             let uv = texture.uv().unwrap();
 
-            assert!(uv.min.x >= 0.0 && uv.min.x < 1.0);
-            assert!(uv.min.y >= 0.0 && uv.min.y < 1.0);
-            assert!(uv.max.x > uv.min.x && uv.max.x <= 1.0);
-            assert!(uv.max.y > uv.min.y && uv.max.y <= 1.0);
+            assert!(uv.min_x() >= 0.0 && uv.min_x() < 1.0);
+            assert!(uv.min_y() >= 0.0 && uv.min_y() < 1.0);
+            assert!(uv.max_x() > uv.min_x() && uv.max_x() <= 1.0);
+            assert!(uv.max_y() > uv.min_y() && uv.max_y() <= 1.0);
 
             let expected_uv_width = 32.0 / 128.0;
             let expected_uv_height = 64.0 / 128.0;
@@ -921,8 +959,8 @@ mod tests {
                     texture: &atlas.lock().textures()[0],
                     mip_level: 0,
                     origin: wgpu::Origin3d {
-                        x: location.bounds.min.x as u32,
-                        y: location.bounds.min.y as u32,
+                        x: location.bounds.min_x() as u32,
+                        y: location.bounds.min_y() as u32,
                         z: location.page_index,
                     },
                     aspect: wgpu::TextureAspect::All,

@@ -3,7 +3,6 @@
 use std::sync::Arc;
 
 use parking_lot::Mutex;
-use wgpu::core::device::queue;
 
 use crate::context::gpu::Gpu;
 
