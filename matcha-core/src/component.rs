@@ -5,10 +5,12 @@ use std::{
 
 use tokio::sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-use crate::ui::WidgetContext;
+use crate::{
+    observer::{Observer, ObserverSender},
+    ui::WidgetContext,
+};
 
 use super::{
-    observer::{ObserverReceiver, ObserverSender, create_observer_ch},
     types::range::CoverRange,
     ui::{Background, Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
 };
@@ -75,11 +77,9 @@ impl UpdateFlag {
     }
 
     /// Create an observer receiver. Also reset the update flag to false.
-    async fn make_observer(&self) -> ObserverReceiver {
-        let (sender, receiver) = create_observer_ch();
+    async fn set_observer(&self, observer: &Observer) {
         let mut observer_sender = self.observer_sender.lock().await;
-        *observer_sender = Some(sender);
-        receiver
+        *observer_sender = Some(observer.sender());
     }
 
     async fn is_updated(&self) -> bool {
@@ -216,10 +216,9 @@ impl<Model: Sync + Send + 'static, Response: 'static, InnerResponse: 'static> Do
         })
     }
 
-    async fn set_observer(&self) -> super::observer::Observer {
-        let mut observer = self.dom.set_observer().await;
-        observer.add_receiver(self.update_flag.make_observer().await);
-        observer
+    async fn set_observer(&self, observer: &Observer) {
+        self.update_flag.set_observer(observer).await;
+        self.dom.set_observer(observer).await;
     }
 }
 
@@ -325,7 +324,7 @@ impl<Model: Sync + Send + 'static, Response: 'static, InnerResponse: 'static> Wi
         parent_size: [Option<f32>; 2],
         background: Background,
         context: &WidgetContext,
-    ) -> Vec<Object> {
+    ) -> Object {
         self.widget.render(
             render_pass,
             target_size,

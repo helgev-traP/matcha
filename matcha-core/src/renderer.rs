@@ -1,139 +1,311 @@
-use std::{collections::HashMap, hash::Hash};
-
-use crate::{ui::Object, ui::WidgetContext, vertex::UvVertex};
+use crate::ui::Object;
+use texture_atlas::TextureError;
+use thiserror::Error;
+use wgpu::util::DeviceExt;
 
 pub mod texture_copy;
 
-mod texture_color_renderer;
-use texture_color_renderer::TextureObjectRenderer;
-mod vertex_color_renderer;
-use vertex_color_renderer::VertexColorRenderer;
-use wgpu::core::instance;
+const COMPUTE_WORKGROUP_SIZE: u32 = 64;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct InstanceData {
-    viewport_position: [[f32; 2]; 2], // [[x0, x1], [y0, y1]]
+    /// transform vertex: {[0, 0], [0, -1], [1, 1], [0, 0]} to where the texture should be rendered
+    viewport_position: nalgebra::Matrix4<f32>,
     atlas_page: u32,
-    atlas_position: [[f32; 2]; 2], // [[x0, x1], [y0, y1]]
-
-    stencil_group: u32,
+    /// [[x0, x1], [y0, y1]]
+    atlas_position: [[f32; 2]; 2],
+    /// the index of the stencil in the stencil data array.
+    /// 0 if no stencil is used. Use `stencil_index - 1` in the shader.
+    stencil_index: u32,
 }
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct StencilData {
-    viewport_position: [[f32; 2]; 2], // [[x0, x1], [y0, y1]]
+    /// transform vertex: {[0, 0], [0, -1], [1, 1], [0, 0]} to where the stencil should be rendered
+    viewport_position: nalgebra::Matrix4<f32>,
     atlas_page: u32,
-    atlas_position: [[f32; 2]; 2], // [[x0, x1], [y0, y1]]
+    /// [[x0, x1], [y0, y1]]
+    atlas_position: [[f32; 2]; 2],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct DrawIndirectCommand {
+    vertex_count: u32,
+    instance_count: u32,
+    first_vertex: u32,
+    first_instance: u32,
 }
 
 pub struct ObjectRenderer {
-    texture_bind_group_layout: wgpu::BindGroupLayout,
+    // Bind Group Layouts
     texture_sampler: wgpu::Sampler,
+    texture_bind_group_layout: wgpu::BindGroupLayout,
+    data_bind_group_layout: wgpu::BindGroupLayout,
 
-    // instance_buffer: wgpu::Buffer,
-    // stencil_buffer: wgpu::Buffer,
-    // visible_instances_buffer: wgpu::Buffer,
-    // instances_atomic_counter: wgpu::Buffer,
-
+    // Pipeline Layouts
     culling_pipeline_layout: wgpu::PipelineLayout,
-    culling_pipeline: wgpu::ComputePipeline,
     command_pipeline_layout: wgpu::PipelineLayout,
-    command_pipeline: wgpu::ComputePipeline,
     render_pipeline_layout: wgpu::PipelineLayout,
+
+    // Pipelines
+    culling_pipeline: wgpu::ComputePipeline,
+    command_pipeline: wgpu::ComputePipeline,
     render_pipeline: wgpu::RenderPipeline,
 }
 
 impl ObjectRenderer {
-    pub fn new(ctx: &WidgetContext) -> Self {
-        let device = &ctx.device();
+    pub fn new(device: &wgpu::Device, surface_format: wgpu::TextureFormat) -> Self {
+        // Sampler
+        let texture_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("ObjectRenderer Sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
 
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("TextureObjectRenderer: Texture Bind Group Layout"),
+                label: Some("ObjectRenderer Texture Bind Group Layout"),
                 entries: &[
+                    // Texture Sampler
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
                         visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::D2Array,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        },
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                         count: None,
                     },
+                    // Texture Atlas
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
                         visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2Array,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    // Stencil Atlas
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2Array,
+                            multisampled: false,
+                        },
                         count: None,
                     },
                 ],
             });
 
-        let affine_bind_group_layout =
+        // Culling Pipeline
+        let data_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("TextureObjectRenderer: Affine Bind Group Layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
+                label: Some("Culling Bind Group Layout"),
+                entries: &[
+                    // All Instances Buffer
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
                     },
-                    count: None,
-                }],
+                    // All Stencils Buffer
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::COMPUTE | wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    // Visible Instances Buffer
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::COMPUTE | wgpu::ShaderStages::VERTEX,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    // Atomic Counter
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    // command buffer
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 4,
+                        visibility: wgpu::ShaderStages::COMPUTE,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                ],
             });
 
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("TextureObjectRenderer: Pipeline Layout"),
-            bind_group_layouts: &[&affine_bind_group_layout, &texture_bind_group_layout],
-            push_constant_ranges: &[],
-        });
+        let (culling_pipeline_layout, culling_pipeline) =
+            Self::create_culling_pipeline(device, &data_bind_group_layout);
 
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("TextureObjectRenderer: Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("renderer.wgsl").into()),
-        });
+        let (command_pipeline_layout, command_pipeline) =
+            Self::create_command_pipeline(device, &data_bind_group_layout);
 
-        let texture_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("TextureObjectRenderer: Texture Sampler"),
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
+        let (render_pipeline_layout, render_pipeline) = Self::create_render_pipeline(
+            device,
+            &texture_bind_group_layout,
+            &data_bind_group_layout,
+            surface_format,
+        );
 
-        todo!()
+        Self {
+            texture_sampler,
+            texture_bind_group_layout,
+            data_bind_group_layout,
+            culling_pipeline_layout,
+            command_pipeline_layout,
+            render_pipeline_layout,
+            culling_pipeline,
+            command_pipeline,
+            render_pipeline,
+        }
     }
 
     fn create_culling_pipeline(
-        &self,
         device: &wgpu::Device,
-        format: wgpu::TextureFormat,
-    ) -> wgpu::ComputePipeline {
-        todo!()
+        bind_group_layout: &wgpu::BindGroupLayout,
+    ) -> (wgpu::PipelineLayout, wgpu::ComputePipeline) {
+        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Culling Shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("renderer_cull.wgsl").into()),
+        });
+
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Culling Pipeline Layout"),
+            bind_group_layouts: &[bind_group_layout],
+            push_constant_ranges: &[wgpu::PushConstantRange {
+                stages: wgpu::ShaderStages::COMPUTE,
+                range: 0..std::mem::size_of::<nalgebra::Matrix4<f32>>() as u32,
+            }],
+        });
+
+        let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Culling Pipeline"),
+            layout: Some(&pipeline_layout),
+            module: &module,
+            entry_point: Some("culling_main"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
+
+        (pipeline_layout, pipeline)
     }
 
     fn create_command_pipeline(
-        &self,
         device: &wgpu::Device,
-        format: wgpu::TextureFormat,
-    ) -> wgpu::ComputePipeline {
-        todo!()
+        bind_group_layout: &wgpu::BindGroupLayout,
+    ) -> (wgpu::PipelineLayout, wgpu::ComputePipeline) {
+        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Command Shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("renderer_command.wgsl").into()),
+        });
+
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Command Pipeline Layout"),
+            bind_group_layouts: &[bind_group_layout],
+            push_constant_ranges: &[],
+        });
+
+        let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("Command Pipeline"),
+            layout: Some(&pipeline_layout),
+            module: &module,
+            entry_point: Some("command_main"),
+            compilation_options: Default::default(),
+            cache: None,
+        });
+
+        (pipeline_layout, pipeline)
     }
 
     fn create_render_pipeline(
-        &self,
         device: &wgpu::Device,
+        texture_bind_group_layout: &wgpu::BindGroupLayout,
+        data_bind_group_layout: &wgpu::BindGroupLayout,
         format: wgpu::TextureFormat,
-    ) -> wgpu::RenderPipeline {
-        todo!()
+    ) -> (wgpu::PipelineLayout, wgpu::RenderPipeline) {
+        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Render Shader"),
+            source: wgpu::ShaderSource::Wgsl(include_str!("renderer_render.wgsl").into()),
+        });
+
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Render Pipeline Layout"),
+            bind_group_layouts: &[texture_bind_group_layout, data_bind_group_layout],
+            push_constant_ranges: &[wgpu::PushConstantRange {
+                stages: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                range: 0..std::mem::size_of::<nalgebra::Matrix4<f32>>() as u32,
+            }],
+        });
+
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Render Pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &module,
+                entry_point: Some("vertex_main"),
+                buffers: &[],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &module,
+                entry_point: Some("fragment_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview: None,
+            cache: None,
+        });
+
+        (pipeline_layout, pipeline)
     }
 
     pub fn render(
@@ -149,32 +321,144 @@ impl ObjectRenderer {
         // objects
         objects: Object,
         // texture atlas
-        texture_atlas: wgpu::Texture,
-        stencil_atlas: wgpu::Texture,
-    ) {
+        texture_atlas: &wgpu::Texture,
+        stencil_atlas: &wgpu::Texture,
+    ) -> Result<(), TextureValidationError> {
         // integrate objects into a instance array
-        let mut instances: Vec<InstanceData> = Vec::new();
-        todo!();
+        let (instances, stencils) =
+            create_instance_and_stencil_data(objects, surface_format, surface_format)?;
 
-        // update or create buffers and bind groups
-        todo!();
+        if instances.is_empty() {
+            return Ok(());
+        }
 
-        // start command encoder
+        // Create buffers
+        let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("ObjectRenderer Instance Buffer"),
+            size: (std::mem::size_of::<InstanceData>() * instances.len()) as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let stencil_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("ObjectRenderer Stencil Buffer"),
+            size: (std::mem::size_of::<StencilData>() * stencils.len()) as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let visible_instances_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("ObjectRenderer Visible Instances Buffer"),
+            size: (std::mem::size_of::<InstanceData>() * instances.len()) as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let atomic_counter_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("ObjectRenderer Atomic Counter Buffer"),
+            size: std::mem::size_of::<u32>() as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let command_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("ObjectRenderer Command Buffer"),
+            size: (std::mem::size_of::<DrawIndirectCommand>()) as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        // Create bind groups
+        let texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("ObjectRenderer Texture Bind Group"),
+            layout: &self.texture_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Sampler(&self.texture_sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(
+                        &texture_atlas.create_view(&wgpu::TextureViewDescriptor::default()),
+                    ),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(
+                        &stencil_atlas.create_view(&wgpu::TextureViewDescriptor::default()),
+                    ),
+                },
+            ],
+        });
+
+        let data_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("ObjectRenderer Data Bind Group"),
+            layout: &self.data_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: instance_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: stencil_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: visible_instances_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: atomic_counter_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: command_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        // already checked that instances is not empty
+        queue.write_buffer(&instance_buffer, 0, bytemuck::cast_slice(&instances));
+
+        if !stencils.is_empty() {
+            queue.write_buffer(&stencil_buffer, 0, bytemuck::cast_slice(&stencils));
+        }
+
+        queue.write_buffer(&atomic_counter_buffer, 0, bytemuck::cast_slice(&[0u32]));
+        queue.write_buffer(
+            &command_buffer,
+            0,
+            bytemuck::cast_slice(&[DrawIndirectCommand {
+                vertex_count: 0,
+                instance_count: 0,
+                first_vertex: 0,
+                first_instance: 0,
+            }]),
+        );
 
         let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("ObjectRenderer: Command Encoder"),
         });
+
+        let normalize_matrix = make_normalize_matrix(destination_size);
 
         // culling compute pass
         {
             let mut culling_pass =
                 command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                     label: Some("ObjectRenderer: Culling Pass"),
-                    ..Default::default()
+                    timestamp_writes: None,
                 });
             culling_pass.set_pipeline(&self.culling_pipeline);
-            culling_pass.set_bind_group(0, &self.culling_bind_group, &[]);
-            culling_pass.dispatch_workgroups(0, 1, 1);
+            culling_pass.set_bind_group(0, &data_bind_group, &[]);
+            culling_pass.set_push_constants(0, bytemuck::cast_slice(normalize_matrix.as_slice()));
+            culling_pass.dispatch_workgroups(
+                (instances.len() as u32 + COMPUTE_WORKGROUP_SIZE - 1) / COMPUTE_WORKGROUP_SIZE,
+                1,
+                1,
+            );
         }
 
         // command encoding pass
@@ -182,10 +466,10 @@ impl ObjectRenderer {
             let mut command_pass =
                 command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                     label: Some("ObjectRenderer: Command Pass"),
-                    ..Default::default()
+                    timestamp_writes: None,
                 });
             command_pass.set_pipeline(&self.command_pipeline);
-            command_pass.set_bind_group(0, &self.command_bind_group, &[]);
+            command_pass.set_bind_group(0, &data_bind_group, &[]);
             command_pass.dispatch_workgroups(1, 1, 1);
         }
 
@@ -197,7 +481,7 @@ impl ObjectRenderer {
                     view: destination_view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
                         store: wgpu::StoreOp::Store,
                     },
                 })],
@@ -206,13 +490,136 @@ impl ObjectRenderer {
                 timestamp_writes: None,
             });
 
-            todo!();
+            render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_bind_group(0, &texture_bind_group, &[]);
+            render_pass.set_bind_group(1, &data_bind_group, &[]);
+            render_pass.set_push_constants(
+                wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                0,
+                bytemuck::cast_slice(normalize_matrix.as_slice()),
+            );
+            render_pass.draw_indirect(&command_buffer, 0);
         }
+
+        queue.submit(std::iter::once(command_encoder.finish()));
+
+        Ok(())
     }
 }
 
-fn mesh_integrate(objects: Vec<Object>) -> Vec<(wgpu::TextureView, Vec<UvVertex>, Vec<u16>)> {
-    todo!()
+fn create_instance_and_stencil_data(
+    objects: Object,
+    texture_format: wgpu::TextureFormat,
+    stencil_format: wgpu::TextureFormat,
+) -> Result<(Vec<InstanceData>, Vec<StencilData>), TextureValidationError> {
+    let mut instances = Vec::new();
+    let mut stencils = Vec::new();
+
+    let mut texture_atlas_id = None;
+    let mut stencil_atlas_id = None;
+
+    create_instance_and_stencil_data_recursive(
+        &objects,
+        nalgebra::Matrix4::identity(),
+        texture_format,
+        stencil_format,
+        &mut instances,
+        &mut stencils,
+        &mut texture_atlas_id,
+        &mut stencil_atlas_id,
+        0,
+    )?;
+
+    Ok((instances, stencils))
+}
+
+fn create_instance_and_stencil_data_recursive(
+    object: &Object,
+    transform: nalgebra::Matrix4<f32>,
+    texture_format: wgpu::TextureFormat,
+    stencil_format: wgpu::TextureFormat,
+    instances: &mut Vec<InstanceData>,
+    stencils: &mut Vec<StencilData>,
+    texture_atlas_id: &mut Option<texture_atlas::TextureAtlasId>,
+    stencil_atlas_id: &mut Option<texture_atlas::TextureAtlasId>,
+    // the index + 1 of the current stencil in the stencils vector.
+    // 0 if no stencil is used.
+    mut current_stencil: u32,
+) -> Result<(), TextureValidationError> {
+    if let Some((stencil, stencil_position)) = &object.stencil_and_position {
+        if stencil.formats() != &[stencil_format] {
+            return Err(TextureValidationError::FormatMismatch);
+        }
+
+        let atlas_id = stencil_atlas_id.get_or_insert_with(|| stencil.atlas_id());
+
+        if atlas_id != &stencil.atlas_id() {
+            return Err(TextureValidationError::AtlasIdMismatch);
+        }
+
+        let (page, position_in_atlas) = stencil.position_in_atlas()?;
+
+        stencils.push(StencilData {
+            viewport_position: transform * stencil_position,
+            atlas_page: page,
+            atlas_position: [
+                [position_in_atlas.min_x(), position_in_atlas.max_x()],
+                [position_in_atlas.min_y(), position_in_atlas.max_y()],
+            ],
+        });
+
+        current_stencil = stencils.len() as u32;
+    }
+
+    if let Some((texture, texture_position)) = &object.texture_and_position {
+        if texture.formats() != &[texture_format] {
+            return Err(TextureValidationError::FormatMismatch);
+        }
+
+        let atlas_id = texture_atlas_id.get_or_insert_with(|| texture.atlas_id());
+
+        if atlas_id != &texture.atlas_id() {
+            return Err(TextureValidationError::AtlasIdMismatch);
+        }
+
+        let (page, position_in_atlas) = texture.position_in_atlas()?;
+
+        instances.push(InstanceData {
+            viewport_position: transform * texture_position,
+            atlas_page: page,
+            atlas_position: [
+                [position_in_atlas.min_x(), position_in_atlas.max_x()],
+                [position_in_atlas.min_y(), position_in_atlas.max_y()],
+            ],
+            stencil_index: current_stencil,
+        });
+    }
+
+    for (child, child_transform) in object.child_elements() {
+        create_instance_and_stencil_data_recursive(
+            child,
+            transform * child_transform,
+            texture_format,
+            stencil_format,
+            instances,
+            stencils,
+            texture_atlas_id,
+            stencil_atlas_id,
+            current_stencil,
+        )?;
+    }
+
+    Ok(())
+}
+
+#[derive(Error, Debug)]
+pub enum TextureValidationError {
+    #[error("texture format mismatch")]
+    FormatMismatch,
+    #[error("texture atlas id mismatch")]
+    AtlasIdMismatch,
+    #[error("texture atlas error: {0}")]
+    AtlasError(#[from] TextureError),
 }
 
 #[rustfmt::skip]

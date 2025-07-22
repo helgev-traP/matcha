@@ -237,17 +237,44 @@ impl<'a> Background<'a> {
 
 #[derive(Clone)]
 pub struct Object {
-    texture: (),
-    texture_position: Range2D<f32>,
-    stencil: Option<()>,
-    stencil_position: Option<Range2D<f32>>,
-    transform: nalgebra::Matrix4<f32>,
+    pub texture_and_position: Option<(texture_atlas::Texture, nalgebra::Matrix4<f32>)>,
+    pub stencil_and_position: Option<(texture_atlas::Texture, nalgebra::Matrix4<f32>)>,
 
-    child_elements: Vec<Object>,
+    child_elements: Vec<(Object, nalgebra::Matrix4<f32>)>,
 }
 
 impl Object {
-    pub fn transform(&mut self, affine: nalgebra::Matrix4<f32>) {
-        self.transform = affine * self.transform;
+    pub fn new() -> Self {
+        Self {
+            texture_and_position: None,
+            stencil_and_position: None,
+            child_elements: Vec::new(),
+        }
+    }
+
+    pub fn with_texture(
+        mut self,
+        texture: texture_atlas::Texture,
+        texture_position: nalgebra::Matrix4<f32>,
+    ) -> Self {
+        self.texture_and_position = Some((texture, texture_position));
+        self
+    }
+
+    pub fn with_stencil(
+        mut self,
+        stencil: texture_atlas::Texture,
+        stencil_position: nalgebra::Matrix4<f32>,
+    ) -> Self {
+        self.stencil_and_position = Some((stencil, stencil_position));
+        self
+    }
+
+    pub fn add_child(&mut self, child: Object, transform: nalgebra::Matrix4<f32>) {
+        self.child_elements.push((child, transform));
+    }
+
+    pub fn child_elements(&self) -> &[(Object, nalgebra::Matrix4<f32>)] {
+        &self.child_elements
     }
 }
