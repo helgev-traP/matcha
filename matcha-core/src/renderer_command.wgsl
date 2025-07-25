@@ -11,7 +11,7 @@ struct DrawIndirectCommand {
 @compute @workgroup_size(1)
 fn command_main() {
     let instance_count = atomicLoad(&visible_instance_count);
-    indirect_command.vertex_count = 6; // 2 triangles for a quad
+    indirect_command.vertex_count = 4; // triangle strip with 4 vertices
     indirect_command.instance_count = instance_count;
     indirect_command.first_vertex = 0;
     indirect_command.first_instance = 0;

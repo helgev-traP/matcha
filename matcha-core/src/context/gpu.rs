@@ -24,7 +24,7 @@ impl Gpu {
                 }),
             )
             .await
-            .ok_or(GpuError::AdapterRequestFailed)?;
+            .map_err(|_| GpuError::AdapterRequestFailed)?;
 
         let (device, queue) = adapter
             .request_device(
@@ -36,8 +36,8 @@ impl Gpu {
                         ..wgpu::Limits::downlevel_defaults()
                     },
                     memory_hints: wgpu::MemoryHints::default(),
+                    trace: wgpu::Trace::Off,
                 },
-                None,
             )
             .await?;
 

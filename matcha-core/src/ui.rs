@@ -1,17 +1,21 @@
 use std::{any::Any, sync::Arc};
 
 use crate::{
-    context::{WindowContext, any_resource::AnyResource, gpu::Gpu, window_surface::WindowSurface},
+    context::{
+        any_resource::AnyResource, gpu::Gpu, texture_allocator, window_surface::WindowSurface,
+    },
     types::range::Range2D,
 };
 
 use super::{events::Event, observer::Observer, types::range::CoverRange};
 
 #[derive(Clone)]
+
 pub struct WidgetContext<'a> {
     gpu: &'a Gpu,
     window_surface: &'a WindowSurface,
-    window_context: &'a WindowContext,
+    texture_atlas: &'a texture_allocator::TextureAllocator,
+    any_resource: &'a AnyResource,
     root_font_size: f32,
     font_size: f32,
 }
@@ -19,14 +23,16 @@ pub struct WidgetContext<'a> {
 impl<'a> WidgetContext<'a> {
     pub(crate) const fn new(
         gpu: &'a Gpu,
-        window_surface: &'a WindowSurface,
-        window_context: &'a WindowContext,
+        window: &'a WindowSurface,
+        texture_atlas: &'a texture_allocator::TextureAllocator,
+        any_resource: &'a AnyResource,
         root_font_size: f32,
     ) -> Self {
         Self {
             gpu,
-            window_surface,
-            window_context,
+            window_surface: window,
+            texture_atlas,
+            any_resource,
             root_font_size,
             font_size: root_font_size,
         }
@@ -40,16 +46,8 @@ impl<'a> WidgetContext<'a> {
         self.gpu.queue()
     }
 
-    pub fn make_encoder(&self) -> wgpu::CommandEncoder {
-        self.gpu
-            .device()
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Command Encoder created by WidgetContext"),
-            })
-    }
-
     pub fn any_resource(&self) -> &AnyResource {
-        self.window_context.resource()
+        self.any_resource
     }
 
     pub fn surface_format(&self) -> wgpu::TextureFormat {
@@ -57,7 +55,11 @@ impl<'a> WidgetContext<'a> {
     }
 
     pub fn texture_format(&self) -> wgpu::TextureFormat {
-        self.window_context.texture_format()
+        self.texture_atlas.color_format()
+    }
+
+    pub fn stencil_format(&self) -> wgpu::TextureFormat {
+        self.texture_atlas.stencil_format()
     }
 
     pub fn dpi(&self) -> f64 {
@@ -84,7 +86,8 @@ impl WidgetContext<'_> {
         Self {
             gpu: self.gpu,
             window_surface: self.window_surface,
-            window_context: self.window_context,
+            texture_atlas: self.texture_atlas,
+            any_resource: self.any_resource,
             root_font_size: self.root_font_size,
             font_size,
         }
@@ -185,9 +188,6 @@ pub trait Widget<T>: Send {
 
     fn render(
         &mut self,
-        render_pass: &mut wgpu::RenderPass<'_>,
-        target_size: [u32; 2],
-        target_format: wgpu::TextureFormat,
         parent_size: [Option<f32>; 2],
         background: Background,
         ctx: &WidgetContext,

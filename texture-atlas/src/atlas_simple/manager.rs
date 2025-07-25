@@ -128,7 +128,7 @@ mod tests {
             .await
             .unwrap();
         adapter
-            .request_device(&wgpu::DeviceDescriptor::default(), None)
+            .request_device(&wgpu::DeviceDescriptor::default())
             .await
             .unwrap()
     }

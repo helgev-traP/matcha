@@ -6,7 +6,6 @@ use guillotiere::{AllocId, AtlasAllocator, Size, euclid};
 use parking_lot::{Mutex, RwLock};
 use thiserror::Error;
 use uuid::Uuid;
-use wgpu::core::device;
 
 #[derive(Clone)]
 pub struct Texture {

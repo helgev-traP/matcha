@@ -23,7 +23,7 @@ parking_lot = "0.12.3"
 winit = "0.30"
 
 # graphics
-wgpu = "24.0"
+wgpu = "25.0"
 bytemuck = { version = "1", features = ["derive"] }
 vello = "0.5"
 

@@ -1,12 +1,9 @@
-use std::{fmt::Debug, sync::Arc};
-
-use vello::kurbo::common;
-use winit::window::Window;
+use std::fmt::Debug;
 
 use crate::{
     context::{
-        WindowContext,
-        window_surface::{self, WindowSurface},
+        any_resource::AnyResource, texture_allocator::TextureAllocator,
+        window_surface::WindowSurface,
     },
     ui::WidgetContext,
 };
@@ -49,7 +46,9 @@ pub struct WinitInstance<
     // --- rendering context ---
     gpu: Option<Gpu>,
     window_surface: Option<WindowSurface>,
-    window_context: Option<WindowContext>,
+    texture_atlas: Option<TextureAllocator>,
+    any_resource: Option<AnyResource>,
+    widget_renderer: Option<ObjectRenderer>,
 
     // --- UI context ---
     root_component: Component<Model, Message, Response, IR>,
@@ -94,7 +93,9 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
             base_color: Color::default(),
             gpu: None,
             window_surface: None,
-            window_context: None,
+            texture_atlas: None,
+            any_resource: None,
+            widget_renderer: None,
             root_component: component,
             root_widget: None,
             observer: Observer::new(),
@@ -143,84 +144,71 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
             return Err(error::RenderError::WindowSurface);
         };
 
+        let Some(texture_atlas) = self.texture_atlas.as_ref() else {
+            return Err(error::RenderError::TextureAllocator);
+        };
+
+        let Some(any_resource) = self.any_resource.as_ref() else {
+            return Err(error::RenderError::AnyResource);
+        };
+
         let Some(root_widget) = self.root_widget.as_mut() else {
             return Err(error::RenderError::RootWidget);
         };
 
-        // let Some(window_renderer) = self.window_renderer.as_mut() else {
-        //     return Err(error::RenderError::Renderer);
-        // };
+        let widget_renderer = self
+            .widget_renderer
+            .get_or_insert_with(|| ObjectRenderer::new(gpu.device(), window_surface.format()));
 
         let Some(benchmarker) = self.benchmarker.as_mut() else {
             return Err(error::RenderError::Benchmarker);
         };
 
         // rendering
-
-        // get surface texture
         let surface_texture = window_surface.get_current_texture();
         let surface_view = surface_texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        // viewport size
         let viewport_size = window_surface.size();
-        let viewport_size = [viewport_size[0] as f32, viewport_size[1] as f32];
 
         // start benchmark
         benchmarker.with_benchmark(|| {
-            let ctx = gpu.widget_context(self.default_font_size);
+            let ctx = WidgetContext::new(
+                gpu,
+                window_surface,
+                texture_atlas,
+                any_resource,
+                self.default_font_size,
+            );
 
-            let mut command_encoder = ctx.make_encoder();
+            let object = root_widget.render(
+                [Some(viewport_size[0] as f32), Some(viewport_size[1] as f32)],
+                Background::new(&surface_view, [0.0, 0.0]), // todo: check this
+                &ctx,
+            );
 
-            {
-                let base_color = self.base_color.to_rgba_f64();
-                let mut render_pass =
-                    command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                        label: Some("Window Render Pass"),
-                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                            view: &surface_view,
-                            resolve_target: None,
-                            ops: wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(wgpu::Color {
-                                    r: base_color[0],
-                                    g: base_color[1],
-                                    b: base_color[2],
-                                    a: base_color[3],
-                                }),
-                                store: wgpu::StoreOp::Store,
-                            },
-                        })],
-                        depth_stencil_attachment: None,
-                        timestamp_writes: None,
-                        occlusion_query_set: None,
-                    });
+            let base_color = self.base_color.to_rgba_f64();
+            let base_color = wgpu::Color {
+                r: base_color[0],
+                g: base_color[1],
+                b: base_color[2],
+                a: base_color[3],
+            };
 
-                let render_result = root_widget.render(
-                    &mut render_pass,
-                    [viewport_size[0] as u32, viewport_size[1] as u32],
+            widget_renderer
+                .render(
+                    gpu.device(),
+                    gpu.queue(),
                     window_surface.format(),
-                    [Some(viewport_size[0]), Some(viewport_size[1])],
-                    Background::new(&surface_view, [0.0, 0.0]),
-                    &ctx,
-                );
-
-                gpu.common_resource()
-                    .get_or_insert_with::<ObjectRenderer, _>(|| ObjectRenderer::new(&ctx))
-                    .render(
-                        gpu.device(),
-                        gpu.queue(),
-                        &surface_view,
-                        viewport_size,
-                        render_result,
-                        None,
-                        window_surface.format(),
-                    );
-            }
-
-            // submit command encoder
-            gpu.queue()
-                .submit(std::iter::once(command_encoder.finish()));
+                    &surface_view,
+                    [viewport_size[0] as f32, viewport_size[1] as f32],
+                    object,
+                    base_color,
+                    texture_atlas.color_texture(),
+                    texture_atlas.stencil_texture(),
+                )
+                .unwrap();
         });
 
         // present to screen
@@ -408,7 +396,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, 
         let gpu = match self.tokio_runtime.block_on(Gpu::new(self.performance)) {
             Ok(gpu) => gpu,
             Err(e) => {
-                eprintln!("Failed to create GPU instance: {}", e);
+                eprintln!("Failed to create GPU instance: {e}");
                 event_loop.exit(); // Exit event loop.
                 return;
             }
@@ -446,7 +434,13 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, 
 
         // --- create window context ---
 
-        self.window_context = Some(WindowContext::new(window_surface.format()));
+        self.texture_atlas = Some(TextureAllocator::new(
+            gpu,
+            window_surface.format(),
+            wgpu::TextureFormat::R8Snorm,
+        ));
+
+        self.any_resource = Some(AnyResource::new());
 
         // --- init input context ---
         {
@@ -497,12 +491,19 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, 
 
             let gpu = self.gpu.as_ref().unwrap();
 
-            let window_context = self.window_context.as_ref().unwrap();
+            let texture_atlas = self.texture_atlas.as_ref().unwrap();
+            let any_resource = self.any_resource.as_ref().unwrap();
 
             let response = root_widget.widget_event(
                 &event,
                 [Some(window_size[0]), Some(window_size[1])],
-                &WidgetContext::new(gpu, window_surface, window_context, self.default_font_size),
+                &WidgetContext::new(
+                    gpu,
+                    window_surface,
+                    texture_atlas,
+                    any_resource,
+                    self.default_font_size,
+                ),
             );
 
             if let Some(user_event) = response {

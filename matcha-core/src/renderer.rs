@@ -1,7 +1,6 @@
 use crate::ui::Object;
 use texture_atlas::TextureError;
 use thiserror::Error;
-use wgpu::util::DeviceExt;
 
 pub mod texture_copy;
 
@@ -10,11 +9,13 @@ const COMPUTE_WORKGROUP_SIZE: u32 = 64;
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct InstanceData {
-    /// transform vertex: {[0, 0], [0, -1], [1, 1], [0, 0]} to where the texture should be rendered
+    /// transform vertex: {[0, 0], [0, -1], [1, 0], [1, -1]} to where the texture should be rendered
     viewport_position: nalgebra::Matrix4<f32>,
     atlas_page: u32,
-    /// [[x0, x1], [y0, y1]]
-    atlas_position: [[f32; 2]; 2],
+    /// [x, y]
+    in_atlas_offset: [f32; 2],
+    /// [width, height]
+    in_atlas_size: [f32; 2],
     /// the index of the stencil in the stencil data array.
     /// 0 if no stencil is used. Use `stencil_index - 1` in the shader.
     stencil_index: u32,
@@ -23,20 +24,19 @@ struct InstanceData {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct StencilData {
-    /// transform vertex: {[0, 0], [0, -1], [1, 1], [0, 0]} to where the stencil should be rendered
+    /// transform vertex: {[0, 0], [0, -1], [1, 0], [1, -1]} to where the stencil should be rendered
     viewport_position: nalgebra::Matrix4<f32>,
+    /// if the inverse of the viewport position exists.
+    /// 0 if the inverse does not exist.
+    viewport_position_inverse_exists: u32,
+    /// inverse of the viewport position matrix.
+    /// used to calculate stencil uv coordinates in the shader.
+    viewport_position_inverse: nalgebra::Matrix4<f32>,
     atlas_page: u32,
-    /// [[x0, x1], [y0, y1]]
-    atlas_position: [[f32; 2]; 2],
-}
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct DrawIndirectCommand {
-    vertex_count: u32,
-    instance_count: u32,
-    first_vertex: u32,
-    first_instance: u32,
+    /// [x, y]
+    in_atlas_offset: [f32; 2],
+    /// [width, height]
+    in_atlas_size: [f32; 2],
 }
 
 pub struct ObjectRenderer {
@@ -292,7 +292,7 @@ impl ObjectRenderer {
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             }),
             primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
                 ..Default::default()
             },
             depth_stencil: None,
@@ -320,13 +320,17 @@ impl ObjectRenderer {
         destination_size: [f32; 2],
         // objects
         objects: Object,
+        load_color: wgpu::Color,
         // texture atlas
-        texture_atlas: &wgpu::Texture,
-        stencil_atlas: &wgpu::Texture,
+        texture_atlas: wgpu::Texture,
+        stencil_atlas: wgpu::Texture,
     ) -> Result<(), TextureValidationError> {
         // integrate objects into a instance array
-        let (instances, stencils) =
-            create_instance_and_stencil_data(objects, surface_format, surface_format)?;
+        let (instances, stencils) = create_instance_and_stencil_data(
+            objects,
+            texture_atlas.format(),
+            stencil_atlas.format(),
+        )?;
 
         if instances.is_empty() {
             return Ok(());
@@ -349,7 +353,7 @@ impl ObjectRenderer {
 
         let visible_instances_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("ObjectRenderer Visible Instances Buffer"),
-            size: (std::mem::size_of::<InstanceData>() * instances.len()) as u64,
+            size: (std::mem::size_of::<u32>() * instances.len()) as u64,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -363,8 +367,10 @@ impl ObjectRenderer {
 
         let command_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("ObjectRenderer Command Buffer"),
-            size: (std::mem::size_of::<DrawIndirectCommand>()) as u64,
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::COPY_DST,
+            size: (std::mem::size_of::<wgpu::util::DrawIndirectArgs>()) as u64,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::INDIRECT
+                | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
@@ -379,15 +385,23 @@ impl ObjectRenderer {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::TextureView(
-                        &texture_atlas.create_view(&wgpu::TextureViewDescriptor::default()),
-                    ),
+                    resource: wgpu::BindingResource::TextureView(&texture_atlas.create_view(
+                        &wgpu::TextureViewDescriptor {
+                            dimension: Some(wgpu::TextureViewDimension::D2Array),
+                            aspect: wgpu::TextureAspect::All,
+                            ..Default::default()
+                        },
+                    )),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: wgpu::BindingResource::TextureView(
-                        &stencil_atlas.create_view(&wgpu::TextureViewDescriptor::default()),
-                    ),
+                    resource: wgpu::BindingResource::TextureView(&stencil_atlas.create_view(
+                        &wgpu::TextureViewDescriptor {
+                            dimension: Some(wgpu::TextureViewDimension::D2Array),
+                            aspect: wgpu::TextureAspect::All,
+                            ..Default::default()
+                        },
+                    )),
                 },
             ],
         });
@@ -430,12 +444,13 @@ impl ObjectRenderer {
         queue.write_buffer(
             &command_buffer,
             0,
-            bytemuck::cast_slice(&[DrawIndirectCommand {
-                vertex_count: 0,
+            wgpu::util::DrawIndirectArgs {
+                vertex_count: 4,
                 instance_count: 0,
                 first_vertex: 0,
                 first_instance: 0,
-            }]),
+            }
+            .as_bytes(),
         );
 
         let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -455,7 +470,7 @@ impl ObjectRenderer {
             culling_pass.set_bind_group(0, &data_bind_group, &[]);
             culling_pass.set_push_constants(0, bytemuck::cast_slice(normalize_matrix.as_slice()));
             culling_pass.dispatch_workgroups(
-                (instances.len() as u32 + COMPUTE_WORKGROUP_SIZE - 1) / COMPUTE_WORKGROUP_SIZE,
+                (instances.len() as u32).div_ceil(COMPUTE_WORKGROUP_SIZE),
                 1,
                 1,
             );
@@ -481,7 +496,7 @@ impl ObjectRenderer {
                     view: destination_view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        load: wgpu::LoadOp::Clear(load_color),
                         store: wgpu::StoreOp::Store,
                     },
                 })],
@@ -519,10 +534,10 @@ fn create_instance_and_stencil_data(
     let mut stencil_atlas_id = None;
 
     create_instance_and_stencil_data_recursive(
-        &objects,
-        nalgebra::Matrix4::identity(),
         texture_format,
         stencil_format,
+        &objects,
+        nalgebra::Matrix4::identity(),
         &mut instances,
         &mut stencils,
         &mut texture_atlas_id,
@@ -534,10 +549,10 @@ fn create_instance_and_stencil_data(
 }
 
 fn create_instance_and_stencil_data_recursive(
-    object: &Object,
-    transform: nalgebra::Matrix4<f32>,
     texture_format: wgpu::TextureFormat,
     stencil_format: wgpu::TextureFormat,
+    object: &Object,
+    transform: nalgebra::Matrix4<f32>,
     instances: &mut Vec<InstanceData>,
     stencils: &mut Vec<StencilData>,
     texture_atlas_id: &mut Option<texture_atlas::TextureAtlasId>,
@@ -559,20 +574,26 @@ fn create_instance_and_stencil_data_recursive(
 
         let (page, position_in_atlas) = stencil.position_in_atlas()?;
 
+        let stencil_position = transform * stencil_position;
+        let (inverse_exists, stencil_position_inverse) = stencil_position
+            .try_inverse()
+            .map(|m| (true, m))
+            .unwrap_or_else(|| (false, nalgebra::Matrix4::identity()));
+
         stencils.push(StencilData {
-            viewport_position: transform * stencil_position,
+            viewport_position: stencil_position,
+            viewport_position_inverse_exists: if inverse_exists { 1 } else { 0 },
+            viewport_position_inverse: stencil_position_inverse,
             atlas_page: page,
-            atlas_position: [
-                [position_in_atlas.min_x(), position_in_atlas.max_x()],
-                [position_in_atlas.min_y(), position_in_atlas.max_y()],
-            ],
+            in_atlas_offset: [position_in_atlas.min_x(), position_in_atlas.min_y()],
+            in_atlas_size: [position_in_atlas.width(), position_in_atlas.height()],
         });
 
         current_stencil = stencils.len() as u32;
     }
 
     if let Some((texture, texture_position)) = &object.texture_and_position {
-        if texture.formats() != &[texture_format] {
+        if texture.formats() != [texture_format] {
             return Err(TextureValidationError::FormatMismatch);
         }
 
@@ -587,20 +608,18 @@ fn create_instance_and_stencil_data_recursive(
         instances.push(InstanceData {
             viewport_position: transform * texture_position,
             atlas_page: page,
-            atlas_position: [
-                [position_in_atlas.min_x(), position_in_atlas.max_x()],
-                [position_in_atlas.min_y(), position_in_atlas.max_y()],
-            ],
+            in_atlas_offset: [position_in_atlas.min_x(), position_in_atlas.min_y()],
+            in_atlas_size: [position_in_atlas.width(), position_in_atlas.height()],
             stencil_index: current_stencil,
         });
     }
 
     for (child, child_transform) in object.child_elements() {
         create_instance_and_stencil_data_recursive(
-            child,
-            transform * child_transform,
             texture_format,
             stencil_format,
+            child,
+            transform * child_transform,
             instances,
             stencils,
             texture_atlas_id,
