@@ -1,9 +1,7 @@
 use std::{any::Any, sync::Arc};
 
 use crate::{
-    context::{
-        any_resource::AnyResource, gpu::Gpu, texture_allocator, window_surface::WindowSurface,
-    },
+    context::{any_resource::AnyResource, gpu::Gpu, texture_allocator},
     types::range::Range2D,
 };
 
@@ -13,7 +11,9 @@ use super::{events::Event, observer::Observer, types::range::CoverRange};
 
 pub struct WidgetContext<'a> {
     gpu: &'a Gpu,
-    window_surface: &'a WindowSurface,
+    surface_format: wgpu::TextureFormat,
+    window_size: [u32; 2],
+    window_dpi: f64,
     texture_atlas: &'a texture_allocator::TextureAllocator,
     any_resource: &'a AnyResource,
     root_font_size: f32,
@@ -23,14 +23,18 @@ pub struct WidgetContext<'a> {
 impl<'a> WidgetContext<'a> {
     pub(crate) const fn new(
         gpu: &'a Gpu,
-        window: &'a WindowSurface,
+        surface_format: wgpu::TextureFormat,
+        window_size: [u32; 2],
+        window_dpi: f64,
         texture_atlas: &'a texture_allocator::TextureAllocator,
         any_resource: &'a AnyResource,
         root_font_size: f32,
     ) -> Self {
         Self {
             gpu,
-            window_surface: window,
+            surface_format,
+            window_size,
+            window_dpi,
             texture_atlas,
             any_resource,
             root_font_size,
@@ -51,7 +55,7 @@ impl<'a> WidgetContext<'a> {
     }
 
     pub fn surface_format(&self) -> wgpu::TextureFormat {
-        self.window_surface.format()
+        self.surface_format
     }
 
     pub fn texture_format(&self) -> wgpu::TextureFormat {
@@ -63,11 +67,11 @@ impl<'a> WidgetContext<'a> {
     }
 
     pub fn dpi(&self) -> f64 {
-        self.window_surface.dpi()
+        self.window_dpi
     }
 
     pub fn viewport_size(&self) -> [u32; 2] {
-        self.window_surface.size()
+        self.window_size
     }
 }
 
@@ -85,7 +89,9 @@ impl WidgetContext<'_> {
     pub const fn with_font_size(&self, font_size: f32) -> Self {
         Self {
             gpu: self.gpu,
-            window_surface: self.window_surface,
+            surface_format: self.surface_format,
+            window_size: self.window_size,
+            window_dpi: self.window_dpi,
             texture_atlas: self.texture_atlas,
             any_resource: self.any_resource,
             root_font_size: self.root_font_size,
