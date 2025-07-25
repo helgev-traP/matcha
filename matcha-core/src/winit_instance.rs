@@ -1,10 +1,7 @@
 use std::fmt::Debug;
 
 use crate::{
-    context::{
-        any_resource::AnyResource, texture_allocator::TextureAllocator,
-        window_surface::WindowSurface,
-    },
+    context::{any_resource::AnyResource, texture_allocator::TextureAllocator},
     ui::WidgetContext,
 };
 
@@ -23,6 +20,8 @@ use super::{
 
 mod benchmark;
 mod error;
+mod window_surface;
+use window_surface::WindowSurface;
 
 // MARK: Window
 
@@ -35,17 +34,13 @@ pub struct WinitInstance<
     // --- tokio runtime ---
     tokio_runtime: tokio::runtime::Runtime,
 
-    // --- window boot settings ---
-    performance: wgpu::PowerPreference,
-    window_title: String,
-    init_size: [u32; 2],
-    maximized: bool,
-    full_screen: bool,
-    base_color: Color,
+    // --- window ---
+    window: WindowSurface,
 
     // --- rendering context ---
+    performance: wgpu::PowerPreference,
+    base_color: Color,
     gpu: Option<Gpu>,
-    window_surface: Option<WindowSurface>,
     texture_atlas: Option<TextureAllocator>,
     any_resource: Option<AnyResource>,
     widget_renderer: Option<ObjectRenderer>,
@@ -86,13 +81,9 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
         Self {
             tokio_runtime,
             performance: wgpu::PowerPreference::HighPerformance,
-            window_title: String::from("matcha"),
-            init_size: [800, 600],
-            maximized: false,
-            full_screen: false,
+            window: WindowSurface::new(),
             base_color: Color::default(),
             gpu: None,
-            window_surface: None,
             texture_atlas: None,
             any_resource: None,
             widget_renderer: None,
@@ -140,10 +131,6 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
             return Err(error::RenderError::Gpu);
         };
 
-        let Some(window_surface) = self.window_surface.as_ref() else {
-            return Err(error::RenderError::WindowSurface);
-        };
-
         let Some(texture_atlas) = self.texture_atlas.as_ref() else {
             return Err(error::RenderError::TextureAllocator);
         };
@@ -158,25 +145,27 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
 
         let widget_renderer = self
             .widget_renderer
-            .get_or_insert_with(|| ObjectRenderer::new(gpu.device(), window_surface.format()));
+            .get_or_insert_with(|| ObjectRenderer::new(gpu.device(), self.window.format()));
 
         let Some(benchmarker) = self.benchmarker.as_mut() else {
             return Err(error::RenderError::Benchmarker);
         };
 
         // rendering
-        let surface_texture = window_surface.get_current_texture();
+        let surface_texture = self.window.get_current_texture().unwrap();
         let surface_view = surface_texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        let viewport_size = window_surface.size();
+        let viewport_size = self.window.size();
 
         // start benchmark
         benchmarker.with_benchmark(|| {
             let ctx = WidgetContext::new(
                 gpu,
-                window_surface,
+                self.window.format(),
+                self.window.size(),
+                self.window.dpi().unwrap(),
                 texture_atlas,
                 any_resource,
                 self.default_font_size,
@@ -200,7 +189,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
                 .render(
                     gpu.device(),
                     gpu.queue(),
-                    window_surface.format(),
+                    self.window.format(),
                     &surface_view,
                     [viewport_size[0] as f32, viewport_size[1] as f32],
                     object,
@@ -257,8 +246,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
             }
             winit::event::WindowEvent::Resized(size) => {
                 let gpu = self.gpu.as_ref().unwrap();
-                let window_surface = self.window_surface.as_mut().unwrap();
-                window_surface.resize(size, gpu);
+                self.window.set_size(size, gpu);
                 self.observer = Observer::new_render_trigger();
                 Event::default()
             }
@@ -404,31 +392,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, 
         let gpu = self.gpu.insert(gpu);
 
         // --- create window ---
-
-        let winit_window = event_loop
-            .create_window(winit::window::WindowAttributes::default())
-            .unwrap();
-        let window_surface = self
-            .window_surface
-            .insert(WindowSurface::new(winit_window, gpu));
-
-        // set window initial settings
-
-        window_surface.window().set_title(&self.window_title);
-        let _ = window_surface
-            .window()
-            .request_inner_size(winit::dpi::PhysicalSize::new(
-                self.init_size[0],
-                self.init_size[1],
-            ));
-        if self.maximized {
-            window_surface.window().set_maximized(true);
-        }
-        if self.full_screen {
-            window_surface
-                .window()
-                .set_fullscreen(Some(winit::window::Fullscreen::Borderless(None)));
-        }
+        self.window.start_window(event_loop, &gpu);
 
         event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
 
@@ -436,7 +400,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, 
 
         self.texture_atlas = Some(TextureAllocator::new(
             gpu,
-            window_surface.format(),
+            self.window.format(),
             wgpu::TextureFormat::R8Snorm,
         ));
 
@@ -453,12 +417,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, 
         // --- prepare benchmark monitoring ---
 
         {
-            let rate = window_surface
-                .window()
-                .current_monitor()
-                .unwrap()
-                .refresh_rate_millihertz()
-                .unwrap();
+            let rate = self.window.refresh_rate_millihertz().unwrap();
             println!("Monitor refresh rate: {}.{} Hz", rate / 1000, rate % 1000);
             self.benchmarker = Some(benchmark::Benchmark::new((rate / 1000) as usize));
         }
@@ -485,8 +444,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, 
         // when root widget exists
         if let Some(root_widget) = self.root_widget.as_mut() {
             // get response from widget tree
-            let window_surface = self.window_surface.as_ref().unwrap();
-            let window_size = window_surface.size();
+            let window_size = self.window.size();
             let window_size = [window_size[0] as f32, window_size[1] as f32];
 
             let gpu = self.gpu.as_ref().unwrap();
@@ -499,7 +457,9 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, 
                 [Some(window_size[0]), Some(window_size[1])],
                 &WidgetContext::new(
                     gpu,
-                    window_surface,
+                    self.window.format(),
+                    self.window.size(),
+                    self.window.dpi().unwrap(),
                     texture_atlas,
                     any_resource,
                     self.default_font_size,
