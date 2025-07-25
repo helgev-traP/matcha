@@ -293,6 +293,7 @@ pub struct GlyphTexture<'a, const N: u32> {
 // MARK: tests
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -326,8 +327,8 @@ mod tests {
                 required_features: wgpu::Features::empty(),
                 required_limits: wgpu::Limits::default(),
                 memory_hints: wgpu::MemoryHints::default(),
+                trace: wgpu::Trace::Off,
             },
-            None,
         ))
         .unwrap();
 

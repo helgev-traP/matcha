@@ -13,7 +13,7 @@ impl Benchmark {
         }
     }
 
-    pub fn with_benchmark<F>(&mut self, mut f: F)
+    pub fn with_benchmark<F>(&mut self, mut f: F) -> Duration
     where
         F: FnMut(),
     {
@@ -23,6 +23,8 @@ impl Benchmark {
 
         self.reading = (self.reading + 1) % self.ring.capacity();
         self.ring[self.reading] = time;
+
+        time
     }
 
     pub fn last_time(&self) -> Time {

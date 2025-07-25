@@ -615,17 +615,16 @@ impl TextureAtlas {
     }
 }
 
-// for internal use only
 impl TextureAtlas {
     fn get_location(&self, id: TextureId) -> Option<TextureLocation> {
         self.state.texture_id_to_location.get(&id).copied()
     }
 
-    fn textures(&self) -> &[wgpu::Texture] {
+    pub fn textures(&self) -> &[wgpu::Texture] {
         &self.textures
     }
 
-    fn texture_views(&self) -> &[wgpu::TextureView] {
+    pub fn texture_views(&self) -> &[wgpu::TextureView] {
         &self.texture_views
     }
 }
@@ -661,7 +660,8 @@ impl TextureAtlas {
             let texture_view = texture.create_view(&wgpu::TextureViewDescriptor {
                 label: Some(&texture_view_label),
                 dimension: Some(wgpu::TextureViewDimension::D2Array),
-                ..wgpu::TextureViewDescriptor::default()
+                aspect: wgpu::TextureAspect::All,
+                ..Default::default()
             });
             textures.push(texture);
             texture_views.push(texture_view);
@@ -714,7 +714,7 @@ mod tests {
             .await
             .unwrap();
         adapter
-            .request_device(&wgpu::DeviceDescriptor::default(), None)
+            .request_device(&wgpu::DeviceDescriptor::default())
             .await
             .unwrap()
     }

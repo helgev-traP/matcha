@@ -1,27 +1,19 @@
-use std::error::Error;
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum RenderError {
+    #[error("GPU is not ready")]
     Gpu,
+    #[error("Window surface is not ready")]
     WindowSurface,
+    #[error("Texture allocator is not ready")]
+    TextureAllocator,
+    #[error("Application context is not ready")]
+    AnyResource,
+    #[error("Root Widget is not ready")]
     RootWidget,
+    #[error("Renderer is not ready")]
     Renderer,
+    #[error("Benchmarker is not ready")]
     Benchmarker,
-}
-impl std::fmt::Display for RenderError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            RenderError::Gpu => write!(f, "GPU is not ready"),
-            RenderError::WindowSurface => write!(f, "Window surface is not ready"),
-            RenderError::RootWidget => write!(f, "Root Widget is not ready"),
-            RenderError::Renderer => write!(f, "Renderer is not ready"),
-            RenderError::Benchmarker => write!(f, "Benchmarker is not ready"),
-        }
-    }
-}
-
-impl Error for RenderError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        None
-    }
 }

@@ -1,14 +1,18 @@
 struct InstanceData {
     viewport_position: mat4x4<f32>,
     atlas_page: u32,
-    atlas_position: mat2x2<f32>,
+    in_atlas_offset: vec2<f32>,
+    in_atlas_size: vec2<f32>,
     stencil_index: u32,
 };
 
 struct StencilData {
     viewport_position: mat4x4<f32>,
+    viewport_position_inverse_exists: u32,
+    viewport_position_inverse: mat4x4<f32>,
     atlas_page: u32,
-    atlas_position: mat2x2<f32>,
+    in_atlas_offset: vec2<f32>,
+    in_atlas_size: vec2<f32>,
 };
 
 @group(0) @binding(0) var<storage, read> all_instances: array<InstanceData>;
@@ -18,38 +22,99 @@ struct StencilData {
 
 var<push_constant> normalize_matrix: mat4x4<f32>;
 
-const QUAD_VERTICES = array<vec2<f32>, 4>(
-    vec2<f32>(0.0, 0.0),
-    vec2<f32>(1.0, 0.0),
-    vec2<f32>(0.0, 1.0),
-    vec2<f32>(1.0, 1.0),
+// vertices:
+// 0 - 3
+// |   |
+// 1 - 2
+const QUAD_VERTICES = array<vec4<f32>, 4>(
+    vec4<f32>(0.0, 0.0, 0.0, 1.0),
+    vec4<f32>(0.0,-1.0, 0.0, 1.0),
+    vec4<f32>(1.0,-1.0, 0.0, 1.0),
+    vec4<f32>(1.0, 0.0, 0.0, 1.0),
+);
+
+const CLIP_VERTICES = array<vec4<f32>, 4>(
+    vec4<f32>(-1.0,  1.0, 0.0, 1.0),
+    vec4<f32>(-1.0, -1.0, 0.0, 1.0),
+    vec4<f32>( 1.0, -1.0, 0.0, 1.0),
+    vec4<f32>( 1.0,  1.0, 0.0, 1.0),
 );
 
 @compute @workgroup_size(64)
 fn culling_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let instance_index = global_id.x;
-    let num_instances = arrayLength(&all_instances);
-
-    if (instance_index >= num_instances) {
-        return;
-    }
-
     let instance = all_instances[instance_index];
 
-    let p1 = normalize_matrix * instance.viewport_position * vec4<f32>(QUAD_VERTICES[0], 0.0, 1.0);
-    let p2 = normalize_matrix * instance.viewport_position * vec4<f32>(QUAD_VERTICES[1], 0.0, 1.0);
-    let p3 = normalize_matrix * instance.viewport_position * vec4<f32>(QUAD_VERTICES[2], 0.0, 1.0);
-    let p4 = normalize_matrix * instance.viewport_position * vec4<f32>(QUAD_VERTICES[3], 0.0, 1.0);
+    let stencil_index_add_1 = instance.stencil_index;
+    let use_stencil = stencil_index_add_1 > 0u;
+    let stencil_index = max(stencil_index_add_1 - 1u, 0u);
+    let stencil = all_stencils[stencil_index];
 
-    let min_x = min(min(p1.x, p2.x), min(p3.x, p4.x));
-    let max_x = max(max(p1.x, p2.x), max(p3.x, p4.x));
-    let min_y = min(min(p1.y, p2.y), min(p3.y, p4.y));
-    let max_y = max(max(p1.y, p2.y), max(p3.y, p4.y));
+    // Visible conditions:
+    // 1. instance is within the viewport
+    // 2. (no stencil) or (stencil is within the viewport)
+    // 3. instance's polygon and stencil's polygon have overlap
 
-    if (max_x < -1.0 || min_x > 1.0 || max_y < -1.0 || min_y > 1.0) {
-        return;
+    var texture_position: array<vec4<f32>, 4>;
+    for (var i = 0u; i < 4u; i++) {
+        texture_position[i] = normalize_matrix * instance.viewport_position * QUAD_VERTICES[i];
     }
 
-    let visible_index = atomicAdd(&visible_instance_count, 1u);
-    visible_instances[visible_index] = instance;
+    var stencil_position: array<vec4<f32>, 4>;
+    for (var i = 0u; i < 4u; i++) {
+        stencil_position[i] = normalize_matrix * stencil.viewport_position * QUAD_VERTICES[i];
+    }
+
+    let texture_is_in_viewport = is_overlapping(texture_position, CLIP_VERTICES);
+    let stencil_is_in_viewport = use_stencil && is_overlapping(stencil_position, CLIP_VERTICES);
+    let polygons_overlap = use_stencil && is_overlapping(texture_position, stencil_position);
+
+    let is_visible = texture_is_in_viewport && (!use_stencil || stencil_is_in_viewport) && polygons_overlap;
+
+    if (is_visible) {
+        let visible_count = atomicAdd(&visible_instance_count, 1u);
+        visible_instances[visible_count] = instance;
+    }
+}
+
+fn is_overlapping(
+    a: array<vec4<f32>, 4>,
+    b: array<vec4<f32>, 4>
+) -> bool {
+    var flag = false;
+    for (var i = 0u; i < 4u; i++) {
+        flag = flag || point_in_polygon(a[i], b);
+    }
+    for (var i = 0u; i < 4u; i++) {
+        flag = flag || point_in_polygon(b[i], a);
+    }
+    return flag;
+}
+
+fn point_in_polygon(
+    point: vec4<f32>,
+    polygon: array<vec4<f32>, 4>
+) -> bool {
+    // use cross product to determine if the point is inside the polygon
+    let points = array<vec2<f32>, 4>(
+        polygon[0].xy - point.xy,
+        polygon[1].xy - point.xy,
+        polygon[2].xy - point.xy,
+        polygon[3].xy - point.xy,
+    );
+    let lines = array<vec2<f32>, 4>(
+        polygon[1].xy - polygon[0].xy,
+        polygon[2].xy - polygon[1].xy,
+        polygon[3].xy - polygon[2].xy,
+        polygon[0].xy - polygon[3].xy,
+    );
+
+    let signs = array<bool, 4>(
+        cross(points[0], lines[0]) > 0,
+        cross(points[1], lines[1]) > 0,
+        cross(points[2], lines[2]) > 0,
+        cross(points[3], lines[3]) > 0,
+    );
+
+    return signs[0] == signs[1] && signs[1] == signs[2] && signs[2] == signs[3];
 }

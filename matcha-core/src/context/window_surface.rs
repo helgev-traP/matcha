@@ -48,7 +48,7 @@ impl WindowSurface {
     }
 
     pub fn window(&self) -> &winit::window::Window {
-        &*self.window
+        &self.window
     }
 
     pub fn window_id(&self) -> winit::window::WindowId {

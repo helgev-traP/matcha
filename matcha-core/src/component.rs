@@ -318,17 +318,11 @@ impl<Model: Sync + Send + 'static, Response: 'static, InnerResponse: 'static> Wi
 
     fn render(
         &mut self,
-        render_pass: &mut wgpu::RenderPass<'_>,
-        target_size: [u32; 2],
-        target_format: wgpu::TextureFormat,
         parent_size: [Option<f32>; 2],
         background: Background,
         context: &WidgetContext,
     ) -> Object {
         self.widget.render(
-            render_pass,
-            target_size,
-            target_format,
             parent_size,
             background,
             context,
