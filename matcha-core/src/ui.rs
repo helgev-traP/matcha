@@ -1,11 +1,13 @@
 use std::{any::Any, sync::Arc};
 
 use crate::{
-    context::{any_resource::AnyResource, gpu::Gpu, texture_allocator},
-    types::range::Range2D,
+    any_resource::AnyResource,
+    events::Event,
+    gpu::Gpu,
+    observer::Observer,
+    texture_allocator,
+    types::range::{CoverRange, Range2D},
 };
-
-use super::{events::Event, observer::Observer, types::range::CoverRange};
 
 #[derive(Clone)]
 
@@ -247,6 +249,12 @@ pub struct Object {
     pub stencil_and_position: Option<(texture_atlas::Texture, nalgebra::Matrix4<f32>)>,
 
     child_elements: Vec<(Object, nalgebra::Matrix4<f32>)>,
+}
+
+impl Default for Object {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Object {

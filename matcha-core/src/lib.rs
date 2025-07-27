@@ -1,18 +1,26 @@
-// api
+// application entry point. wrapper of winit_instance.
 pub mod app;
-pub mod component;
-pub mod device;
-pub mod events;
+
+// event loop, window handling and rendering
 pub mod winit_instance;
 
-// core modules
-pub mod context;
+// widget system
+pub mod component;
 pub mod observer;
 pub mod ui;
 
-// renderers
+// core modules
+pub mod device;
+pub mod events;
+
+// resource management
+pub mod any_resource;
+// gpu preparation
+pub mod gpu;
+// renderer of object tree
 pub mod renderer;
+// allocator for area in texture atlas
+pub mod texture_allocator;
 
 // types
 pub mod types;
-pub mod vertex;

@@ -1,29 +1,28 @@
 use std::fmt::Debug;
 
 use crate::{
-    context::{any_resource::AnyResource, texture_allocator::TextureAllocator},
-    ui::WidgetContext,
-};
-
-use super::{
+    any_resource::AnyResource,
     component::Component,
-    context::gpu::Gpu,
     device::{keyboard_state::KeyboardState, mouse_state::MouseState},
     events::Event,
     observer::Observer,
-    renderer::ObjectRenderer,
     types::color::Color,
-    ui::{Background, Widget},
+    ui::{Background, Widget, WidgetContext},
 };
 
 // MARK: modules
 
 mod benchmark;
 mod error;
+mod render_control;
+mod ui_control;
 mod window_surface;
-use window_surface::WindowSurface;
 
-// MARK: Window
+// MARK: Winit
+
+// make a builder or a preference struct to choose these values later.
+const POWER_PREFERENCE: wgpu::PowerPreference = wgpu::PowerPreference::LowPower;
+const BASE_COLOR: wgpu::Color = wgpu::Color::TRANSPARENT;
 
 pub struct WinitInstance<
     Model: Send + Sync + 'static,
@@ -35,15 +34,13 @@ pub struct WinitInstance<
     tokio_runtime: tokio::runtime::Runtime,
 
     // --- window ---
-    window: WindowSurface,
+    window: window_surface::WindowSurface,
 
     // --- rendering context ---
-    performance: wgpu::PowerPreference,
-    base_color: Color,
-    gpu: Option<Gpu>,
-    texture_atlas: Option<TextureAllocator>,
     any_resource: Option<AnyResource>,
-    widget_renderer: Option<ObjectRenderer>,
+
+    // --- render control ---
+    render_control: render_control::RenderControl,
 
     // --- UI context ---
     root_component: Component<Model, Message, Response, IR>,
@@ -78,15 +75,16 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
             .build()
             .unwrap();
 
+        let render_control = tokio_runtime.block_on(render_control::RenderControl::new(
+            POWER_PREFERENCE,
+            BASE_COLOR,
+        ));
+
         Self {
             tokio_runtime,
-            performance: wgpu::PowerPreference::HighPerformance,
-            window: WindowSurface::new(),
-            base_color: Color::default(),
-            gpu: None,
-            texture_atlas: None,
+            window: window_surface::WindowSurface::new(),
             any_resource: None,
-            widget_renderer: None,
+            render_control,
             root_component: component,
             root_widget: None,
             observer: Observer::new(),
@@ -127,14 +125,6 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
 {
     fn render(&mut self) -> Result<(), error::RenderError> {
         // ensure that rendering context is available.
-        let Some(gpu) = self.gpu.as_ref() else {
-            return Err(error::RenderError::Gpu);
-        };
-
-        let Some(texture_atlas) = self.texture_atlas.as_ref() else {
-            return Err(error::RenderError::TextureAllocator);
-        };
-
         let Some(any_resource) = self.any_resource.as_ref() else {
             return Err(error::RenderError::AnyResource);
         };
@@ -142,10 +132,6 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
         let Some(root_widget) = self.root_widget.as_mut() else {
             return Err(error::RenderError::RootWidget);
         };
-
-        let widget_renderer = self
-            .widget_renderer
-            .get_or_insert_with(|| ObjectRenderer::new(gpu.device(), self.window.format()));
 
         let Some(benchmarker) = self.benchmarker.as_mut() else {
             return Err(error::RenderError::Benchmarker);
@@ -177,25 +163,12 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'sta
                 &ctx,
             );
 
-            let base_color = self.base_color.to_rgba_f64();
-            let base_color = wgpu::Color {
-                r: base_color[0],
-                g: base_color[1],
-                b: base_color[2],
-                a: base_color[3],
-            };
-
-            widget_renderer
+            self.render_control
                 .render(
-                    gpu.device(),
-                    gpu.queue(),
-                    self.window.format(),
+                    object,
                     &surface_view,
                     [viewport_size[0] as f32, viewport_size[1] as f32],
-                    object,
-                    base_color,
-                    texture_atlas.color_texture(),
-                    texture_atlas.stencil_texture(),
+                    self.window.format(),
                 )
                 .unwrap();
         });
@@ -379,31 +352,12 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, 
     // MARK: resumed
 
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        // --- prepare gpu ---
-
-        let gpu = match self.tokio_runtime.block_on(Gpu::new(self.performance)) {
-            Ok(gpu) => gpu,
-            Err(e) => {
-                eprintln!("Failed to create GPU instance: {e}");
-                event_loop.exit(); // Exit event loop.
-                return;
-            }
-        };
-        let gpu = self.gpu.insert(gpu);
-
         // --- create window ---
         self.window.start_window(event_loop, &gpu);
 
         event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
 
         // --- create window context ---
-
-        self.texture_atlas = Some(TextureAllocator::new(
-            gpu,
-            self.window.format(),
-            wgpu::TextureFormat::R8Snorm,
-        ));
-
         self.any_resource = Some(AnyResource::new());
 
         // --- init input context ---

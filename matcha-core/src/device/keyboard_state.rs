@@ -1,258 +1,90 @@
-use std::collections::HashMap;
+use crate::events::{ConcreteEvent, Event, KeyEvent};
+use std::collections::{HashMap, VecDeque};
+use winit::keyboard::{Key as WinitKey, KeyCode, ModifiersState, PhysicalKey};
 
-use winit::keyboard::SmolStr;
+/// キーボードの特定時点での状態のスナップショット。
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct KeyboardSnapshot {
+    /// 現在押されている物理キーと、対応する論理キーのマッピング。
+    pressed: HashMap<KeyCode, WinitKey>,
+    /// キーが押された順番を保持するキュー（最新が末尾）。
+    press_order: VecDeque<KeyCode>,
+    /// 現在の修飾キーの状態。
+    modifiers: ModifiersState,
+}
 
-use crate::{
-    device::keyboard::{Key, Modifiers, NamedKey},
-    events::{ConcreteEvent, ElementState, Event},
-};
+impl KeyboardSnapshot {
+    /// 指定した物理キーが現在押されているかを確認します。
+    pub fn is_physical_pressed(&self, key: KeyCode) -> bool {
+        self.pressed.contains_key(&key)
+    }
 
-// track keyboard state by winit structure.
+    /// 指定した論理キーが現在押されているかを確認します。
+    pub fn is_logical_pressed(&self, key: &WinitKey) -> bool {
+        self.pressed.values().any(|v| v == key)
+    }
+
+    /// 現在の修飾キーの状態を取得します。
+    pub fn modifiers(&self) -> ModifiersState {
+        self.modifiers
+    }
+
+    /// 押されているキーを押された順にイテレータとして取得します。
+    pub fn press_order(&self) -> impl Iterator<Item = (&KeyCode, &WinitKey)> {
+        self.press_order.iter().rev().map(|k| (k, &self.pressed[k]))
+    }
+}
+
+/// winitのキーイベントを処理し、KeyboardSnapshotを管理する状態マシン。
+#[derive(Default)]
 pub struct KeyboardState {
-    characters: HashMap<winit::keyboard::KeyCode, (SmolStr, u32)>,
-    named_keys: HashMap<NamedKey, u32>,
-    modifiers: HashMap<Modifiers, u32>,
+    snapshot: KeyboardSnapshot,
 }
 
 impl KeyboardState {
     pub fn new() -> Self {
-        Self {
-            characters: HashMap::new(),
-            named_keys: HashMap::new(),
-            modifiers: HashMap::new(),
-        }
+        Self::default()
     }
 
-    pub fn key_event(&mut self, frame: u64, event: winit::event::KeyEvent) -> Option<Event> {
-        match event.state {
-            winit::event::ElementState::Pressed => match event.logical_key {
-                winit::keyboard::Key::Named(named_key) => match named_key {
-                    winit::keyboard::NamedKey::Enter
-                    | winit::keyboard::NamedKey::Escape
-                    | winit::keyboard::NamedKey::Backspace
-                    | winit::keyboard::NamedKey::Tab
-                    | winit::keyboard::NamedKey::Space
-                    | winit::keyboard::NamedKey::CapsLock
-                    | winit::keyboard::NamedKey::F1
-                    | winit::keyboard::NamedKey::F2
-                    | winit::keyboard::NamedKey::F3
-                    | winit::keyboard::NamedKey::F4
-                    | winit::keyboard::NamedKey::F5
-                    | winit::keyboard::NamedKey::F6
-                    | winit::keyboard::NamedKey::F7
-                    | winit::keyboard::NamedKey::F8
-                    | winit::keyboard::NamedKey::F9
-                    | winit::keyboard::NamedKey::F10
-                    | winit::keyboard::NamedKey::F11
-                    | winit::keyboard::NamedKey::F12
-                    | winit::keyboard::NamedKey::PrintScreen
-                    | winit::keyboard::NamedKey::ScrollLock
-                    | winit::keyboard::NamedKey::Pause
-                    | winit::keyboard::NamedKey::Insert
-                    | winit::keyboard::NamedKey::Home
-                    | winit::keyboard::NamedKey::PageUp
-                    | winit::keyboard::NamedKey::Delete
-                    | winit::keyboard::NamedKey::End
-                    | winit::keyboard::NamedKey::PageDown
-                    | winit::keyboard::NamedKey::ArrowRight
-                    | winit::keyboard::NamedKey::ArrowLeft
-                    | winit::keyboard::NamedKey::ArrowDown
-                    | winit::keyboard::NamedKey::ArrowUp
-                    | winit::keyboard::NamedKey::NumLock => {
-                        if let Some(count) = self
-                            .named_keys
-                            .get_mut(&NamedKey::from_winit_named_key(named_key).unwrap())
-                        {
-                            *count += 1;
-                        } else {
-                            self.named_keys
-                                .insert(NamedKey::from_winit_named_key(named_key).unwrap(), 1);
-                        }
-
-                        Some(Event::new(
-                            frame,
-                            ConcreteEvent::KeyboardInput {
-                                key: Key::Spacial(
-                                    NamedKey::from_winit_named_key(named_key).unwrap(),
-                                ),
-                                element_state: ElementState::from_winit_state(
-                                    event.state,
-                                    self.named_keys
-                                        [&NamedKey::from_winit_named_key(named_key).unwrap()],
-                                ),
-                            },
-                        ))
-                    }
-                    winit::keyboard::NamedKey::Control
-                    | winit::keyboard::NamedKey::Alt
-                    | winit::keyboard::NamedKey::Shift
-                    | winit::keyboard::NamedKey::Super => {
-                        if let Some(count) = self.modifiers.get_mut(
-                            &Modifiers::from_winit_named_key(named_key, event.location).unwrap(),
-                        ) {
-                            *count += 1;
-                        } else {
-                            self.modifiers.insert(
-                                Modifiers::from_winit_named_key(named_key, event.location).unwrap(),
-                                1,
-                            );
-                        }
-
-                        Some(Event::new(
-                            frame,
-                            ConcreteEvent::KeyboardInput {
-                                key: Key::Modifiers(
-                                    Modifiers::from_winit_named_key(named_key, event.location)
-                                        .unwrap(),
-                                ),
-                                element_state: ElementState::from_winit_state(
-                                    event.state,
-                                    self.modifiers[&Modifiers::from_winit_named_key(
-                                        named_key,
-                                        event.location,
-                                    )
-                                    .unwrap()],
-                                ),
-                            },
-                        ))
-                    }
-                    _ => None,
-                },
-                winit::keyboard::Key::Character(c) => {
-                    if let winit::keyboard::PhysicalKey::Code(code) = event.physical_key {
-                        if let Some((_, count)) = self.characters.get_mut(&code) {
-                            *count += 1;
-                        } else {
-                            self.characters.insert(code, (c, 1));
-                        }
-
-                        Some(Event::new(
-                            frame,
-                            ConcreteEvent::KeyboardInput {
-                                key: Key::Character(
-                                    self.characters[&code].0.chars().next().unwrap(),
-                                ),
-                                element_state: ElementState::from_winit_state(
-                                    event.state,
-                                    self.characters[&code].1,
-                                ),
-                            },
-                        ))
-                    } else {
-                        None
+    /// winitのイベントを受け取り、内部状態を更新し、アプリケーションのKeyEventを生成する。
+    pub fn process_winit_event(
+        &mut self,
+        winit_event: &winit::event::KeyEvent,
+        modifiers: ModifiersState,
+    ) -> Event {
+        // 1. `self.snapshot`を更新する
+        if let PhysicalKey::Code(key_code) = winit_event.physical_key {
+            match winit_event.state {
+                winit::event::ElementState::Pressed => {
+                    if !self.snapshot.pressed.contains_key(&key_code) {
+                        self.snapshot
+                            .pressed
+                            .insert(key_code, winit_event.logical_key.clone());
+                        self.snapshot.press_order.push_back(key_code);
                     }
                 }
-                winit::keyboard::Key::Unidentified(_) => None,
-                winit::keyboard::Key::Dead(_) => None,
-            },
-
-            winit::event::ElementState::Released => match event.logical_key {
-                winit::keyboard::Key::Named(named_key) => match named_key {
-                    winit::keyboard::NamedKey::Enter
-                    | winit::keyboard::NamedKey::Escape
-                    | winit::keyboard::NamedKey::Backspace
-                    | winit::keyboard::NamedKey::Tab
-                    | winit::keyboard::NamedKey::Space
-                    | winit::keyboard::NamedKey::CapsLock
-                    | winit::keyboard::NamedKey::F1
-                    | winit::keyboard::NamedKey::F2
-                    | winit::keyboard::NamedKey::F3
-                    | winit::keyboard::NamedKey::F4
-                    | winit::keyboard::NamedKey::F5
-                    | winit::keyboard::NamedKey::F6
-                    | winit::keyboard::NamedKey::F7
-                    | winit::keyboard::NamedKey::F8
-                    | winit::keyboard::NamedKey::F9
-                    | winit::keyboard::NamedKey::F10
-                    | winit::keyboard::NamedKey::F11
-                    | winit::keyboard::NamedKey::F12
-                    | winit::keyboard::NamedKey::PrintScreen
-                    | winit::keyboard::NamedKey::ScrollLock
-                    | winit::keyboard::NamedKey::Pause
-                    | winit::keyboard::NamedKey::Insert
-                    | winit::keyboard::NamedKey::Home
-                    | winit::keyboard::NamedKey::PageUp
-                    | winit::keyboard::NamedKey::Delete
-                    | winit::keyboard::NamedKey::End
-                    | winit::keyboard::NamedKey::PageDown
-                    | winit::keyboard::NamedKey::ArrowRight
-                    | winit::keyboard::NamedKey::ArrowLeft
-                    | winit::keyboard::NamedKey::ArrowDown
-                    | winit::keyboard::NamedKey::ArrowUp
-                    | winit::keyboard::NamedKey::NumLock => {
-                        let count = self
-                            .named_keys
-                            .get_mut(&NamedKey::from_winit_named_key(named_key).unwrap())
-                            .map(|count| *count)
-                            .unwrap_or(0);
-
-                        self.named_keys
-                            .remove(&NamedKey::from_winit_named_key(named_key).unwrap());
-
-                        Some(Event::new(
-                            frame,
-                            ConcreteEvent::KeyboardInput {
-                                key: Key::Spacial(
-                                    NamedKey::from_winit_named_key(named_key).unwrap(),
-                                ),
-                                element_state: ElementState::from_winit_state(event.state, count),
-                            },
-                        ))
-                    }
-                    winit::keyboard::NamedKey::Control
-                    | winit::keyboard::NamedKey::Alt
-                    | winit::keyboard::NamedKey::Shift
-                    | winit::keyboard::NamedKey::Super => {
-                        let count = self
-                            .modifiers
-                            .get_mut(
-                                &Modifiers::from_winit_named_key(named_key, event.location)
-                                    .unwrap(),
-                            )
-                            .map(|count| *count)
-                            .unwrap_or(0);
-
-                        self.modifiers.remove(
-                            &Modifiers::from_winit_named_key(named_key, event.location).unwrap(),
-                        );
-
-                        Some(Event::new(
-                            frame,
-                            ConcreteEvent::KeyboardInput {
-                                key: Key::Modifiers(
-                                    Modifiers::from_winit_named_key(named_key, event.location)
-                                        .unwrap(),
-                                ),
-                                element_state: ElementState::from_winit_state(event.state, count),
-                            },
-                        ))
-                    }
-                    _ => None,
-                },
-                winit::keyboard::Key::Character(c) => {
-                    if let winit::keyboard::PhysicalKey::Code(code) = event.physical_key {
-                        let count = self
-                            .characters
-                            .get_mut(&code)
-                            .map(|(_, count)| *count)
-                            .unwrap_or(0);
-
-                        self.characters.remove(&code);
-
-                        Some(Event::new(
-                            frame,
-                            ConcreteEvent::KeyboardInput {
-                                key: Key::Character(c.chars().next().unwrap()),
-                                element_state: ElementState::from_winit_state(event.state, count),
-                            },
-                        ))
-                    } else {
-                        None
+                winit::event::ElementState::Released => {
+                    if self.snapshot.pressed.remove(&key_code).is_some() {
+                        self.snapshot.press_order.retain(|&k| k != key_code);
                     }
                 }
-                winit::keyboard::Key::Unidentified(_) => None,
-                winit::keyboard::Key::Dead(_) => None,
-            },
+            }
         }
+
+        // winitから最新の修飾キー状態を受け取り、そのままスナップショットに反映
+        self.snapshot.modifiers = modifiers;
+
+        // 2. アプリケーションのKeyEventを生成して返す
+        let key_event = KeyEvent {
+            winit: winit_event.clone(),
+            snapshot: self.snapshot.clone(), // 更新された最新の状態のスナップショットを添付
+        };
+
+        Event::new(ConcreteEvent::KeyboardEvent(key_event))
+    }
+
+    /// 現在のキーボード状態への読み取り専用アクセスを提供する。
+    pub fn snapshot(&self) -> &KeyboardSnapshot {
+        &self.snapshot
     }
 }

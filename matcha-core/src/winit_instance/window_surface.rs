@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use winit::{event_loop::ActiveEventLoop, window::Window};
 
-use crate::context::gpu::Gpu;
+use crate::gpu::Gpu;
 
 pub struct WindowSurface {
     // winit

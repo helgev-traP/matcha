@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 
-use crate::context::gpu::Gpu;
+use super::gpu::Gpu;
 
 pub struct TextureAllocator {
     size: u32,
@@ -73,11 +73,11 @@ impl TextureAllocator {
         self.stencil.lock().allocate(device, queue, size)
     }
 
-    pub fn color_texture(&self) -> wgpu::Texture {
+    pub(super) fn color_texture(&self) -> wgpu::Texture {
         self.color.lock().textures()[0].clone()
     }
 
-    pub fn stencil_texture(&self) -> wgpu::Texture {
+    pub(super) fn stencil_texture(&self) -> wgpu::Texture {
         self.stencil.lock().textures()[0].clone()
     }
 }

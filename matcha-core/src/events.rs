@@ -5,26 +5,20 @@ use super::device::{keyboard::Key, mouse::MouseButton};
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Event {
-    frame: u64,
     raw: ConcreteEvent,
     relative_position: [f32; 2],
 }
 
 impl Event {
-    pub fn new(frame: u64, event: ConcreteEvent) -> Self {
+    pub fn new(event: ConcreteEvent) -> Self {
         Self {
-            frame,
             raw: event,
             relative_position: [0.0, 0.0],
         }
     }
 
-    pub fn frame(&self) -> u64 {
-        self.frame
-    }
-
-    pub fn raw_event(&self) -> ConcreteEvent {
-        self.raw
+    pub fn raw_event(&self) -> &ConcreteEvent {
+        &self.raw
     }
 
     pub fn event(&self) -> ConcreteEvent {
@@ -33,8 +27,7 @@ impl Event {
 
     pub fn transition(&self, position: [f32; 2]) -> Self {
         Self {
-            frame: self.frame,
-            raw: self.raw,
+            raw: self.raw.clone(),
             relative_position: [
                 self.relative_position[0] + position[0],
                 self.relative_position[1] + position[1],
@@ -43,34 +36,92 @@ impl Event {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+use crate::device::keyboard_state::KeyboardSnapshot;
+use winit::event::KeyEvent as WinitKeyEvent;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct KeyEvent {
+    /// イベントを発生させたwinitの元イベント。`repeat`, `text`など豊富な情報を持つ。
+    pub winit: WinitKeyEvent,
+    /// イベント発生瞬間のキーボード全体の状態。
+    pub snapshot: KeyboardSnapshot,
+}
+
+impl KeyEvent {
+    /* --- UIウィジェット向けAPI --- */
+
+    // --- トリガー情報 ---
+    /// このイベントを発生させた物理キーを取得します。
+    pub fn physical_key(&self) -> winit::keyboard::PhysicalKey {
+        self.winit.physical_key
+    }
+    /// このイベントを発生させた論理キーを取得します。
+    pub fn logical_key(&self) -> &winit::keyboard::Key {
+        &self.winit.logical_key
+    }
+    /// このイベントがキーリピートによるものか否かを取得します。
+    pub fn is_repeat(&self) -> bool {
+        self.winit.repeat
+    }
+    /// このキー入力によって生成されたテキストを取得します（例: 'a', 'A', '\n'）。
+    pub fn text(&self) -> Option<&str> {
+        self.winit.text.as_deref()
+    }
+
+    // --- 状態スナップショットへのアクセス ---
+    /// 指定した物理キーが**イベント発生時に**押されていたかを確認します。
+    pub fn is_physical_pressed(&self, key: winit::keyboard::KeyCode) -> bool {
+        self.snapshot.is_physical_pressed(key)
+    }
+    /// 指定した論理キーが**イベント発生時に**押されていたかを確認します。
+    pub fn is_logical_pressed(&self, key: &winit::keyboard::Key) -> bool {
+        self.snapshot.is_logical_pressed(key)
+    }
+    /// **イベント発生時**の修飾キーの状態を取得します。
+    pub fn modifiers(&self) -> winit::keyboard::ModifiersState {
+        self.snapshot.modifiers()
+    }
+    /// **イベント発生時**に押されていたキーを押された順にイテレータとして取得します。
+    pub fn press_order(&self) -> impl Iterator<Item = (&winit::keyboard::KeyCode, &winit::keyboard::Key)> {
+        self.snapshot.press_order()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum ConcreteEvent {
-    #[default]
     None,
     // mouse event
-    MouseClick {
-        position: [f32; 2],
+    MouseEvent {
+        current_position: [f32; 2],
+        dragging_primary: Option<[f32; 2]>,
+        dragging_secondary: Option<[f32; 2]>,
+        dragging_middle: Option<[f32; 2]>,
+
+        event: MouseEvent,
+    },
+    // keyboard event
+    KeyboardEvent(KeyEvent),
+    // todo
+}
+
+impl Default for ConcreteEvent {
+    fn default() -> Self {
+        ConcreteEvent::None
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MouseEvent {
+    Click {
         click_state: ElementState,
         button: MouseButton,
     },
-    CursorMove {
-        position: [f32; 2],
-        primary_dragging_from: Option<[f32; 2]>,
-        secondary_dragging_from: Option<[f32; 2]>,
-        middle_dragging_from: Option<[f32; 2]>,
-    },
-    CursorEntered,
-    CursorLeft,
-    MouseScroll {
-        position: [f32; 2],
+    Move,
+    Entered,
+    Left,
+    Scroll {
         delta: [f32; 2],
     },
-    // keyboard event
-    KeyboardInput {
-        key: Key,
-        element_state: ElementState,
-    },
-    // todo
 }
 
 // MARK: ElementState
