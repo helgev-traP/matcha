@@ -107,51 +107,11 @@ impl NamedKey {
 }
 
 bitflags! {
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
     pub struct Modifiers: u8 {
-        const LEFT_SHIFT = 0b0001;
-        const RIGHT_SHIFT = 0b0010;
-        const LEFT_CTRL = 0b0100;
-        const RIGHT_CTRL = 0b1000;
-        const LEFT_ALT = 0b0001_0000;
-        const RIGHT_ALT = 0b0010_0000;
-        const LEFT_SUPER = 0b0100_0000;
-        const RIGHT_SUPER = 0b1000_0000;
-
-        const SHIFT = Self::LEFT_SHIFT.bits() | Self::RIGHT_SHIFT.bits();
-        const CTRL = Self::LEFT_CTRL.bits() | Self::RIGHT_CTRL.bits();
-        const ALT = Self::LEFT_ALT.bits() | Self::RIGHT_ALT.bits();
-        const SUPER = Self::LEFT_SUPER.bits() | Self::RIGHT_SUPER.bits();
-    }
-}
-
-impl Modifiers {
-    pub fn from_winit_named_key(
-        key: winit::keyboard::NamedKey,
-        location: winit::keyboard::KeyLocation,
-    ) -> Option<Self> {
-        match key {
-            winit::keyboard::NamedKey::Control => match location {
-                winit::keyboard::KeyLocation::Left => Some(Modifiers::LEFT_CTRL),
-                winit::keyboard::KeyLocation::Right => Some(Modifiers::RIGHT_CTRL),
-                _ => None,
-            },
-            winit::keyboard::NamedKey::Alt => match location {
-                winit::keyboard::KeyLocation::Left => Some(Modifiers::LEFT_ALT),
-                winit::keyboard::KeyLocation::Right => Some(Modifiers::RIGHT_ALT),
-                _ => None,
-            },
-            winit::keyboard::NamedKey::Shift => match location {
-                winit::keyboard::KeyLocation::Left => Some(Modifiers::LEFT_SHIFT),
-                winit::keyboard::KeyLocation::Right => Some(Modifiers::RIGHT_SHIFT),
-                _ => None,
-            },
-            winit::keyboard::NamedKey::Super => match location {
-                winit::keyboard::KeyLocation::Left => Some(Modifiers::LEFT_SUPER),
-                winit::keyboard::KeyLocation::Right => Some(Modifiers::RIGHT_SUPER),
-                _ => None,
-            },
-            _ => None,
-        }
+        const SHIFT = 0b0001;
+        const CTRL  = 0b0010;
+        const ALT   = 0b0100;
+        const SUPER = 0b1000;
     }
 }

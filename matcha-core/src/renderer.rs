@@ -1,9 +1,10 @@
+use std::sync::Arc;
+
 use crate::ui::Object;
 use texture_atlas::TextureError;
 use thiserror::Error;
 
-pub mod texture_copy;
-
+const PIPELINE_CACHE_SIZE: u64 = 3;
 const COMPUTE_WORKGROUP_SIZE: u32 = 64;
 
 #[repr(C)]
@@ -39,7 +40,7 @@ struct StencilData {
     in_atlas_size: [f32; 2],
 }
 
-pub struct ObjectRenderer {
+pub struct Renderer {
     // Bind Group Layouts
     texture_sampler: wgpu::Sampler,
     texture_bind_group_layout: wgpu::BindGroupLayout,
@@ -49,15 +50,16 @@ pub struct ObjectRenderer {
     culling_pipeline_layout: wgpu::PipelineLayout,
     command_pipeline_layout: wgpu::PipelineLayout,
     render_pipeline_layout: wgpu::PipelineLayout,
+    render_pipeline_shader_module: wgpu::ShaderModule,
 
     // Pipelines
     culling_pipeline: wgpu::ComputePipeline,
     command_pipeline: wgpu::ComputePipeline,
-    render_pipeline: wgpu::RenderPipeline,
+    render_pipeline: moka::sync::Cache<wgpu::TextureFormat, Arc<wgpu::RenderPipeline>>, // key: surface format
 }
 
-impl ObjectRenderer {
-    pub fn new(device: &wgpu::Device, surface_format: wgpu::TextureFormat) -> Self {
+impl Renderer {
+    pub fn new(device: &wgpu::Device) -> Self {
         // Sampler
         let texture_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("ObjectRenderer Sampler"),
@@ -175,12 +177,16 @@ impl ObjectRenderer {
         let (command_pipeline_layout, command_pipeline) =
             Self::create_command_pipeline(device, &data_bind_group_layout);
 
-        let (render_pipeline_layout, render_pipeline) = Self::create_render_pipeline(
-            device,
-            &texture_bind_group_layout,
-            &data_bind_group_layout,
-            surface_format,
-        );
+        let (render_pipeline_layout, render_pipeline_shader_module) =
+            Self::create_render_pipeline_layout(
+                device,
+                &texture_bind_group_layout,
+                &data_bind_group_layout,
+            );
+
+        let render_pipeline = moka::sync::Cache::builder()
+            .max_capacity(PIPELINE_CACHE_SIZE)
+            .build();
 
         Self {
             texture_sampler,
@@ -189,6 +195,7 @@ impl ObjectRenderer {
             culling_pipeline_layout,
             command_pipeline_layout,
             render_pipeline_layout,
+            render_pipeline_shader_module,
             culling_pipeline,
             command_pipeline,
             render_pipeline,
@@ -201,7 +208,7 @@ impl ObjectRenderer {
     ) -> (wgpu::PipelineLayout, wgpu::ComputePipeline) {
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Culling Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("renderer_cull.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(include_str!("renderer/renderer_cull.wgsl").into()),
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -231,7 +238,7 @@ impl ObjectRenderer {
     ) -> (wgpu::PipelineLayout, wgpu::ComputePipeline) {
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Command Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("renderer_command.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(include_str!("renderer/renderer_command.wgsl").into()),
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -252,15 +259,14 @@ impl ObjectRenderer {
         (pipeline_layout, pipeline)
     }
 
-    fn create_render_pipeline(
+    fn create_render_pipeline_layout(
         device: &wgpu::Device,
         texture_bind_group_layout: &wgpu::BindGroupLayout,
         data_bind_group_layout: &wgpu::BindGroupLayout,
-        format: wgpu::TextureFormat,
-    ) -> (wgpu::PipelineLayout, wgpu::RenderPipeline) {
+    ) -> (wgpu::PipelineLayout, wgpu::ShaderModule) {
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Render Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("renderer_render.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(include_str!("renderer/renderer_render.wgsl").into()),
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -272,20 +278,29 @@ impl ObjectRenderer {
             }],
         });
 
+        (pipeline_layout, module)
+    }
+
+    fn create_render_pipeline(
+        device: &wgpu::Device,
+        render_pipeline_layout: &wgpu::PipelineLayout,
+        shader_module: &wgpu::ShaderModule,
+        target_format: wgpu::TextureFormat,
+    ) -> wgpu::RenderPipeline {
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
-            layout: Some(&pipeline_layout),
+            layout: Some(render_pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &module,
+                module: &shader_module,
                 entry_point: Some("vertex_main"),
                 buffers: &[],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
-                module: &module,
+                module: &shader_module,
                 entry_point: Some("fragment_main"),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format,
+                    format: target_format,
                     blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -305,7 +320,7 @@ impl ObjectRenderer {
             cache: None,
         });
 
-        (pipeline_layout, pipeline)
+        pipeline
     }
 
     pub fn render(
@@ -325,6 +340,16 @@ impl ObjectRenderer {
         texture_atlas: wgpu::Texture,
         stencil_atlas: wgpu::Texture,
     ) -> Result<(), TextureValidationError> {
+        // get or create render pipeline that matches given surface format
+        let render_pipeline = self.render_pipeline.get_with(surface_format, || {
+            Arc::new(Self::create_render_pipeline(
+                device,
+                &self.render_pipeline_layout,
+                &self.render_pipeline_shader_module,
+                surface_format,
+            ))
+        });
+
         // integrate objects into a instance array
         let (instances, stencils) = create_instance_and_stencil_data(
             objects,
@@ -505,7 +530,7 @@ impl ObjectRenderer {
                 timestamp_writes: None,
             });
 
-            render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_pipeline(render_pipeline.as_ref());
             render_pass.set_bind_group(0, &texture_bind_group, &[]);
             render_pass.set_bind_group(1, &data_bind_group, &[]);
             render_pass.set_push_constants(
