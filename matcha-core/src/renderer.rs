@@ -287,17 +287,17 @@ impl Renderer {
         shader_module: &wgpu::ShaderModule,
         target_format: wgpu::TextureFormat,
     ) -> wgpu::RenderPipeline {
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
             layout: Some(render_pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &shader_module,
+                module: shader_module,
                 entry_point: Some("vertex_main"),
                 buffers: &[],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
-                module: &shader_module,
+                module: shader_module,
                 entry_point: Some("fragment_main"),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: target_format,
@@ -318,11 +318,10 @@ impl Renderer {
             },
             multiview: None,
             cache: None,
-        });
-
-        pipeline
+        })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn render(
         &self,
         // gpu
@@ -573,6 +572,7 @@ fn create_instance_and_stencil_data(
     Ok((instances, stencils))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn create_instance_and_stencil_data_recursive(
     texture_format: wgpu::TextureFormat,
     stencil_format: wgpu::TextureFormat,
@@ -587,7 +587,7 @@ fn create_instance_and_stencil_data_recursive(
     mut current_stencil: u32,
 ) -> Result<(), TextureValidationError> {
     if let Some((stencil, stencil_position)) = &object.stencil_and_position {
-        if stencil.formats() != &[stencil_format] {
+        if stencil.formats() != [stencil_format] {
             return Err(TextureValidationError::FormatMismatch);
         }
 

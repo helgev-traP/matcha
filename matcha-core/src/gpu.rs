@@ -1,5 +1,21 @@
 use std::sync::Arc;
 
+#[derive(Clone, Copy)]
+pub struct DeviceQueue<'a> {
+    pub(crate) device: &'a wgpu::Device,
+    pub(crate) queue: &'a wgpu::Queue,
+}
+
+impl DeviceQueue<'_> {
+    pub fn device(&self) -> &wgpu::Device {
+        self.device
+    }
+
+    pub fn queue(&self) -> &wgpu::Queue {
+        self.queue
+    }
+}
+
 pub struct Gpu {
     // gpu device
     instance: wgpu::Instance,
@@ -27,18 +43,16 @@ impl Gpu {
             .map_err(|_| GpuError::AdapterRequestFailed)?;
 
         let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: None,
-                    required_features: wgpu::Features::PUSH_CONSTANTS,
-                    required_limits: wgpu::Limits {
-                        max_push_constant_size: 128,
-                        ..wgpu::Limits::downlevel_defaults()
-                    },
-                    memory_hints: wgpu::MemoryHints::default(),
-                    trace: wgpu::Trace::Off,
+            .request_device(&wgpu::DeviceDescriptor {
+                label: None,
+                required_features: wgpu::Features::PUSH_CONSTANTS,
+                required_limits: wgpu::Limits {
+                    max_push_constant_size: 128,
+                    ..wgpu::Limits::downlevel_defaults()
                 },
-            )
+                memory_hints: wgpu::MemoryHints::default(),
+                trace: wgpu::Trace::Off,
+            })
             .await?;
 
         Ok(Self {
@@ -65,6 +79,13 @@ impl Gpu {
 
     pub fn queue(&self) -> &Arc<wgpu::Queue> {
         &self.queue
+    }
+
+    pub fn device_queue(&self) -> DeviceQueue<'_> {
+        DeviceQueue {
+            device: &self.device,
+            queue: &self.queue,
+        }
     }
 }
 

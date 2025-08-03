@@ -321,15 +321,13 @@ mod tests {
         }))
         .unwrap();
 
-        let (device, queue) = pollster::block_on(adaptor.request_device(
-            &wgpu::DeviceDescriptor {
-                label: None,
-                required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::default(),
-                memory_hints: wgpu::MemoryHints::default(),
-                trace: wgpu::Trace::Off,
-            },
-        ))
+        let (device, queue) = pollster::block_on(adaptor.request_device(&wgpu::DeviceDescriptor {
+            label: None,
+            required_features: wgpu::Features::empty(),
+            required_limits: wgpu::Limits::default(),
+            memory_hints: wgpu::MemoryHints::default(),
+            trace: wgpu::Trace::Off,
+        }))
         .unwrap();
 
         (device, queue)

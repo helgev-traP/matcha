@@ -3,7 +3,7 @@ use std::any::Any;
 use matcha_core::{
     common_resource::CommonResource,
     context::WidgetContext,
-    events::Event,
+    device_event::DeviceEvent,
     observer::Observer,
     types::range::{CoverRange, Range2D},
     ui::{Background, Dom, DomComPareResult, UpdateWidgetError, Widget},
@@ -188,9 +188,9 @@ where
         }
     }
 
-    fn widget_event(
+    fn device_event(
         &mut self,
-        event: &Event,
+        event: &DeviceEvent,
         parent_size: [Option<f32>; 2],
         context: &WidgetContext,
     ) -> Option<T> {

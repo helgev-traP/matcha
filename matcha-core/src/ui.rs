@@ -1,9 +1,9 @@
-use std::{any::Any, sync::Arc};
+use std::any::Any;
 
 use crate::{
     any_resource::AnyResource,
-    events::Event,
-    gpu::Gpu,
+    device_event::DeviceEvent,
+    gpu::DeviceQueue,
     observer::Observer,
     texture_allocator,
     types::range::{CoverRange, Range2D},
@@ -12,9 +12,9 @@ use crate::{
 #[derive(Clone)]
 
 pub struct WidgetContext<'a> {
-    gpu: &'a Gpu,
+    device_queue: DeviceQueue<'a>,
     surface_format: wgpu::TextureFormat,
-    window_size: [u32; 2],
+    window_size: [f32; 2],
     window_dpi: f64,
     texture_atlas: &'a texture_allocator::TextureAllocator,
     any_resource: &'a AnyResource,
@@ -24,16 +24,16 @@ pub struct WidgetContext<'a> {
 
 impl<'a> WidgetContext<'a> {
     pub(crate) const fn new(
-        gpu: &'a Gpu,
+        device_queue: DeviceQueue<'a>,
         surface_format: wgpu::TextureFormat,
-        window_size: [u32; 2],
+        window_size: [f32; 2],
         window_dpi: f64,
         texture_atlas: &'a texture_allocator::TextureAllocator,
         any_resource: &'a AnyResource,
         root_font_size: f32,
     ) -> Self {
         Self {
-            gpu,
+            device_queue,
             surface_format,
             window_size,
             window_dpi,
@@ -44,12 +44,12 @@ impl<'a> WidgetContext<'a> {
         }
     }
 
-    pub fn device(&self) -> &Arc<wgpu::Device> {
-        self.gpu.device()
+    pub fn device(&self) -> &wgpu::Device {
+        self.device_queue.device()
     }
 
-    pub fn queue(&self) -> &Arc<wgpu::Queue> {
-        self.gpu.queue()
+    pub fn queue(&self) -> &wgpu::Queue {
+        self.device_queue.queue()
     }
 
     pub fn any_resource(&self) -> &AnyResource {
@@ -72,7 +72,7 @@ impl<'a> WidgetContext<'a> {
         self.window_dpi
     }
 
-    pub fn viewport_size(&self) -> [u32; 2] {
+    pub fn viewport_size(&self) -> [f32; 2] {
         self.window_size
     }
 }
@@ -90,7 +90,7 @@ impl WidgetContext<'_> {
 impl WidgetContext<'_> {
     pub const fn with_font_size(&self, font_size: f32) -> Self {
         Self {
-            gpu: self.gpu,
+            device_queue: self.device_queue,
             surface_format: self.surface_format,
             window_size: self.window_size,
             window_dpi: self.window_dpi,
@@ -160,9 +160,9 @@ pub trait Widget<T>: Send {
     fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult;
 
     // widget event
-    fn widget_event(
+    fn device_event(
         &mut self,
-        event: &Event,
+        event: &DeviceEvent,
         parent_size: [Option<f32>; 2],
         context: &WidgetContext,
     ) -> Option<T>;

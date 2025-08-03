@@ -41,6 +41,13 @@ macro_rules! convert_srgb_u8 {
 }
 
 impl Color {
+    pub const TRANSPARENT: Color = Color::RgbaF32 {
+        r: 0.0,
+        g: 0.0,
+        b: 0.0,
+        a: 0.0,
+    };
+
     pub fn is_transparent(&self) -> bool {
         match self {
             Color::Rgba8USrgb { a, .. } => *a == 0,
@@ -129,6 +136,18 @@ impl Color {
             Color::RgbaF32 { r, g, b, a } => [*r as f64, *g as f64, *b as f64, *a as f64],
             Color::RgbF64 { r, g, b } => [*r, *g, *b, 1.0],
             Color::RgbaF64 { r, g, b, a } => [*r, *g, *b, *a],
+        }
+    }
+}
+
+impl From<Color> for wgpu::Color {
+    fn from(color: Color) -> Self {
+        let [r, g, b, a] = color.to_rgba_f32();
+        wgpu::Color {
+            r: r as f64,
+            g: g as f64,
+            b: b as f64,
+            a: a as f64,
         }
     }
 }

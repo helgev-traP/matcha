@@ -1,49 +1,251 @@
 use std::time::Duration;
 
+use thiserror::Error;
+use winit::dpi::{PhysicalPosition, PhysicalSize};
+
 use crate::{
     component::Component,
-    device::{keyboard_state::KeyboardState, mouse_state::MouseState},
+    device_event::{
+        DeviceEvent, DeviceEventData,
+        key_state::KeyboardState,
+        mouse_state::{MousePrimaryButton, MouseState},
+        window_state::WindowState,
+    },
     observer::Observer,
-    ui::Widget,
+    ui::{Background, Object, Widget, WidgetContext},
 };
-
-const DOUBLE_CLICK_THRESHOLD: Duration = Duration::from_millis(300);
-const LONG_PRESS_THRESHOLD: Duration = Duration::from_millis(500);
-const SCROLL_PIXEL_PER_LINE: f32 = 40.0;
 
 pub struct UiControl<
     Model: Send + Sync + 'static,
     Message: 'static,
-    Response: 'static,
-    IR: 'static = Response,
+    Event: 'static,
+    InnerEvent: 'static = Event,
 > {
-    component: Component<Model, Message, Response, IR>,
-    widget: Option<Box<dyn Widget<Response>>>,
+    component: Component<Model, Message, Event, InnerEvent>,
+    widget: Option<Box<dyn Widget<Event>>>,
     observer: Observer,
 
+    window_state: WindowState,
     mouse_state: MouseState,
     keyboard_state: KeyboardState,
 
-    scroll_pixel_per_line: f32,
     default_font_size: f32,
-
-    frame_count: u128,
 }
 
-impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'static>
-    UiControl<Model, Message, Response, IR>
+#[derive(Debug, Error)]
+pub enum UiControlError {
+    #[error("combo_duration must be less than or equal to long_press_duration")]
+    InvalidDuration,
+}
+
+impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent: 'static>
+    UiControl<Model, Message, Event, InnerEvent>
 {
-    pub fn new(component: Component<Model, Message, Response, IR>) -> Self {
-        Self {
+    pub fn new(
+        component: Component<Model, Message, Event, InnerEvent>,
+        double_click_duration: Duration,
+        long_press_duration: Duration,
+        primary_button: MousePrimaryButton,
+        scroll_pixel_per_line: f32,
+        default_font_size: f32,
+    ) -> Result<Self, UiControlError> {
+        Ok(Self {
             component,
             widget: None,
-            observer: Observer::new(),
-            mouse_state: MouseState::new(DOUBLE_CLICK_THRESHOLD, LONG_PRESS_THRESHOLD)
-                .expect("combo_duration must be less than or equal to long_press_duration"),
+            observer: Observer::new_render_trigger(),
+            window_state: WindowState::default(),
+            mouse_state: MouseState::new(
+                double_click_duration,
+                long_press_duration,
+                primary_button,
+                scroll_pixel_per_line,
+            )
+            .ok_or(UiControlError::InvalidDuration)?,
             keyboard_state: KeyboardState::new(),
-            scroll_pixel_per_line: SCROLL_PIXEL_PER_LINE,
-            default_font_size: 16.0,
-            frame_count: 0,
+            default_font_size,
+        })
+    }
+
+    pub fn set_mouse_primary_button(&mut self, button: MousePrimaryButton) {
+        self.mouse_state.set_primary_button(button);
+    }
+
+    pub fn mouse_primary_button(&self) -> MousePrimaryButton {
+        self.mouse_state.primary_button()
+    }
+
+    pub fn set_scroll_pixel_per_line(&mut self, pixel: f32) {
+        self.mouse_state.set_scroll_pixel_per_line(pixel);
+    }
+
+    pub fn scroll_pixel_per_line(&self) -> f32 {
+        self.mouse_state.scroll_pixel_per_line()
+    }
+
+    pub fn set_default_font_size(&mut self, font_size: f32) {
+        self.default_font_size = font_size;
+    }
+
+    pub fn default_font_size(&self) -> f32 {
+        self.default_font_size
+    }
+}
+
+impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent: 'static>
+    UiControl<Model, Message, Event, InnerEvent>
+{
+    pub async fn render_to_object_tree<'a>(
+        &mut self,
+        size: [f32; 2],
+        background: Background<'a>,
+        ctx: &WidgetContext<'a>,
+    ) -> Object {
+        if self.widget.is_none() {
+            let dom = self.component.view().await;
+
+            self.observer = Observer::new_render_trigger();
+            dom.set_observer(&self.observer).await;
+
+            self.widget = Some(dom.build_widget_tree());
+        } else if self.observer.is_updated() {
+            let dom = self.component.view().await;
+
+            self.observer = Observer::new();
+            dom.set_observer(&self.observer).await;
+
+            let widget = self.widget.as_mut().expect("checked existence above");
+            if let Err(e) = widget.update_widget_tree(true, &*dom).await {
+                eprintln!("Failed to update widget tree: {e:?}. Rebuilding.");
+                self.widget = Some(dom.build_widget_tree());
+            }
         }
+
+        let widget = self.widget.as_mut().expect("widget initialized above");
+        widget.render([Some(size[0]), Some(size[1])], background, ctx)
+    }
+
+    fn convert_winit_to_window_event(
+        &mut self,
+        window_event: winit::event::WindowEvent,
+        get_window_size: impl Fn() -> (PhysicalSize<u32>, PhysicalSize<u32>),
+        get_window_position: impl Fn() -> (PhysicalPosition<i32>, PhysicalPosition<i32>),
+    ) -> Option<DeviceEvent> {
+        match window_event {
+            // we don't handle these events here
+            winit::event::WindowEvent::ScaleFactorChanged { .. }
+            | winit::event::WindowEvent::Occluded(_)
+            | winit::event::WindowEvent::ActivationTokenDone { .. }
+            | winit::event::WindowEvent::RedrawRequested
+            | winit::event::WindowEvent::Destroyed => None,
+
+            // window interactions
+            winit::event::WindowEvent::Resized(_) => {
+                let (inner_size, outer_size) = get_window_size();
+                Some(DeviceEvent::new(
+                    self.window_state
+                        .resized(inner_size.into(), outer_size.into()),
+                ))
+            }
+            winit::event::WindowEvent::Moved(_) => {
+                let (inner_position, outer_position) = get_window_position();
+                Some(DeviceEvent::new(
+                    self.window_state
+                        .moved(inner_position.into(), outer_position.into()),
+                ))
+            }
+            winit::event::WindowEvent::CloseRequested => {
+                Some(DeviceEvent::new(DeviceEventData::CloseRequested))
+            }
+            winit::event::WindowEvent::Focused(focused) => {
+                Some(DeviceEvent::new(DeviceEventData::WindowFocus(focused)))
+            }
+            winit::event::WindowEvent::ThemeChanged(theme) => {
+                Some(DeviceEvent::new(DeviceEventData::Theme(theme)))
+            }
+
+            // file drop events
+            winit::event::WindowEvent::DroppedFile(path_buf) => {
+                let mouse_position = self.mouse_state.position();
+                Some(DeviceEvent::new(DeviceEventData::FileDrop {
+                    mouse_position,
+                    path_buf,
+                }))
+            }
+            winit::event::WindowEvent::HoveredFile(path_buf) => {
+                let mouse_position = self.mouse_state.position();
+                Some(DeviceEvent::new(DeviceEventData::FileHover {
+                    mouse_position,
+                    path_buf,
+                }))
+            }
+            winit::event::WindowEvent::HoveredFileCancelled => {
+                let mouse_position = self.mouse_state.position();
+                Some(DeviceEvent::new(DeviceEventData::FileHoverCancelled {
+                    mouse_position,
+                }))
+            }
+
+            // keyboard events
+            winit::event::WindowEvent::KeyboardInput { event, .. } => {
+                self.keyboard_state.keyboard_input(event)
+            }
+            winit::event::WindowEvent::ModifiersChanged(modifiers) => {
+                self.keyboard_state.modifiers_changed(modifiers.state());
+                None
+            }
+            winit::event::WindowEvent::Ime(_) => Some(DeviceEvent::new(DeviceEventData::Ime)),
+
+            // mouse events
+            winit::event::WindowEvent::CursorMoved { position, .. } => {
+                Some(self.mouse_state.cursor_moved(position))
+            }
+            winit::event::WindowEvent::CursorEntered { .. } => {
+                Some(self.mouse_state.cursor_entered())
+            }
+            winit::event::WindowEvent::CursorLeft { .. } => Some(self.mouse_state.cursor_left()),
+            winit::event::WindowEvent::MouseWheel { delta, .. } => {
+                Some(self.mouse_state.mouse_wheel(delta))
+            }
+            winit::event::WindowEvent::MouseInput { state, button, .. } => {
+                self.mouse_state.mouse_input(button, state)
+            }
+
+            // touch events
+            winit::event::WindowEvent::PinchGesture { .. }
+            | winit::event::WindowEvent::PanGesture { .. }
+            | winit::event::WindowEvent::DoubleTapGesture { .. }
+            | winit::event::WindowEvent::RotationGesture { .. }
+            | winit::event::WindowEvent::TouchpadPressure { .. }
+            | winit::event::WindowEvent::Touch(..)
+            | winit::event::WindowEvent::AxisMotion { .. } => {
+                Some(DeviceEvent::new(DeviceEventData::Touch))
+            }
+        }
+    }
+
+    pub fn window_event(
+        &mut self,
+        viewport_size: [f32; 2],
+        window_event: winit::event::WindowEvent,
+        get_window_size: impl Fn() -> (PhysicalSize<u32>, PhysicalSize<u32>),
+        get_window_position: impl Fn() -> (PhysicalPosition<i32>, PhysicalPosition<i32>),
+        ctx: &WidgetContext,
+    ) -> Option<Event> {
+        let event =
+            self.convert_winit_to_window_event(window_event, get_window_size, get_window_position);
+
+        if let (Some(widget), Some(event)) = (&mut self.widget, event) {
+            widget.device_event(
+                &event,
+                [Some(viewport_size[0]), Some(viewport_size[1])],
+                ctx,
+            )
+        } else {
+            None
+        }
+    }
+
+    pub fn user_event(&self, user_event: &Message) {
+        self.component.update(user_event);
     }
 }

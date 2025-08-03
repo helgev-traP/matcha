@@ -2,7 +2,7 @@ use std::any::Any;
 
 use matcha_core::{
     context::WidgetContext,
-    events::Event,
+    device_event::DeviceEvent,
     observer::Observer,
     types::range::CoverRange,
     ui::{Background, Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
@@ -167,9 +167,9 @@ where
         }
     }
 
-    fn widget_event(
+    fn device_event(
         &mut self,
-        event: &Event,
+        event: &DeviceEvent,
         parent_size: [Option<f32>; 2],
         context: &WidgetContext,
     ) -> Option<T> {
@@ -177,7 +177,7 @@ where
             VisibilityState::Visible => self
                 .content
                 .as_mut()
-                .map(|content| content.widget_event(event, parent_size, context))
+                .map(|content| content.device_event(event, parent_size, context))
                 .unwrap_or_default(),
             VisibilityState::Hidden | VisibilityState::None => None,
         }

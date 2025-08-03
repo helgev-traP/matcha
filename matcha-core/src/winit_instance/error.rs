@@ -1,19 +1,23 @@
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum RenderError {
-    #[error("GPU is not ready")]
+pub enum InitError {
+    #[error("Failed to initialize tokio runtime")]
+    TokioRuntime,
+    #[error("Failed to initialize GPU")]
     Gpu,
-    #[error("Window surface is not ready")]
+    #[error(transparent)]
+    UiControl(#[from] super::ui_control::UiControlError),
+    #[error(transparent)]
+    WindowSurface(#[from] super::window_surface::WindowSurfaceError),
+}
+
+#[derive(Debug, Error)]
+pub enum RenderError {
+    #[error("Window surface error")]
     WindowSurface,
-    #[error("Texture allocator is not ready")]
-    TextureAllocator,
-    #[error("Application context is not ready")]
-    AnyResource,
-    #[error("Root Widget is not ready")]
-    RootWidget,
-    #[error("Renderer is not ready")]
-    Renderer,
-    #[error("Benchmarker is not ready")]
-    Benchmarker,
+    #[error(transparent)]
+    Surface(#[from] wgpu::SurfaceError),
+    #[error(transparent)]
+    Render(#[from] super::render_control::RenderControlError),
 }
