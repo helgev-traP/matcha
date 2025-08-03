@@ -60,3 +60,4 @@ pollster = "0.4"
 
 [workspace.lints.clippy]
 unwrap_used = "warn"
+type_complexity = "allow"

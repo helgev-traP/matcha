@@ -2,7 +2,7 @@ use std::{any::Any, sync::Arc};
 
 use matcha_core::{
     context::WidgetContext,
-    events::Event,
+    device_event::DeviceEvent,
     observer::Observer,
     types::range::{CoverRange, Range2D},
     ui::{Background, Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
@@ -214,9 +214,9 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
         }
     }
 
-    fn widget_event(
+    fn device_event(
         &mut self,
-        event: &Event,
+        event: &DeviceEvent,
         parent_size: [Option<f32>; 2],
         context: &WidgetContext,
     ) -> Option<T> {

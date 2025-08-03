@@ -2,7 +2,7 @@ use std::{any::Any, sync::Arc};
 
 use matcha_core::{
     context::WidgetContext,
-    events::Event,
+    device_event::DeviceEvent,
     observer::Observer,
     types::{cache::Cache, range::CoverRange},
     ui::{Background, Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
@@ -103,7 +103,12 @@ impl<T: Send + 'static> Widget<T> for SpaceNode {
     }
 
     // widget event
-    fn widget_event(&mut self, _: &Event, _: [Option<f32>; 2], _: &WidgetContext) -> Option<T> {
+    fn device_event(
+        &mut self,
+        _: &DeviceEvent,
+        _: [Option<f32>; 2],
+        _: &WidgetContext,
+    ) -> Option<T> {
         None
     }
 

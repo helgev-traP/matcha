@@ -2,385 +2,194 @@ use std::fmt::Debug;
 
 use crate::{
     any_resource::AnyResource,
+    backend::Backend,
     component::Component,
-    device::{keyboard_state::KeyboardState, mouse_state::MouseState},
-    events::Event,
-    observer::Observer,
-    types::color::Color,
-    ui::{Background, Widget, WidgetContext},
+    ui::{Background, WidgetContext},
 };
 
 // MARK: modules
 
+pub mod error;
+
 mod benchmark;
-mod error;
+mod builder;
 mod render_control;
 mod ui_control;
 mod window_surface;
 
-// MARK: Winit
+pub use builder::WinitInstanceBuilder;
 
-// make a builder or a preference struct to choose these values later.
-const POWER_PREFERENCE: wgpu::PowerPreference = wgpu::PowerPreference::LowPower;
-const BASE_COLOR: wgpu::Color = wgpu::Color::TRANSPARENT;
+// MARK: Winit
 
 pub struct WinitInstance<
     Model: Send + Sync + 'static,
     Message: 'static,
-    Response: 'static,
-    IR: 'static = Response,
+    B: Backend<Event> + Clone + 'static,
+    Event: Send + 'static,
+    InnerEvent: 'static = Event,
 > {
     // --- tokio runtime ---
-    tokio_runtime: tokio::runtime::Runtime,
-
+    pub(crate) tokio_runtime: tokio::runtime::Runtime,
     // --- window ---
-    window: window_surface::WindowSurface,
-
+    pub(crate) window: window_surface::WindowSurface,
+    pub(crate) surface_preferred_format: wgpu::TextureFormat,
     // --- rendering context ---
-    any_resource: Option<AnyResource>,
-
+    pub(crate) any_resource: AnyResource,
     // --- render control ---
-    render_control: render_control::RenderControl,
-
-    // --- UI context ---
-    root_component: Component<Model, Message, Response, IR>,
-    root_widget: Option<Box<dyn Widget<Response>>>,
-    observer: Observer,
-
-    // --- raw event handling ---
-    mouse_state: Option<MouseState>,
-    keyboard_state: Option<KeyboardState>,
-
-    // --- event handling settings ---
-    scroll_pixel_per_line: f32,
-
-    // --- widget context ---
-    default_font_size: f32,
-
-    // frame
-    frame: u64,
-
+    pub(crate) render_control: render_control::RenderControl,
+    // --- UI control ---
+    pub(crate) ui_control: ui_control::UiControl<Model, Message, Event, InnerEvent>,
+    // --- backend ---
+    pub(crate) backend: B,
     // --- benchmark / monitoring ---
-    benchmarker: Option<benchmark::Benchmark>,
+    pub(crate) benchmarker: benchmark::Benchmark,
 }
 
-// build chain
-impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'static>
-    WinitInstance<Model, Message, Response, IR>
+impl<
+    Model: Send + Sync + 'static,
+    Message: 'static,
+    B: Backend<Event> + Clone + 'static,
+    Event: Send + 'static,
+    InnerEvent: 'static,
+> WinitInstance<Model, Message, B, Event, InnerEvent>
 {
-    pub fn new(component: Component<Model, Message, Response, IR>) -> Self {
-        let tokio_runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(4)
-            .enable_all()
-            .build()
-            .unwrap();
-
-        let render_control = tokio_runtime.block_on(render_control::RenderControl::new(
-            POWER_PREFERENCE,
-            BASE_COLOR,
-        ));
-
-        Self {
-            tokio_runtime,
-            window: window_surface::WindowSurface::new(),
-            any_resource: None,
-            render_control,
-            root_component: component,
-            root_widget: None,
-            observer: Observer::new(),
-            mouse_state: None,
-            keyboard_state: None,
-            scroll_pixel_per_line: 40.0,
-            default_font_size: 16.0,
-            frame: 0,
-            benchmarker: None,
-        }
+    pub fn builder(
+        component: Component<Model, Message, Event, InnerEvent>,
+        backend: B,
+    ) -> WinitInstanceBuilder<Model, Message, B, Event, InnerEvent> {
+        WinitInstanceBuilder::new(component, backend)
     }
-
-    // design
-
-    pub fn base_color(&mut self, color: Color) {}
-
-    pub fn performance(&mut self, performance: wgpu::PowerPreference) {}
-
-    pub fn title(&mut self, title: &str) {}
-
-    pub fn init_size(&mut self, size: [u32; 2]) {}
-
-    pub fn maximized(&mut self, maximized: bool) {}
-
-    pub fn full_screen(&mut self, full_screen: bool) {}
-
-    // input
-
-    pub fn mouse_primary_button(&mut self, button: crate::device::mouse::MousePhysicalButton) {}
-
-    pub fn scroll_pixel_per_line(&mut self, pixel: f32) {}
 }
 
 // MARK: render
 
-impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'static>
-    WinitInstance<Model, Message, Response, IR>
+fn create_widget_context<
+    'a,
+    Model: Send + Sync + 'static,
+    Message: 'static,
+    Event: 'static,
+    InnerEvent: 'static,
+>(
+    window: &window_surface::WindowSurface,
+    render_control: &'a render_control::RenderControl,
+    ui_control: &ui_control::UiControl<Model, Message, Event, InnerEvent>,
+    any_resource: &'a AnyResource,
+) -> Option<WidgetContext<'a>> {
+    let size = window.inner_size()?;
+    let size = [size.width as f32, size.height as f32];
+    let dpi = window.dpi()?;
+
+    let format = window.format()?;
+
+    Some(WidgetContext::new(
+        render_control.device_queue(),
+        format,
+        size,
+        dpi,
+        render_control.texture_allocator(),
+        any_resource,
+        ui_control.default_font_size(),
+    ))
+}
+
+impl<
+    Model: Send + Sync + 'static,
+    Message: 'static,
+    B: Backend<Event> + Clone + 'static,
+    Event: Send + 'static,
+    InnerEvent: 'static,
+> WinitInstance<Model, Message, B, Event, InnerEvent>
 {
     fn render(&mut self) -> Result<(), error::RenderError> {
-        // ensure that rendering context is available.
-        let Some(any_resource) = self.any_resource.as_ref() else {
-            return Err(error::RenderError::AnyResource);
-        };
+        let surface_texture = self
+            .window
+            .get_current_texture()
+            .ok_or(error::RenderError::WindowSurface)??;
 
-        let Some(root_widget) = self.root_widget.as_mut() else {
-            return Err(error::RenderError::RootWidget);
-        };
+        self.benchmarker
+            .with_benchmark(|| -> Result<(), error::RenderError> {
+                let target_view = surface_texture
+                    .texture
+                    .create_view(&wgpu::TextureViewDescriptor::default());
 
-        let Some(benchmarker) = self.benchmarker.as_mut() else {
-            return Err(error::RenderError::Benchmarker);
-        };
-
-        // rendering
-        let surface_texture = self.window.get_current_texture().unwrap();
-        let surface_view = surface_texture
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-
-        let viewport_size = self.window.size();
-
-        // start benchmark
-        benchmarker.with_benchmark(|| {
-            let ctx = WidgetContext::new(
-                gpu,
-                self.window.format(),
-                self.window.size(),
-                self.window.dpi().unwrap(),
-                texture_atlas,
-                any_resource,
-                self.default_font_size,
-            );
-
-            let object = root_widget.render(
-                [Some(viewport_size[0] as f32), Some(viewport_size[1] as f32)],
-                Background::new(&surface_view, [0.0, 0.0]), // todo: check this
-                &ctx,
-            );
-
-            self.render_control
-                .render(
-                    object,
-                    &surface_view,
-                    [viewport_size[0] as f32, viewport_size[1] as f32],
-                    self.window.format(),
+                let ctx = create_widget_context(
+                    &self.window,
+                    &self.render_control,
+                    &self.ui_control,
+                    &self.any_resource,
                 )
-                .unwrap();
-        });
+                .expect(
+                    "Window must exist when render is called, as it is only called after resumed",
+                );
 
-        // present to screen
+                let object = {
+                    let background = Background::new(&target_view, [0.0, 0.0]);
+                    self.tokio_runtime
+                        .block_on(self.ui_control.render_to_object_tree(
+                            ctx.viewport_size(),
+                            background,
+                            &ctx,
+                        ))
+                };
+
+                let size = self.window.inner_size().expect(
+                    "Window must exist when render is called, as it is only called after resumed",
+                );
+                let size = [size.width as f32, size.height as f32];
+
+                self.render_control
+                    .render(
+                        object,
+                        &target_view,
+                        size,
+                        self.window
+                            .format()
+                            .expect("Surface must be configured when render is called"),
+                    )
+                    .map_err(error::RenderError::Render)?;
+
+                Ok(())
+            })?;
+
+        println!(
+            "Render time: {}, Average: {}, Max: {}",
+            self.benchmarker.last_time(),
+            self.benchmarker.average_time(),
+            self.benchmarker.max_time()
+        );
+
         surface_texture.present();
 
-        // print debug info
-        {
-            print!(
-                "\rframe rendering time: {}, average: {}, max in second: {} | frame: {}",
-                benchmarker.last_time(),
-                benchmarker.average_time(),
-                benchmarker.max_time(),
-                self.frame,
-            );
-            // flush
-            std::io::Write::flush(&mut std::io::stdout()).unwrap();
-        }
-
-        // increment frame count for input handling
-        self.frame += 1;
-
-        // return
         Ok(())
-    }
-}
-
-// MARK: process_raw_event
-
-impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'static>
-    WinitInstance<Model, Message, Response, IR>
-{
-    fn process_raw_event(
-        &mut self,
-        event_loop: &winit::event_loop::ActiveEventLoop,
-        window_id: winit::window::WindowId,
-        event: winit::event::WindowEvent,
-    ) -> Event {
-        let _ = event_loop;
-        let _ = window_id;
-
-        match event {
-            // window
-            winit::event::WindowEvent::CloseRequested => {
-                event_loop.exit();
-                Event::default()
-            }
-            winit::event::WindowEvent::Resized(size) => {
-                let gpu = self.gpu.as_ref().unwrap();
-                self.window.set_size(size, gpu);
-                self.observer = Observer::new_render_trigger();
-                Event::default()
-            }
-            // mouse
-            winit::event::WindowEvent::CursorMoved {
-                device_id,
-                position,
-            } => self
-                .mouse_state
-                .as_mut()
-                .unwrap()
-                .mouse_move(self.frame, position.into()),
-            winit::event::WindowEvent::CursorEntered { device_id } => self
-                .mouse_state
-                .as_mut()
-                .unwrap()
-                .cursor_entered(self.frame),
-            winit::event::WindowEvent::CursorLeft { device_id } => {
-                self.mouse_state.as_mut().unwrap().cursor_left(self.frame)
-            }
-            winit::event::WindowEvent::MouseWheel {
-                device_id,
-                delta,
-                phase,
-            } => match delta {
-                winit::event::MouseScrollDelta::LineDelta(x, y) => {
-                    self.mouse_state.as_mut().unwrap().mouse_scroll(
-                        self.frame,
-                        [
-                            x * self.scroll_pixel_per_line,
-                            y * self.scroll_pixel_per_line,
-                        ],
-                    )
-                }
-                winit::event::MouseScrollDelta::PixelDelta(position) => self
-                    .mouse_state
-                    .as_mut()
-                    .unwrap()
-                    .mouse_scroll(self.frame, [position.x as f32, position.y as f32]),
-            },
-            winit::event::WindowEvent::MouseInput {
-                device_id,
-                state,
-                button,
-            } => {
-                let button = match button {
-                    winit::event::MouseButton::Left => crate::device::mouse::MouseButton::Primary,
-                    winit::event::MouseButton::Right => {
-                        crate::device::mouse::MouseButton::Secondary
-                    }
-                    winit::event::MouseButton::Middle => crate::device::mouse::MouseButton::Middle,
-                    winit::event::MouseButton::Back => return Event::default(),
-                    winit::event::MouseButton::Forward => return Event::default(),
-                    winit::event::MouseButton::Other(_) => return Event::default(),
-                };
-                match state {
-                    winit::event::ElementState::Pressed => self
-                        .mouse_state
-                        .as_mut()
-                        .unwrap()
-                        .button_pressed(self.frame, button),
-                    winit::event::ElementState::Released => self
-                        .mouse_state
-                        .as_mut()
-                        .unwrap()
-                        .button_released(self.frame, button),
-                }
-            }
-            // keyboard
-            winit::event::WindowEvent::KeyboardInput {
-                device_id,
-                event,
-                is_synthetic,
-            } => self
-                .keyboard_state
-                .as_mut()
-                .unwrap()
-                .key_event(self.frame, event)
-                .unwrap_or_default(),
-            _ => {
-                // ignore other events
-                Event::default()
-            }
-        }
-    }
-}
-
-// MARK: polling to render
-
-impl<Model: Send + Sync + 'static, Message: 'static, Response: 'static, IR: 'static>
-    WinitInstance<Model, Message, Response, IR>
-{
-    pub fn poll(&mut self) {
-        // DOM and Widget updates, as well as re-rendering, will only execute in this function
-        // as a result of observers catching component updates.
-
-        // check observer
-        if self.observer.is_updated() {
-            self.tokio_runtime.block_on(async {
-                // rebuild dom tree
-                let dom = self.root_component.view().await;
-
-                // re-collect observers
-                dom.set_observer(&self.observer).await;
-
-                // update widget tree
-
-                if let Some(root_widget) = self.root_widget.as_mut() {
-                    if (root_widget.update_widget_tree(true, &*dom).await).is_err() {
-                        self.root_widget = Some(dom.build_widget_tree());
-                    }
-                } else {
-                    self.root_widget = Some(dom.build_widget_tree());
-                }
-            });
-        }
-
-        // re-rendering
-        self.render().unwrap();
     }
 }
 
 // MARK: Winit Event Loop
 
 // winit event handler
-impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, IR: 'static>
-    winit::application::ApplicationHandler<Message>
-    for WinitInstance<Model, Message, Response, IR>
+impl<
+    Model: Send + Sync + 'static,
+    Message: 'static,
+    B: Backend<Event> + Clone + 'static,
+    Event: Debug + Send + 'static,
+    InnerEvent: 'static,
+> winit::application::ApplicationHandler<Message>
+    for WinitInstance<Model, Message, B, Event, InnerEvent>
 {
     // MARK: resumed
 
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        // --- create window ---
-        self.window.start_window(event_loop, &gpu);
-
-        event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
-
-        // --- create window context ---
-        self.any_resource = Some(AnyResource::new());
-
-        // --- init input context ---
+        // create a window
+        if let Err(e) = self
+            .window
+            .start_window(event_loop, self.surface_preferred_format, self.render_control.gpu())
         {
-            // todo: calculate double click and long press duration from monitor refresh rate
-
-            self.mouse_state = Some(MouseState::new(12, 60).unwrap());
-            self.keyboard_state = Some(KeyboardState::new());
+            eprintln!("Failed to start window: {e:?}");
+            event_loop.exit();
+            return;
         }
 
-        // --- prepare benchmark monitoring ---
-
-        {
-            let rate = self.window.refresh_rate_millihertz().unwrap();
-            println!("Monitor refresh rate: {}.{} Hz", rate / 1000, rate % 1000);
-            self.benchmarker = Some(benchmark::Benchmark::new((rate / 1000) as usize));
-        }
-
-        // --- trigger first frame rendering ---
-        {
-            // set observer that returns true
-            self.observer = Observer::new_render_trigger();
-        }
+        self.window.request_redraw();
     }
 
     // MARK: window_event
@@ -391,72 +200,98 @@ impl<Model: Send + Sync + 'static, Message: 'static, Response: Debug + 'static, 
         window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
-        // process raw event
-
-        let event = self.process_raw_event(event_loop, window_id, event);
-
-        // when root widget exists
-        if let Some(root_widget) = self.root_widget.as_mut() {
-            // get response from widget tree
-            let window_size = self.window.size();
-            let window_size = [window_size[0] as f32, window_size[1] as f32];
-
-            let gpu = self.gpu.as_ref().unwrap();
-
-            let texture_atlas = self.texture_atlas.as_ref().unwrap();
-            let any_resource = self.any_resource.as_ref().unwrap();
-
-            let response = root_widget.widget_event(
-                &event,
-                [Some(window_size[0]), Some(window_size[1])],
-                &WidgetContext::new(
-                    gpu,
-                    self.window.format(),
-                    self.window.size(),
-                    self.window.dpi().unwrap(),
-                    texture_atlas,
-                    any_resource,
-                    self.default_font_size,
-                ),
-            );
-
-            if let Some(user_event) = response {
-                // send response to backend
-                todo!(
-                    "Response to backend: {:?}\nBut sending to backend is not implemented yet",
-                    user_event
-                );
+        // events which are to be handled by render system
+        match event {
+            winit::event::WindowEvent::RedrawRequested => {
+                if let Err(e) = self.render() {
+                    match e {
+                        error::RenderError::Surface(
+                            wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated,
+                        ) => {
+                            // reconfigure the surface
+                            let size = self
+                                .window
+                                .inner_size()
+                                .expect("Window must exist to render");
+                            self.window
+                                .set_size(size, self.render_control.device_queue().device);
+                            // request redraw in the next frame
+                            self.window.request_redraw();
+                        }
+                        _ => {
+                            eprintln!("Render error: {e:?}");
+                        }
+                    }
+                }
             }
+            winit::event::WindowEvent::Resized(physical_size) => {
+                // update the window size
+                self.window
+                    .set_size(physical_size, self.render_control.device_queue().device);
+                self.window.request_redraw();
+            }
+            _ => {}
         }
 
-        // polling
-        self.poll();
+        // convert window event to Event
+
+        let Some(ctx) = create_widget_context(
+            &self.window,
+            &self.render_control,
+            &self.ui_control,
+            &self.any_resource,
+        ) else {
+            return;
+        };
+
+        let event = self.ui_control.window_event(
+            ctx.viewport_size(),
+            event,
+            || {
+                (
+                    self.window.inner_size().expect("window should be there when window event is called"),
+                    self.window.outer_size().expect("window should be there when window event is called"),
+                )
+            },
+            || {
+                (
+                    self.window.inner_position().expect("").expect("window should be there and when Android / Wayland window moving event should not be called"),
+                    self.window.outer_position().expect("").expect("window should be there and when Android / Wayland window moving event should not be called"),
+                )
+            },
+            &ctx,
+        );
+
+        if let Some(event) = event {
+            let backend = self.backend.clone();
+            self.tokio_runtime
+                .spawn(async move { backend.send_event(event).await });
+        }
+
+        self.window.request_redraw();
     }
 
     // MARK: new_events
 
     fn new_events(
         &mut self,
-        event_loop: &winit::event_loop::ActiveEventLoop,
+        _: &winit::event_loop::ActiveEventLoop,
         cause: winit::event::StartCause,
     ) {
-        let _ = event_loop;
-
         match cause {
             winit::event::StartCause::Init => {}
             winit::event::StartCause::WaitCancelled { .. } => {}
             winit::event::StartCause::ResumeTimeReached { .. } | winit::event::StartCause::Poll => {
-                self.poll()
+                self.window.request_redraw();
             }
         }
     }
 
     // MARK: user_event
 
-    fn user_event(&mut self, event_loop: &winit::event_loop::ActiveEventLoop, event: Message) {
-        let _ = event_loop;
-        // --- send message to component ---
-        self.root_component.update(event);
+    fn user_event(&mut self, _: &winit::event_loop::ActiveEventLoop, event: Message) {
+        self.ui_control.user_event(&event);
+        self.window.request_redraw();
     }
 
     // MARK: other

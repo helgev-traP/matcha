@@ -5,13 +5,13 @@ pub mod app;
 pub mod winit_instance;
 
 // widget system
+pub mod backend;
 pub mod component;
 pub mod observer;
 pub mod ui;
 
-// core modules
-pub mod device;
-pub mod events;
+// winit event handling
+pub mod device_event;
 
 // resource management
 pub mod any_resource;

@@ -1,152 +1,181 @@
 use std::sync::Arc;
-
-use winit::{event_loop::ActiveEventLoop, window::Window};
+use thiserror::Error;
+use winit::{
+    dpi::{PhysicalPosition, PhysicalSize},
+    event_loop::ActiveEventLoop,
+    window::{Fullscreen, Window},
+};
 
 use crate::gpu::Gpu;
 
 pub struct WindowSurface {
-    // winit
-    window: Option<Arc<winit::window::Window>>,
-    title: String,
-    size: [u32; 2],
-    init_maximized: bool,
-    init_full_screen: bool,
-    // wgpu
+    window: Option<Arc<Window>>,
     surface: Option<wgpu::Surface<'static>>,
-    config: wgpu::SurfaceConfiguration,
+    surface_config: Option<wgpu::SurfaceConfiguration>,
+    // window settings
+    title: String,
+    init_size: PhysicalSize<u32>,
+    maximized: bool,
+    fullscreen: bool,
 }
 
 impl WindowSurface {
     pub fn new() -> Self {
         Self {
             window: None,
-            title: String::new(),
-            size: [800, 600],
-            init_maximized: false,
-            init_full_screen: false,
             surface: None,
-            config: wgpu::SurfaceConfiguration {
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                format: wgpu::TextureFormat::Bgra8UnormSrgb,
-                width: 800,
-                height: 600,
-                present_mode: wgpu::PresentMode::AutoVsync,
-                desired_maximum_frame_latency: 2,
-                alpha_mode: wgpu::CompositeAlphaMode::Auto,
-                view_formats: vec![],
-            },
+            surface_config: None,
+            title: "Matcha App".to_string(),
+            init_size: PhysicalSize::new(800, 600),
+            maximized: false,
+            fullscreen: false,
         }
     }
 
-    pub fn set_title(&mut self, title: String) {
-        self.title = title;
-        if let Some(window) = self.window.as_ref() {
-            window.set_title(&self.title);
+    // --- Settings ---
+
+    pub fn set_title(&mut self, title: &str) {
+        self.title = title.to_string();
+        if let Some(window) = &self.window {
+            window.set_title(title);
         }
     }
 
-    pub fn set_size(&mut self, new_size: winit::dpi::PhysicalSize<u32>, gpu: &Gpu) {
-        if new_size.width > 0 && new_size.height > 0 {
-            self.size = [new_size.width, new_size.height];
-            self.config.width = new_size.width;
-            self.config.height = new_size.height;
-            if let Some(surface) = &self.surface {
-                surface.configure(gpu.device(), &self.config);
+    pub fn set_init_size(&mut self, size: PhysicalSize<u32>) {
+        self.init_size = size;
+    }
+
+    pub fn set_maximized(&mut self, maximized: bool) {
+        self.maximized = maximized;
+        if let Some(window) = &self.window {
+            window.set_maximized(maximized);
+        }
+    }
+
+    pub fn set_fullscreen(&mut self, fullscreen: bool) {
+        self.fullscreen = fullscreen;
+        if let Some(window) = &self.window {
+            if fullscreen {
+                window.set_fullscreen(Some(Fullscreen::Borderless(None)));
+            } else {
+                window.set_fullscreen(None);
             }
         }
     }
 
-    pub fn start_window(&mut self, event_loop: &ActiveEventLoop, gpu: &Gpu) {
-        let window = event_loop
-            .create_window(
-                Window::default_attributes()
-                    .with_title("Matcha Window")
-                    .with_inner_size(winit::dpi::PhysicalSize::new(self.size[0], self.size[1]))
-                    .with_maximized(self.init_maximized)
-                    .with_fullscreen(if self.init_full_screen {
-                        Some(winit::window::Fullscreen::Borderless(None))
-                    } else {
-                        None
-                    })
-                    .with_resizable(true)
-                    .with_visible(true),
-            )
-            .unwrap();
+    // --- Winit Integration ---
 
-        let window = Arc::new(window);
+    pub fn start_window(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        preferred_surface_format: wgpu::TextureFormat,
+        gpu: &Gpu,
+    ) -> Result<(), WindowSurfaceError> {
+        let window_attributes = Window::default_attributes()
+            .with_title(&self.title)
+            .with_inner_size(self.init_size)
+            .with_maximized(self.maximized);
 
-        let surface = gpu.instance().create_surface(window.clone()).unwrap();
-        let surface_caps = surface.get_capabilities(gpu.adapter());
-        let surface_format = surface_caps
+        let window = Arc::new(event_loop.create_window(window_attributes)?);
+
+        if self.fullscreen {
+            window.set_fullscreen(Some(Fullscreen::Borderless(None)));
+        }
+
+        let surface = gpu.instance().create_surface(window.clone())?;
+
+        let if_preferred_format_supported = surface
+            .get_capabilities(gpu.adapter())
             .formats
-            .iter()
-            .find(|f| f.is_srgb())
-            .copied()
-            .unwrap_or(surface_caps.formats[0]);
+            .contains(&preferred_surface_format);
 
-        let size = window.inner_size();
-        self.config.format = surface_format;
-        self.config.width = size.width;
-        self.config.height = size.height;
+        let mut surface_config = surface
+            .get_default_config(
+                gpu.adapter(),
+                window.inner_size().width,
+                window.inner_size().height,
+            )
+            .map(|mut config| {
+                config.usage = wgpu::TextureUsages::RENDER_ATTACHMENT;
+                config.present_mode = wgpu::PresentMode::AutoVsync;
+                config.desired_maximum_frame_latency = 1;
+                config.alpha_mode = wgpu::CompositeAlphaMode::Auto;
+                config
+            })
+            .ok_or(WindowSurfaceError::SurfaceConfiguration)?;
 
-        surface.configure(gpu.device(), &self.config);
+        if if_preferred_format_supported {
+            surface_config.format = preferred_surface_format;
+        }
+
+        surface.configure(gpu.device(), &surface_config);
 
         self.window = Some(window);
         self.surface = Some(surface);
+        self.surface_config = Some(surface_config);
+
+        Ok(())
     }
 
-    pub fn window(&self) -> Option<&winit::window::Window> {
-        self.window.as_ref().map(|v| &**v)
+    // --- Getters ---
+
+    pub fn window(&self) -> Option<&Arc<Window>> {
+        self.window.as_ref()
     }
 
-    pub fn window_id(&self) -> Option<winit::window::WindowId> {
-        self.window.as_ref().map(|w| w.id())
+    pub fn get_current_texture(&self) -> Option<Result<wgpu::SurfaceTexture, wgpu::SurfaceError>> {
+        self.surface.as_ref().map(|s| s.get_current_texture())
     }
 
-    pub fn window_id_eq(&self, id: winit::window::WindowId) -> bool {
-        self.window_id().map_or(false, |w| w == id)
+    pub fn set_size(&mut self, size: PhysicalSize<u32>, device: &wgpu::Device) {
+        if let (Some(surface), Some(surface_config)) = (&self.surface, &mut self.surface_config) {
+            surface_config.width = size.width;
+            surface_config.height = size.height;
+            surface.configure(device, surface_config);
+        }
     }
 
-    pub fn get_current_texture(&self) -> Option<wgpu::SurfaceTexture> {
-        self.surface
-            .as_ref()
-            .and_then(|s| s.get_current_texture().ok())
+    pub fn format(&self) -> Option<wgpu::TextureFormat> {
+        self.surface_config.as_ref().map(|c| c.format)
     }
 
-    pub fn render_and_present<F>(&self, f: F)
-    where
-        F: FnOnce(wgpu::TextureView),
-    {
-        let Some(frame) = self.get_current_texture() else {
-            return;
-        };
-        let view = frame
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-        f(view);
-        frame.present();
+    pub fn inner_size(&self) -> Option<PhysicalSize<u32>> {
+        self.window.as_ref().map(|w| w.inner_size())
     }
 
-    pub fn config(&self) -> &wgpu::SurfaceConfiguration {
-        &self.config
+    pub fn outer_size(&self) -> Option<PhysicalSize<u32>> {
+        self.window.as_ref().map(|w| w.outer_size())
     }
 
-    pub fn format(&self) -> wgpu::TextureFormat {
-        self.config.format
+    pub fn inner_position(
+        &self,
+    ) -> Option<Result<PhysicalPosition<i32>, winit::error::NotSupportedError>> {
+        self.window.as_ref().map(|w| w.inner_position())
     }
 
-    pub fn size(&self) -> [u32; 2] {
-        [self.config.width, self.config.height]
+    pub fn outer_position(
+        &self,
+    ) -> Option<Result<PhysicalPosition<i32>, winit::error::NotSupportedError>> {
+        self.window.as_ref().map(|w| w.outer_position())
     }
 
     pub fn dpi(&self) -> Option<f64> {
         self.window.as_ref().map(|w| w.scale_factor())
     }
 
-    pub fn refresh_rate_millihertz(&self) -> Option<u32> {
-        self.window
-            .as_ref()
-            .and_then(|w| w.current_monitor())
-            .and_then(|m| m.refresh_rate_millihertz())
+    pub fn request_redraw(&self) {
+        if let Some(window) = &self.window {
+            window.request_redraw();
+        }
     }
+}
+
+#[derive(Debug, Error)]
+pub enum WindowSurfaceError {
+    #[error(transparent)]
+    Os(#[from] winit::error::OsError),
+    #[error(transparent)]
+    CreateSurface(#[from] wgpu::CreateSurfaceError),
+    #[error("Failed to get surface configuration")]
+    SurfaceConfiguration,
 }
