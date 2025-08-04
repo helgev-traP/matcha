@@ -9,13 +9,13 @@ use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct Texture {
-    inner: Arc<TextureInner>,
+    inner: Arc<TextureData>,
 }
 
 // We only store the texture id and reference to the atlas,
 // to make `Texture` remain valid after `TextureAtlas` resizes or changes,
 // except for data loss when the atlas shrinks.
-struct TextureInner {
+struct TextureData {
     // allocation info
     texture_id: TextureId,
     atlas_id: TextureAtlasId,
@@ -276,7 +276,7 @@ impl Texture {
 }
 
 // Ensure the texture area will be deallocated when the texture is dropped.
-impl Drop for TextureInner {
+impl Drop for TextureData {
     fn drop(&mut self) {
         if let Some(atlas) = self.atlas.upgrade() {
             match atlas.lock().deallocate(self.texture_id) {
@@ -454,7 +454,7 @@ impl TextureAtlas {
                 let texture_id = TextureId {
                     texture_uuid: Uuid::new_v4(),
                 };
-                let texture_inner = TextureInner {
+                let texture_inner = TextureData {
                     texture_id,
                     atlas_id: self.id,
                     atlas: self.weak_self.clone(),
@@ -507,7 +507,7 @@ impl TextureAtlas {
             let texture_id = TextureId {
                 texture_uuid: Uuid::new_v4(),
             };
-            let texture_inner = TextureInner {
+            let texture_inner = TextureData {
                 texture_id,
                 atlas_id: self.id,
                 atlas: self.weak_self.clone(),
