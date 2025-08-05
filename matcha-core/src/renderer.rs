@@ -56,6 +56,10 @@ pub struct Renderer {
     culling_pipeline: wgpu::ComputePipeline,
     command_pipeline: wgpu::ComputePipeline,
     render_pipeline: moka::sync::Cache<wgpu::TextureFormat, Arc<wgpu::RenderPipeline>>, // key: surface format
+
+    // reusable buffers
+    atomic_counter: wgpu::Buffer,
+    draw_command: wgpu::Buffer,
 }
 
 impl Renderer {
@@ -188,6 +192,22 @@ impl Renderer {
             .max_capacity(PIPELINE_CACHE_SIZE)
             .build();
 
+        // Create buffers
+        let atomic_counter = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("ObjectRenderer Atomic Counter Buffer"),
+            size: std::mem::size_of::<u32>() as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let draw_command = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("ObjectRenderer Draw Command Buffer"),
+            size: (std::mem::size_of::<wgpu::util::DrawIndirectArgs>()) as u64,
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::INDIRECT
+                | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
         Self {
             texture_sampler,
             texture_bind_group_layout,
@@ -199,6 +219,8 @@ impl Renderer {
             culling_pipeline,
             command_pipeline,
             render_pipeline,
+            atomic_counter,
+            draw_command,
         }
     }
 
@@ -361,40 +383,24 @@ impl Renderer {
         }
 
         // Create buffers
-        let instance_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        let all_instance_data_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("ObjectRenderer Instance Buffer"),
             size: (std::mem::size_of::<InstanceData>() * instances.len()) as u64,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        let stencil_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        let all_stencil_data_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("ObjectRenderer Stencil Buffer"),
             size: (std::mem::size_of::<StencilData>() * stencils.len()) as u64,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
-        let visible_instances_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        let visible_instance_indices_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("ObjectRenderer Visible Instances Buffer"),
             size: (std::mem::size_of::<u32>() * instances.len()) as u64,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
-        let atomic_counter_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("ObjectRenderer Atomic Counter Buffer"),
-            size: std::mem::size_of::<u32>() as u64,
-            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
-        let command_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("ObjectRenderer Command Buffer"),
-            size: (std::mem::size_of::<wgpu::util::DrawIndirectArgs>()) as u64,
-            usage: wgpu::BufferUsages::STORAGE
-                | wgpu::BufferUsages::INDIRECT
-                | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
@@ -436,46 +442,39 @@ impl Renderer {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: instance_buffer.as_entire_binding(),
+                    resource: all_instance_data_buffer.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: stencil_buffer.as_entire_binding(),
+                    resource: all_stencil_data_buffer.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: visible_instances_buffer.as_entire_binding(),
+                    resource: visible_instance_indices_buffer.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 3,
-                    resource: atomic_counter_buffer.as_entire_binding(),
+                    resource: self.atomic_counter.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
                     binding: 4,
-                    resource: command_buffer.as_entire_binding(),
+                    resource: self.draw_command.as_entire_binding(),
                 },
             ],
         });
 
         // already checked that instances is not empty
-        queue.write_buffer(&instance_buffer, 0, bytemuck::cast_slice(&instances));
+        queue.write_buffer(
+            &all_instance_data_buffer,
+            0,
+            bytemuck::cast_slice(&instances),
+        );
 
         if !stencils.is_empty() {
-            queue.write_buffer(&stencil_buffer, 0, bytemuck::cast_slice(&stencils));
+            queue.write_buffer(&all_stencil_data_buffer, 0, bytemuck::cast_slice(&stencils));
         }
 
-        queue.write_buffer(&atomic_counter_buffer, 0, bytemuck::cast_slice(&[0u32]));
-        queue.write_buffer(
-            &command_buffer,
-            0,
-            wgpu::util::DrawIndirectArgs {
-                vertex_count: 4,
-                instance_count: 0,
-                first_vertex: 0,
-                first_instance: 0,
-            }
-            .as_bytes(),
-        );
+        queue.write_buffer(&self.atomic_counter, 0, bytemuck::cast_slice(&[0u32]));
 
         let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("ObjectRenderer: Command Encoder"),
@@ -537,7 +536,7 @@ impl Renderer {
                 0,
                 bytemuck::cast_slice(normalize_matrix.as_slice()),
             );
-            render_pass.draw_indirect(&command_buffer, 0);
+            render_pass.draw_indirect(&self.draw_command, 0);
         }
 
         queue.submit(std::iter::once(command_encoder.finish()));
