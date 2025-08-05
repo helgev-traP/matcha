@@ -180,10 +180,11 @@ impl<
 
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         // create a window
-        if let Err(e) = self
-            .window
-            .start_window(event_loop, self.surface_preferred_format, self.render_control.gpu())
-        {
+        if let Err(e) = self.window.start_window(
+            event_loop,
+            self.surface_preferred_format,
+            self.render_control.gpu(),
+        ) {
             eprintln!("Failed to start window: {e:?}");
             event_loop.exit();
             return;
