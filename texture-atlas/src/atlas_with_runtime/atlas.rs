@@ -8,16 +8,16 @@ use thiserror::Error;
 use uuid::Uuid;
 
 #[derive(Clone)]
-pub struct Texture {
-    inner: Arc<TextureData>,
+pub struct AtlasRegion {
+    inner: Arc<RegionData>,
 }
 
 // We only store the texture id and reference to the atlas,
 // to make `Texture` remain valid after `TextureAtlas` resizes or changes,
 // except for data loss when the atlas shrinks.
-struct TextureData {
+struct RegionData {
     // allocation info
-    texture_id: TextureId,
+    texture_id: RegionId,
     // interaction with the atlas
     atlas: Weak<RwLock<TextureAtlas>>,
     // It may be useful to store some information about the texture that will not change during atlas resizing
@@ -27,7 +27,7 @@ struct TextureData {
 
 /// Public API to interact with a texture.
 /// User code should not need to know about its id, location, or atlas.
-impl Texture {
+impl AtlasRegion {
     pub fn area(&self) -> u32 {
         self.inner.size[0] * self.inner.size[1]
     }
@@ -40,20 +40,20 @@ impl Texture {
         &self.inner.formats
     }
 
-    pub fn write_data(&self, queue: &wgpu::Queue, data: &[&[u8]]) -> Result<(), TextureError> {
+    pub fn write_data(&self, queue: &wgpu::Queue, data: &[&[u8]]) -> Result<(), AtlasRegionError> {
         // Check data consistency
         if data.len() != self.inner.formats.len() {
-            return Err(TextureError::DataConsistencyError(
+            return Err(AtlasRegionError::DataConsistencyError(
                 "Data length does not match formats length".to_string(),
             ));
         }
         for (i, format) in self.inner.formats.iter().enumerate() {
             let bytes_per_pixel = format
                 .block_copy_size(None)
-                .ok_or(TextureError::InvalidFormatBlockCopySize)?;
+                .ok_or(AtlasRegionError::InvalidFormatBlockCopySize)?;
             let expected_size = self.inner.size[0] * self.inner.size[1] * bytes_per_pixel;
             if data[i].len() as u32 != expected_size {
-                return Err(TextureError::DataConsistencyError(format!(
+                return Err(AtlasRegionError::DataConsistencyError(format!(
                     "Data size for format {i} does not match expected size"
                 )));
             }
@@ -61,13 +61,13 @@ impl Texture {
 
         // Get the texture in the atlas and location
         let Some(atlas) = self.inner.atlas.upgrade() else {
-            return Err(TextureError::AtlasGone);
+            return Err(AtlasRegionError::AtlasGone);
         };
         let atlas = atlas.read();
 
         let textures = atlas.textures();
         let Some(location) = atlas.get_location(self.inner.texture_id) else {
-            return Err(TextureError::TextureNotFoundInAtlas);
+            return Err(AtlasRegionError::TextureNotFoundInAtlas);
         };
 
         for (i, texture) in textures.iter().enumerate() {
@@ -76,7 +76,7 @@ impl Texture {
             let bytes_per_pixel = texture
                 .format()
                 .block_copy_size(None)
-                .ok_or(TextureError::InvalidFormatBlockCopySize)?;
+                .ok_or(AtlasRegionError::InvalidFormatBlockCopySize)?;
             let bytes_per_row = self.inner.size[0] * bytes_per_pixel;
 
             let origin = wgpu::Origin3d {
@@ -109,34 +109,37 @@ impl Texture {
         Ok(())
     }
 
-    pub fn read_data(&self) -> Result<(), TextureError> {
+    pub fn read_data(&self) -> Result<(), AtlasRegionError> {
         todo!()
     }
 
-    pub fn copy_from_texture(&self) -> Result<(), TextureError> {
+    pub fn copy_from_texture(&self) -> Result<(), AtlasRegionError> {
         todo!()
     }
 
-    pub fn copy_to_texture(&self) -> Result<(), TextureError> {
+    pub fn copy_to_texture(&self) -> Result<(), AtlasRegionError> {
         todo!()
     }
 
-    pub fn copy_from_buffer(&self) -> Result<(), TextureError> {
+    pub fn copy_from_buffer(&self) -> Result<(), AtlasRegionError> {
         todo!()
     }
 
-    pub fn copy_to_buffer(&self) -> Result<(), TextureError> {
+    pub fn copy_to_buffer(&self) -> Result<(), AtlasRegionError> {
         todo!()
     }
 
-    pub fn set_viewport(&self, render_pass: &mut wgpu::RenderPass<'_>) -> Result<(), TextureError> {
+    pub fn set_viewport(
+        &self,
+        render_pass: &mut wgpu::RenderPass<'_>,
+    ) -> Result<(), AtlasRegionError> {
         // Get the texture location in the atlas
         let Some(atlas) = self.inner.atlas.upgrade() else {
-            return Err(TextureError::AtlasGone);
+            return Err(AtlasRegionError::AtlasGone);
         };
         let atlas = atlas.read();
         let Some(location) = atlas.get_location(self.inner.texture_id) else {
-            return Err(TextureError::TextureNotFoundInAtlas);
+            return Err(AtlasRegionError::TextureNotFoundInAtlas);
         };
 
         // Set the viewport to the texture area
@@ -155,15 +158,15 @@ impl Texture {
     pub fn begin_render_pass<'a>(
         &'a self,
         encoder: &'a mut wgpu::CommandEncoder,
-    ) -> Result<wgpu::RenderPass<'a>, TextureError> {
+    ) -> Result<wgpu::RenderPass<'a>, AtlasRegionError> {
         // Get the texture location in the atlas
         let Some(atlas) = self.inner.atlas.upgrade() else {
-            return Err(TextureError::AtlasGone);
+            return Err(AtlasRegionError::AtlasGone);
         };
         let atlas = atlas.read();
         let texture_views = atlas.texture_views();
         let Some(location) = atlas.get_location(self.inner.texture_id) else {
-            return Err(TextureError::TextureNotFoundInAtlas);
+            return Err(AtlasRegionError::TextureNotFoundInAtlas);
         };
 
         // Create a render pass for the texture area
@@ -200,14 +203,14 @@ impl Texture {
         Ok(render_pass)
     }
 
-    pub fn uv(&self) -> Result<Box2D<f32, euclid::UnknownUnit>, TextureError> {
+    pub fn uv(&self) -> Result<Box2D<f32, euclid::UnknownUnit>, AtlasRegionError> {
         // Get the texture location in the atlas
         let Some(atlas) = self.inner.atlas.upgrade() else {
-            return Err(TextureError::AtlasGone);
+            return Err(AtlasRegionError::AtlasGone);
         };
         let atlas = atlas.read();
         let Some(location) = atlas.get_location(self.inner.texture_id) else {
-            return Err(TextureError::TextureNotFoundInAtlas);
+            return Err(AtlasRegionError::TextureNotFoundInAtlas);
         };
 
         Ok(location.uv)
@@ -215,7 +218,7 @@ impl Texture {
 }
 
 // Ensure the texture area will be deallocated when the texture is dropped.
-impl Drop for TextureData {
+impl Drop for RegionData {
     fn drop(&mut self) {
         if let Some(atlas) = self.atlas.upgrade() {
             match atlas.read().deallocate(self.texture_id) {
@@ -231,7 +234,7 @@ impl Drop for TextureData {
 }
 
 #[derive(Error, Debug)]
-pub enum TextureError {
+pub enum AtlasRegionError {
     #[error("The texture's atlas has been dropped.")]
     AtlasGone,
     #[error("The texture was not found in the atlas.")]
@@ -243,18 +246,18 @@ pub enum TextureError {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct TextureId {
+struct RegionId {
     texture_uuid: Uuid,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-struct TextureLocation {
+struct RegionLocation {
     page_index: u32,
     bounds: euclid::Box2D<i32, euclid::UnknownUnit>,
     uv: euclid::Box2D<f32, euclid::UnknownUnit>,
 }
 
-impl TextureLocation {
+impl RegionLocation {
     fn area(&self) -> u32 {
         self.bounds.area() as u32
     }
@@ -330,18 +333,18 @@ impl TextureAtlas {
 
 /// TextureAtlas allocation and deallocation
 impl TextureAtlas {
-    pub fn allocate(&self, size: [u32; 2]) -> Result<Texture, TextureAtlasError> {
+    pub fn allocate(&self, size: [u32; 2]) -> Result<AtlasRegion, TextureAtlasError> {
         todo!()
     }
 
-    pub fn deallocate(&self, id: TextureId) -> Result<(), DeallocationErrorTextureNotFound> {
+    pub fn deallocate(&self, id: RegionId) -> Result<(), DeallocationErrorTextureNotFound> {
         todo!()
     }
 }
 
 // for internal use only
 impl TextureAtlas {
-    fn get_location(&self, id: TextureId) -> Option<TextureLocation> {
+    fn get_location(&self, id: RegionId) -> Option<RegionLocation> {
         todo!()
     }
 
@@ -360,8 +363,8 @@ struct TextureAtlasSolid {
     size: wgpu::Extent3d,
 
     allocators: Vec<Mutex<AtlasAllocator>>,
-    texture_id_to_location: DashMap<TextureId, TextureLocation>,
-    texture_id_to_alloc_id: DashMap<TextureId, AllocId>,
+    texture_id_to_location: DashMap<RegionId, RegionLocation>,
+    texture_id_to_alloc_id: DashMap<RegionId, AllocId>,
     usage: std::sync::atomic::AtomicUsize,
 }
 
@@ -412,8 +415,8 @@ struct TextureAtlasResize {
     new_size: wgpu::Extent3d,
 
     new_allocators: Vec<Mutex<AtlasAllocator>>,
-    new_texture_id_to_location: DashMap<TextureId, TextureLocation>,
-    new_texture_id_to_alloc_id: DashMap<TextureId, AllocId>,
+    new_texture_id_to_location: DashMap<RegionId, RegionLocation>,
+    new_texture_id_to_alloc_id: DashMap<RegionId, AllocId>,
     new_usage: usize,
 
     // The previous atlas state
@@ -421,8 +424,8 @@ struct TextureAtlasResize {
     old_texture_views: Vec<wgpu::TextureView>,
     old_size: wgpu::Extent3d,
     old_allocators: Vec<Mutex<AtlasAllocator>>,
-    old_texture_id_to_location: DashMap<TextureId, TextureLocation>,
-    old_texture_id_to_alloc_id: DashMap<TextureId, AllocId>,
+    old_texture_id_to_location: DashMap<RegionId, RegionLocation>,
+    old_texture_id_to_alloc_id: DashMap<RegionId, AllocId>,
     old_usage: std::sync::atomic::AtomicUsize,
 }
 
@@ -495,7 +498,7 @@ mod helper {
         _old_texture_views: &[wgpu::TextureView],
         new_textures: &[wgpu::Texture],
         _new_texture_views: &[wgpu::TextureView],
-        location_map: impl Iterator<Item = (TextureLocation, TextureLocation)>,
+        location_map: impl Iterator<Item = (RegionLocation, RegionLocation)>,
     ) {
         for (old_location, new_location) in location_map {
             for (old_texture, new_texture) in old_textures.iter().zip(new_textures.iter()) {

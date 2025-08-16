@@ -8,7 +8,7 @@ use crate::{
     device_event::mouse_state::MousePrimaryButton,
     types::color::Color,
     winit_instance::{
-        AnyResource, WinitInstance, error, render_control, ui_control, window_surface,
+        AnyResource, WinitInstance, error, render_control, ticker, ui_control, window_surface,
     },
 };
 
@@ -232,6 +232,7 @@ impl<
             ui_control,
             backend: self.backend,
             benchmarker: super::benchmark::Benchmark::new(60),
+            ticker: ticker::Ticker::new(),
         })
     }
 }

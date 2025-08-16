@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use matcha_core::context::WidgetContext;
+use matcha_core::ui::WidgetContext;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FlexWrap {

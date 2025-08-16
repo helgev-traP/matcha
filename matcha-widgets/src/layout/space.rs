@@ -1,23 +1,24 @@
-use std::{any::Any, sync::Arc};
+use std::any::Any;
+use std::sync::Arc;
 
 use matcha_core::{
-    context::WidgetContext,
     device_event::DeviceEvent,
-    observer::Observer,
-    types::{cache::Cache, range::CoverRange},
-    ui::{Background, Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
+    render_node::RenderNode,
+    types::range::CoverRange,
+    ui::{
+        Background, Constraints, Dom, DomComPareResult, UpdateWidgetError, Widget, WidgetContext,
+    },
+    update_flag::UpdateNotifier,
 };
 
 // todo: more documentation
 
 // MARK: DOM
 
-type SizeFn =
-    dyn for<'a> Fn([Option<f32>; 2], &'a WidgetContext) -> [f32; 2] + Send + Sync + 'static;
+type SizeFn = dyn for<'a> Fn(&Constraints, &'a WidgetContext) -> [f32; 2] + Send + Sync + 'static;
 
 pub struct Space {
     label: Option<String>,
-
     size: Arc<SizeFn>,
 }
 
@@ -25,13 +26,13 @@ impl Space {
     pub fn new(label: Option<&str>) -> Box<Self> {
         Box::new(Self {
             label: label.map(|s| s.to_string()),
-            size: Arc::new(|_, _| [0.0, 0.0]),
+            size: Arc::new(|constraints, _| [constraints.min_width, constraints.min_height]),
         })
     }
 
     pub fn size<F>(mut self, size: F) -> Self
     where
-        F: Fn([Option<f32>; 2], &WidgetContext) -> [f32; 2] + Send + Sync + 'static,
+        F: Fn(&Constraints, &WidgetContext) -> [f32; 2] + Send + Sync + 'static,
     {
         self.size = Arc::new(size);
         self
@@ -44,15 +45,12 @@ impl<T: Send + 'static> Dom<T> for Space {
         Box::new(SpaceNode {
             label: self.label.clone(),
             size: Arc::clone(&self.size),
-            size_cache: Cache::new(),
+            final_size: [0.0, 0.0],
         })
     }
 
-    async fn set_observer(&self) -> Observer {
-        // If your widget has any child widgets,
-        // you should collect their observers for matcha ui system to catch child component updates.
-
-        Observer::default()
+    async fn set_update_notifier(&self, _notifier: &UpdateNotifier) {
+        // No children to notify
     }
 }
 
@@ -60,23 +58,18 @@ impl<T: Send + 'static> Dom<T> for Space {
 
 pub struct SpaceNode {
     label: Option<String>,
-
     size: Arc<SizeFn>,
-
-    size_cache: Cache<[Option<f32>; 2], [f32; 2]>,
+    final_size: [f32; 2],
 }
 
 // MARK: Widget trait
 
 #[async_trait::async_trait]
 impl<T: Send + 'static> Widget<T> for SpaceNode {
-    // label
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
 
-    // for dom handling
-    // keep in mind to change redraw flag to true if some change is made.
     async fn update_widget_tree(
         &mut self,
         _: bool,
@@ -85,60 +78,51 @@ impl<T: Send + 'static> Widget<T> for SpaceNode {
         if let Some(dom) = (dom as &dyn Any).downcast_ref::<Space>() {
             self.label = dom.label.clone();
             self.size = Arc::clone(&dom.size);
-
             Ok(())
         } else {
-            return Err(UpdateWidgetError::TypeMismatch);
+            Err(UpdateWidgetError::TypeMismatch)
         }
     }
 
-    // comparing dom
     fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult {
-        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Space>() {
-            let _ = dom;
-            todo!()
+        if (dom as &dyn Any).downcast_ref::<Space>().is_some() {
+            DomComPareResult::Same // Simplified
         } else {
             DomComPareResult::Different
         }
     }
 
-    // widget event
-    fn device_event(
-        &mut self,
-        _: &DeviceEvent,
-        _: [Option<f32>; 2],
-        _: &WidgetContext,
-    ) -> Option<T> {
+    fn device_event(&mut self, _event: &DeviceEvent, _context: &WidgetContext) -> Option<T> {
         None
     }
 
-    // Actual size including its sub widgets with pixel value.
-    fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &WidgetContext) -> [f32; 2] {
-        *self
-            .size_cache
-            .get_data_or_insert_with(&parent_size, || (self.size)(parent_size, context))
+    fn is_inside(&mut self, _position: [f32; 2], _context: &WidgetContext) -> bool {
+        // A space is just an empty area, so it's never "inside".
+        false
     }
 
-    // The drawing range and the area that the widget always covers.
-    fn cover_range(&mut self, _: [Option<f32>; 2], _: &WidgetContext) -> CoverRange<f32> {
-        Default::default()
+    fn preferred_size(&mut self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
+        (self.size)(constraints, context)
     }
 
-    // if redraw is needed
+    fn arrange(&mut self, final_size: [f32; 2], _context: &WidgetContext) {
+        self.final_size = final_size;
+    }
+
+    fn cover_range(&mut self, _context: &WidgetContext) -> CoverRange<f32> {
+        CoverRange::default()
+    }
+
     fn need_rerendering(&self) -> bool {
         false
     }
 
-    // render
     fn render(
         &mut self,
-        _: &mut wgpu::RenderPass<'_>,
-        _: [u32; 2],
-        _: wgpu::TextureFormat,
-        _: [Option<f32>; 2],
-        _: Background,
-        _: &WidgetContext,
-    ) -> Vec<Object> {
-        vec![]
+        _background: Background,
+        _animation_update_flag_notifier: UpdateNotifier,
+        _ctx: &WidgetContext,
+    ) -> RenderNode {
+        RenderNode::new()
     }
 }

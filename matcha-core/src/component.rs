@@ -6,14 +6,13 @@ use std::{
 use tokio::sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use crate::{
-    device_event::DeviceEvent,
-    observer::{Observer, ObserverSender},
-    ui::WidgetContext,
+    device_event::DeviceEvent, render_node::RenderNode, ui::WidgetContext,
+    update_flag::UpdateNotifier,
 };
 
 use super::{
     types::range::CoverRange,
-    ui::{Background, Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
+    ui::{Background, Constraints, Dom, DomComPareResult, UpdateWidgetError, Widget},
 };
 
 // MARK: - ModelAccessor
@@ -52,7 +51,7 @@ impl<Model: 'static> ModelAccessor<Model> {
 
 struct UpdateFlag {
     updated: AtomicBool,
-    observer_sender: Mutex<Option<ObserverSender>>,
+    observer_sender: Mutex<Option<UpdateNotifier>>,
 }
 
 impl UpdateFlag {
@@ -68,7 +67,7 @@ impl UpdateFlag {
         self.updated
             .store(true, std::sync::atomic::Ordering::Release);
         if let Some(sender) = &mut *self.observer_sender.lock().await {
-            sender.send_update();
+            sender.notify();
         }
     }
 
@@ -78,9 +77,9 @@ impl UpdateFlag {
     }
 
     /// Create an observer receiver. Also reset the update flag to false.
-    async fn set_observer(&self, observer: &Observer) {
+    async fn set_update_notifier(&self, notifier: &UpdateNotifier) {
         let mut observer_sender = self.observer_sender.lock().await;
-        *observer_sender = Some(observer.sender());
+        *observer_sender = Some(notifier.clone());
     }
 
     fn is_updated(&self) -> bool {
@@ -229,9 +228,9 @@ impl<Model: Sync + Send + 'static, Event: 'static, InnerEvent: 'static> Dom<Even
         })
     }
 
-    async fn set_observer(&self, observer: &Observer) {
-        self.update_flag.set_observer(observer).await;
-        self.dom.set_observer(observer).await;
+    async fn set_update_notifier(&self, notifier: &UpdateNotifier) {
+        self.update_flag.set_update_notifier(notifier).await;
+        self.dom.set_update_notifier(notifier).await;
     }
 }
 
@@ -294,38 +293,28 @@ impl<Model: Sync + Send + 'static, Event: 'static, InnerEvent: 'static> Widget<E
         }
     }
 
-    fn device_event(
-        &mut self,
-        event: &DeviceEvent,
-        parent_size: [Option<f32>; 2],
-        context: &WidgetContext,
-    ) -> Option<Event> {
+    fn device_event(&mut self, event: &DeviceEvent, context: &WidgetContext) -> Option<Event> {
         (self.device)(event, self.model_accessor.clone());
 
         self.widget
-            .device_event(event, parent_size, context)
+            .device_event(event, context)
             .and_then(|inner_event| (self.event)(inner_event, self.model_accessor.clone()))
     }
 
-    fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &WidgetContext) -> [f32; 2] {
-        self.widget.px_size(parent_size, context)
+    fn preferred_size(&mut self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
+        self.widget.preferred_size(constraints, context)
     }
 
-    fn is_inside(
-        &mut self,
-        position: [f32; 2],
-        parent_size: [Option<f32>; 2],
-        context: &WidgetContext,
-    ) -> bool {
-        self.widget.is_inside(position, parent_size, context)
+    fn arrange(&mut self, final_size: [f32; 2], context: &WidgetContext) {
+        self.widget.arrange(final_size, context)
     }
 
-    fn cover_range(
-        &mut self,
-        parent_size: [Option<f32>; 2],
-        context: &WidgetContext,
-    ) -> CoverRange<f32> {
-        self.widget.cover_range(parent_size, context)
+    fn is_inside(&mut self, position: [f32; 2], context: &WidgetContext) -> bool {
+        self.widget.is_inside(position, context)
+    }
+
+    fn cover_range(&mut self, context: &WidgetContext) -> CoverRange<f32> {
+        self.widget.cover_range(context)
     }
 
     fn need_rerendering(&self) -> bool {
@@ -334,10 +323,11 @@ impl<Model: Sync + Send + 'static, Event: 'static, InnerEvent: 'static> Widget<E
 
     fn render(
         &mut self,
-        parent_size: [Option<f32>; 2],
         background: Background,
+        animation_update_flag_notifier: crate::update_flag::UpdateNotifier,
         context: &WidgetContext,
-    ) -> Object {
-        self.widget.render(parent_size, background, context)
+    ) -> RenderNode {
+        self.widget
+            .render(background, animation_update_flag_notifier, context)
     }
 }

@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use matcha_core::{
-    context::WidgetContext,
     types::{color::Color, range::Range2D},
     ui::Style,
+    ui::WidgetContext,
 };
 use parking_lot::Mutex;
 

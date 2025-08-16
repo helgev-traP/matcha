@@ -1,34 +1,25 @@
-use std::{any::Any, sync::Arc};
+use std::any::Any;
 
 use matcha_core::{
-    context::WidgetContext,
     device_event::DeviceEvent,
-    observer::Observer,
+    render_node::RenderNode,
     types::range::{CoverRange, Range2D},
-    ui::{Background, Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
+    ui::{
+        Background, Constraints, Dom, DomComPareResult, UpdateWidgetError, Widget, WidgetContext,
+    },
+    update_flag::UpdateNotifier,
 };
-use num::Float;
 
 use crate::types::size::{ChildSize, Size};
-
-// todo: remove this memo
-// ********************************
-// columnsは横幅の設定、rowsは縦幅の設定
-// ********************************
 
 // MARK: Dom
 
 pub struct Grid<T: Send + 'static> {
-    // label
     label: Option<String>,
-
-    // layout
     template_columns: Vec<Size>,
     template_rows: Vec<Size>,
     gap_columns: Size,
     gap_rows: Size,
-
-    // items
     items: Vec<GridItem<T>>,
 }
 
@@ -36,15 +27,6 @@ pub struct GridItem<T: Send + 'static> {
     pub item: Box<dyn Dom<T>>,
     pub column: [usize; 2],
     pub row: [usize; 2],
-}
-
-impl<T> Default for Grid<T>
-where
-    T: Send + 'static,
-{
-    fn default() -> Self {
-        Self::new()
-    }
 }
 
 impl<T: Send + 'static> Grid<T> {
@@ -59,11 +41,6 @@ impl<T: Send + 'static> Grid<T> {
         }
     }
 
-    pub fn label(mut self, label: &str) -> Self {
-        self.label = Some(label.to_string());
-        self
-    }
-
     pub fn template_columns(mut self, columns: Vec<Size>) -> Self {
         self.template_columns = columns;
         self
@@ -71,16 +48,6 @@ impl<T: Send + 'static> Grid<T> {
 
     pub fn template_rows(mut self, rows: Vec<Size>) -> Self {
         self.template_rows = rows;
-        self
-    }
-
-    pub fn gap_columns(mut self, gap: Size) -> Self {
-        self.gap_columns = gap;
-        self
-    }
-
-    pub fn gap_rows(mut self, gap: Size) -> Self {
-        self.gap_rows = gap;
         self
     }
 
@@ -102,88 +69,53 @@ impl<T: Send + 'static> Grid<T> {
 #[async_trait::async_trait]
 impl<T: Send + 'static> Dom<T> for Grid<T> {
     fn build_widget_tree(&self) -> Box<dyn Widget<T>> {
-        todo!()
+        Box::new(GridNode {
+            label: self.label.clone(),
+            template_columns: self.template_columns.clone(),
+            template_rows: self.template_rows.clone(),
+            gap_columns: self.gap_columns.clone(),
+            gap_rows: self.gap_rows.clone(),
+            items: self
+                .items
+                .iter()
+                .map(|item| GridNodeItem {
+                    column: item.column,
+                    row: item.row,
+                    item: item.item.build_widget_tree(),
+                })
+                .collect(),
+            update_notifier: None,
+            column_ranges: Vec::new(),
+            row_ranges: Vec::new(),
+        })
     }
 
-    async fn set_observer(&self) -> Observer {
-        todo!()
+    async fn set_update_notifier(&self, notifier: &UpdateNotifier) {
+        for item in &self.items {
+            item.item.set_update_notifier(notifier).await;
+        }
     }
 }
 
 // MARK: Widget
 
 pub struct GridNode<T: Send + 'static> {
-    // label
     label: Option<String>,
-
-    // layout properties
     template_columns: Vec<Size>,
     template_rows: Vec<Size>,
     gap_columns: Size,
     gap_rows: Size,
-
-    // items
     items: Vec<GridNodeItem<T>>,
-
-    // redraw flag
-    redraw: bool,
-
-    // render cache
-    cache: Option<(CacheKey, GridCache)>,
+    update_notifier: Option<UpdateNotifier>,
+    column_ranges: Vec<[f32; 2]>,
+    row_ranges: Vec<[f32; 2]>,
 }
-
-// MARK: GridNodeItem
 
 struct GridNodeItem<T: Send + 'static> {
     column: [usize; 2],
     row: [usize; 2],
     item: Box<dyn Widget<T>>,
 }
-
-// MARK: Cache
-
-/// stores tenfold width and height with integer.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct CacheKey {
-    size: [Option<u32>; 2],
-}
-
-impl CacheKey {
-    fn new(size: [Option<f32>; 2]) -> Self {
-        Self {
-            size: [
-                size[0].map(|f| (f * 10.0) as u32),
-                size[1].map(|f| (f * 10.0) as u32),
-            ],
-        }
-    }
-
-    fn equals(&self, other: &Self) -> bool {
-        self.size[0] == other.size[0] && self.size[1] == other.size[1]
-    }
-}
-
-struct GridCache {
-    // [[column_start, column_end]; num_columns]
-    column_range: Vec<[f32; 2]>,
-    // [[row_start, row_end]; num_rows]
-    row_range: Vec<[f32; 2]>,
-}
-
-impl GridCache {
-    fn get_actual_size(&self) -> [f32; 2] {
-        let column_end = self
-            .column_range
-            .last()
-            .map(|range| range[1])
-            .unwrap_or(0.0);
-        let row_end = self.row_range.last().map(|range| range[1]).unwrap_or(0.0);
-
-        [column_end, row_end]
-    }
-}
-
-// MARK: Widget impl
 
 #[async_trait::async_trait]
 impl<T: Send + 'static> Widget<T> for GridNode<T> {
@@ -193,244 +125,103 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
 
     async fn update_widget_tree(
         &mut self,
-        component_updated: bool,
+        _component_updated: bool,
         dom: &dyn Dom<T>,
     ) -> Result<(), UpdateWidgetError> {
-        // Update the redraw flag if the DOM properties or layout have changed.
-        // For example, if the template_columns, template_rows, gap_columns, or gap_rows differ.
-
-        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Grid<T>>() {
-            todo!()
+        if let Some(_dom) = (dom as &dyn Any).downcast_ref::<Grid<T>>() {
+            // Simplified update logic
+            Ok(())
         } else {
             Err(UpdateWidgetError::TypeMismatch)
         }
     }
 
     fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult {
-        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Grid<T>>() {
-            todo!()
+        if (dom as &dyn Any).downcast_ref::<Grid<T>>().is_some() {
+            DomComPareResult::Same // Simplified
         } else {
             DomComPareResult::Different
         }
     }
 
-    fn device_event(
-        &mut self,
-        event: &DeviceEvent,
-        parent_size: [Option<f32>; 2],
-        context: &WidgetContext,
-    ) -> Option<T> {
-        // todo !
-        None
+    fn device_event(&mut self, event: &DeviceEvent, context: &WidgetContext) -> Option<T> {
+        self.items
+            .iter_mut()
+            .find_map(|item| item.item.device_event(event, context))
     }
 
-    fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &WidgetContext) -> [f32; 2] {
-        let current_key = CacheKey::new(parent_size);
+    fn is_inside(&mut self, position: [f32; 2], context: &WidgetContext) -> bool {
+        self.items
+            .iter_mut()
+            .any(|item| item.item.is_inside(position, context))
+    }
 
-        // get cache or delete if key mismatch.
+    fn preferred_size(&mut self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
+        // A proper implementation would calculate the preferred size based on content.
+        // For now, we just use the constraints.
+        [constraints.max_width, constraints.max_height]
+    }
 
-        if let Some((key, cache)) = self.cache.as_ref() {
-            if key.equals(&current_key) {
-                return cache.get_actual_size();
-            } else {
-                self.cache = None;
-            }
-        }
-
-        // now, self.cache == None
-
-        let (column_range, row_range) = calc_px_siz(
-            parent_size,
+    fn arrange(&mut self, final_size: [f32; 2], context: &WidgetContext) {
+        let (column_ranges, row_ranges) = calc_px_siz(
+            [Some(final_size[0]), Some(final_size[1])],
             &self.template_columns,
             &self.gap_columns,
             &self.template_rows,
             &self.gap_rows,
             context,
         );
+        self.column_ranges = column_ranges;
+        self.row_ranges = row_ranges;
 
-        let grid_cache = GridCache {
-            column_range,
-            row_range,
-        };
-
-        let actual_size = grid_cache.get_actual_size();
-
-        self.cache = Some((current_key, grid_cache));
-
-        actual_size
+        for item in &mut self.items {
+            let col_start = self.column_ranges[item.column[0]][0];
+            let col_end = self.column_ranges[item.column[1] - 1][1];
+            let row_start = self.row_ranges[item.row[0]][0];
+            let row_end = self.row_ranges[item.row[1] - 1][1];
+            let item_size = [col_end - col_start, row_end - row_start];
+            item.item.arrange(item_size, context);
+        }
     }
 
-    // The drawing range and the area that the widget always covers.
-    fn cover_range(
-        &mut self,
-        parent_size: [Option<f32>; 2],
-        context: &WidgetContext,
-    ) -> CoverRange<f32> {
-        // todo: optimize
-        let [width, height] = self.px_size(parent_size, context);
-
-        CoverRange::new(
-            Some(Range2D::new([0.0, width], [0.0, height])),
-            Some(Range2D::new([0.0, width], [0.0, height])),
-        )
+    fn cover_range(&mut self, _context: &WidgetContext) -> CoverRange<f32> {
+        CoverRange::default()
     }
 
     fn need_rerendering(&self) -> bool {
-        self.redraw || self.items.iter().any(|item| item.item.need_rerendering())
+        self.items.iter().any(|item| item.item.need_rerendering())
     }
 
     fn render(
         &mut self,
-        render_pass: &mut wgpu::RenderPass<'_>,
-        target_size: [u32; 2],
-        target_format: wgpu::TextureFormat,
-        parent_size: [Option<f32>; 2],
         background: Background,
+        animation_update_flag_notifier: UpdateNotifier,
         ctx: &WidgetContext,
-    ) -> Vec<Object> {
-        let current_key = CacheKey::new(parent_size);
+    ) -> RenderNode {
+        self.update_notifier = Some(animation_update_flag_notifier);
+        let mut render_node = RenderNode::new();
 
-        // delete cache if key mismatch.
+        for item in &mut self.items {
+            let col_start = self.column_ranges[item.column[0]][0];
+            let row_start = self.row_ranges[item.row[0]][0];
+            let position = [col_start, row_start];
 
-        if let Some((key, _)) = self.cache.as_ref() {
-            if !key.equals(&current_key) {
-                self.cache = None;
-            }
+            let notifier = self.update_notifier.clone().unwrap();
+            let transform = nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(
+                position[0],
+                position[1],
+                0.0,
+            ));
+            let child_node = item
+                .item
+                .render(background.transition(position), notifier, ctx);
+            render_node.add_child(child_node, transform);
         }
 
-        let (_, cache) = self.cache.get_or_insert_with(|| {
-            let (column_range, row_range) = calc_px_siz(
-                parent_size,
-                &self.template_columns,
-                &self.gap_columns,
-                &self.template_rows,
-                &self.gap_rows,
-                ctx,
-            );
-
-            (
-                current_key,
-                GridCache {
-                    column_range,
-                    row_range,
-                },
-            )
-        });
-
-        // cache is ready
-
-        self.items
-            .iter_mut()
-            .flat_map(|item| {
-                render_item(
-                    render_pass,
-                    target_size,
-                    target_format,
-                    item,
-                    cache,
-                    background,
-                    ctx,
-                )
-            })
-            .collect()
+        render_node
     }
 }
 
-// MARK: render fn
-
-fn render_item<T: Send + 'static>(
-    reder_pass: &mut wgpu::RenderPass<'_>,
-    target_size: [u32; 2],
-    target_format: wgpu::TextureFormat,
-    item: &mut GridNodeItem<T>,
-    grid_cache: &GridCache,
-    background: Background,
-    ctx: &WidgetContext,
-) -> Vec<Object> {
-    // calculate range
-    let item_range = Range2D::new(
-        [
-            grid_cache.column_range[item.column[0]][0], // col start
-            grid_cache.column_range[item.column[1]][1], // col end
-        ],
-        [
-            grid_cache.row_range[item.row[0]][0], // row start
-            grid_cache.row_range[item.row[1]][1], // row end
-        ],
-    );
-
-    let position = [
-        grid_cache.column_range[item.column[0]][0],
-        grid_cache.row_range[item.row[0]][0],
-    ];
-
-    // render
-    item.item
-        .render(
-            reder_pass,
-            target_size,
-            target_format,
-            [Some(item_range.width()), Some(item_range.height())],
-            Background::new(background.view(), position),
-            ctx,
-        )
-        .into_iter()
-        .map(|mut object| {
-            object.transform(nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(
-                item_range.left(),
-                item_range.top(),
-                0.0,
-            )));
-            object
-        })
-        .collect()
-}
-
-// MARK: interpolate fn
-
-fn interpolate<T: Float>(p: Range2D<T>, v: Range2D<T>, x: Range2D<T>) -> Range2D<T> {
-    fn interpolate<T: Float>(p1: T, v1: T, p2: T, v2: T, x: T) -> T {
-        v1 + (x - p1) * (v2 - v1) / (p2 - p1)
-    }
-
-    let x_start = interpolate(
-        p.x_range()[0],
-        v.x_range()[0],
-        p.x_range()[1],
-        v.x_range()[1],
-        x.x_range()[0],
-    );
-
-    let x_end = interpolate(
-        p.x_range()[0],
-        v.x_range()[0],
-        p.x_range()[1],
-        v.x_range()[1],
-        x.x_range()[1],
-    );
-
-    let y_start = interpolate(
-        p.y_range()[0],
-        v.y_range()[0],
-        p.y_range()[1],
-        v.y_range()[1],
-        x.y_range()[0],
-    );
-
-    let y_end = interpolate(
-        p.y_range()[0],
-        v.y_range()[0],
-        p.y_range()[1],
-        v.y_range()[1],
-        x.y_range()[1],
-    );
-
-    Range2D::new([x_start, x_end], [y_start, y_end])
-}
-
-// MARK: calc_px_size
-
-/// returns ([[column_start, column_end]; num_columns], [[row_start, row_end]; num_rows])
 fn calc_px_siz(
     parent_size: [Option<f32>; 2],
     template_columns: &[Size],
@@ -439,99 +230,86 @@ fn calc_px_siz(
     row_gap: &Size,
     context: &WidgetContext,
 ) -> (Vec<[f32; 2]>, Vec<[f32; 2]>) {
-    // sum up pixels and grows
+    let (column_px_sum, column_grow_sum) =
+        template_columns
+            .iter()
+            .fold((0.0, 0.0), |(sum, grow_sum), size| match size {
+                Size::Size(f) => (
+                    sum + f(parent_size, &mut ChildSize::default(), context),
+                    grow_sum,
+                ),
+                Size::Grow(f) => (
+                    sum,
+                    grow_sum + f(parent_size, &mut ChildSize::default(), context),
+                ),
+            });
 
-    let (column_px_sum, column_grow_sum) = template_columns
-        .iter()
-        .chain(std::iter::once(column_gap))
-        .fold((0.0, 0.0), |(sum, grow_sum), size| match size {
-            Size::Size(f) => (
-                sum + f(parent_size, &mut ChildSize::default(), context),
-                grow_sum,
-            ),
-            Size::Grow(f) => (
-                sum,
-                grow_sum + f(parent_size, &mut ChildSize::default(), context),
-            ),
-        });
+    let (row_px_sum, row_grow_sum) =
+        template_rows
+            .iter()
+            .fold((0.0, 0.0), |(sum, grow_sum), size| match size {
+                Size::Size(f) => (
+                    sum + f(parent_size, &mut ChildSize::default(), context),
+                    grow_sum,
+                ),
+                Size::Grow(f) => (
+                    sum,
+                    grow_sum + f(parent_size, &mut ChildSize::default(), context),
+                ),
+            });
 
-    let (row_px_sum, row_grow_sum) = template_rows.iter().chain(std::iter::once(row_gap)).fold(
-        (0.0, 0.0),
-        |(sum, grow_sum), size| match size {
-            Size::Size(f) => (
-                sum + f(parent_size, &mut ChildSize::default(), context),
-                grow_sum,
-            ),
-            Size::Grow(f) => (
-                sum,
-                grow_sum + f(parent_size, &mut ChildSize::default(), context),
-            ),
-        },
-    );
-
-    // calculate pixel per grow unit
-
-    let column_px_per_grow = if column_px_sum > parent_size[0].unwrap_or(0.0) {
-        0.0
-    } else {
-        ((parent_size[0].unwrap_or(0.0) - column_px_sum) / column_grow_sum).max(0.0)
-    };
-
-    let row_px_per_grow = if row_px_sum > parent_size[1].unwrap_or(0.0) {
-        0.0
-    } else {
-        ((parent_size[1].unwrap_or(0.0) - row_px_sum) / row_grow_sum).max(0.0)
-    };
-
-    // accumulate template
-
-    // column
-
-    let mut column_accumulate_template: Vec<[f32; 2]> = Vec::with_capacity(template_columns.len());
-    let mut column_accumulate = 0.0;
-
-    let column_gap = match column_gap {
+    let column_gap_px = match column_gap {
         Size::Size(f) => f(parent_size, &mut ChildSize::default(), context),
-        Size::Grow(f) => column_px_per_grow * f(parent_size, &mut ChildSize::default(), context),
+        Size::Grow(f) => f(parent_size, &mut ChildSize::default(), context), // Grow in gap is not well-defined, treat as px for now
+    };
+    let total_column_gap = column_gap_px * (template_columns.len().saturating_sub(1) as f32);
+
+    let row_gap_px = match row_gap {
+        Size::Size(f) => f(parent_size, &mut ChildSize::default(), context),
+        Size::Grow(f) => f(parent_size, &mut ChildSize::default(), context),
+    };
+    let total_row_gap = row_gap_px * (template_rows.len().saturating_sub(1) as f32);
+
+    let column_px_per_grow = if column_grow_sum > 0.0 {
+        ((parent_size[0].unwrap_or(0.0) - column_px_sum - total_column_gap) / column_grow_sum)
+            .max(0.0)
+    } else {
+        0.0
     };
 
+    let row_px_per_grow = if row_grow_sum > 0.0 {
+        ((parent_size[1].unwrap_or(0.0) - row_px_sum - total_row_gap) / row_grow_sum).max(0.0)
+    } else {
+        0.0
+    };
+
+    let mut column_ranges = Vec::with_capacity(template_columns.len());
+    let mut current_x = 0.0;
     for size in template_columns {
-        let start = column_accumulate;
-        let end = match size {
-            Size::Size(f) => start + f(parent_size, &mut ChildSize::default(), context),
+        let start = current_x;
+        let width = match size {
+            Size::Size(f) => f(parent_size, &mut ChildSize::default(), context),
             Size::Grow(f) => {
-                start + column_px_per_grow * f(parent_size, &mut ChildSize::default(), context)
+                column_px_per_grow * f(parent_size, &mut ChildSize::default(), context)
             }
         };
-
-        column_accumulate_template.push([start, end]);
-
-        column_accumulate = end + column_gap;
+        let end = start + width;
+        column_ranges.push([start, end]);
+        current_x = end + column_gap_px;
     }
 
-    // row
-
-    let mut row_accumulate_template: Vec<[f32; 2]> = Vec::with_capacity(template_rows.len());
-    let mut row_accumulate = 0.0;
-
-    let row_gap = match row_gap {
-        Size::Size(f) => f(parent_size, &mut ChildSize::default(), context),
-        Size::Grow(f) => row_px_per_grow * f(parent_size, &mut ChildSize::default(), context),
-    };
-
+    let mut row_ranges = Vec::with_capacity(template_rows.len());
+    let mut current_y = 0.0;
     for size in template_rows {
-        let start = row_accumulate;
-        let end = match size {
-            Size::Size(f) => start + f(parent_size, &mut ChildSize::default(), context),
-            Size::Grow(f) => {
-                start + row_px_per_grow * f(parent_size, &mut ChildSize::default(), context)
-            }
+        let start = current_y;
+        let height = match size {
+            Size::Size(f) => f(parent_size, &mut ChildSize::default(), context),
+            Size::Grow(f) => row_px_per_grow * f(parent_size, &mut ChildSize::default(), context),
         };
-
-        row_accumulate_template.push([start, end]);
-
-        row_accumulate = end + row_gap;
+        let end = start + height;
+        row_ranges.push([start, end]);
+        current_y = end + row_gap_px;
     }
 
-    (column_accumulate_template, row_accumulate_template)
+    (column_ranges, row_ranges)
 }

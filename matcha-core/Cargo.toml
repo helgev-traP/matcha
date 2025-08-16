@@ -8,6 +8,7 @@ publish = false
 # self
 utils = { workspace = true }
 texture-atlas = { workspace = true }
+buffer-atlas = { workspace = true }
 
 # async runtime, utility
 tokio = { workspace = true }

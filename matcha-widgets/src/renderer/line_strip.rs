@@ -3,7 +3,7 @@ push constants:
     [[f32; 4]; 4] // composed affine matrix
 */
 
-use matcha_core::{context::WidgetContext, vertex::ColorVertex};
+use matcha_core::{ui::WidgetContext, vertex::ColorVertex};
 use wgpu::{PipelineCompilationOptions, util::DeviceExt};
 
 pub struct LineStripColor {

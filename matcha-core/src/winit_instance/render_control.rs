@@ -2,9 +2,9 @@ use thiserror::Error;
 
 use crate::{
     gpu::{DeviceQueue, Gpu, GpuError},
+    render_node::RenderNode,
     renderer::{Renderer, TextureValidationError},
     texture_allocator::TextureAllocator,
-    ui::Object,
 };
 
 pub struct RenderControl {
@@ -56,7 +56,7 @@ impl RenderControl {
 
     pub fn render(
         &self,
-        object: Object,
+        object: RenderNode,
         target_view: &wgpu::TextureView,
         viewport_size: [f32; 2],
         surface_format: wgpu::TextureFormat,

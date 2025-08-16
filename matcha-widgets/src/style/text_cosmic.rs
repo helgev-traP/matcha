@@ -1,5 +1,5 @@
 use cosmic_text::{Attrs, Buffer, Color, FontSystem, Metrics, Shaping, SwashCache};
-use matcha_core::{context::WidgetContext, renderer::texture_copy, ui::Style};
+use matcha_core::{ui::Style, ui::WidgetContext};
 use parking_lot::Mutex;
 
 struct FontContext {
@@ -172,12 +172,7 @@ impl Style for TextCosmic<'static> {
         Box::new(self.clone())
     }
 
-    fn is_inside(
-        &self,
-        position: [f32; 2],
-        boundary_size: [f32; 2],
-        ctx: &matcha_core::context::WidgetContext,
-    ) -> bool {
+    fn is_inside(&self, position: [f32; 2], boundary_size: [f32; 2], ctx: &WidgetContext) -> bool {
         let draw_range = self.draw_range(boundary_size, ctx);
         let x_range = draw_range.x_range();
         let y_range = draw_range.y_range();
@@ -191,9 +186,9 @@ impl Style for TextCosmic<'static> {
     fn draw_range(
         &self,
         boundary_size: [f32; 2],
-        ctx: &matcha_core::context::WidgetContext,
+        ctx: &WidgetContext,
     ) -> matcha_core::types::range::Range2D<f32> {
-        let font_context = ctx.common_resource().get_or_insert_default::<FontContext>();
+        let font_context = ctx.any_resource().get_or_insert_default::<FontContext>();
 
         let font_system = &font_context.font_system;
         let swash_cache = &font_context.swash_cache;
@@ -232,79 +227,13 @@ impl Style for TextCosmic<'static> {
 
     fn draw(
         &self,
-        render_pass: &mut wgpu::RenderPass<'_>,
-        target_size: [u32; 2],
-        target_format: wgpu::TextureFormat,
-        boundary_size: [f32; 2],
-        offset: [f32; 2],
-        ctx: &matcha_core::context::WidgetContext,
+        _render_pass: &mut wgpu::RenderPass<'_>,
+        _target_size: [u32; 2],
+        _target_format: wgpu::TextureFormat,
+        _boundary_size: [f32; 2],
+        _offset: [f32; 2],
+        _ctx: &WidgetContext,
     ) {
-        let font_context = ctx.common_resource().get_or_insert_default::<FontContext>();
-
-        let font_system = &font_context.font_system;
-        let swash_cache = &font_context.swash_cache;
-
-        let buffer = &mut *self.buffer.lock();
-        let cache_in_memory = &mut *self.cache_in_memory.lock();
-        let cache_in_texture = &mut *self.cache_in_texture.lock();
-
-        if buffer.is_none() {
-            *buffer = Some(Self::set_buffer(&mut font_system.lock(), self.metrics));
-        }
-        let buffer = buffer.as_mut().unwrap();
-
-        if cache_in_memory.is_none() {
-            *cache_in_memory = Some(Self::render_to_memory(
-                &self.texts,
-                self.color,
-                buffer,
-                &mut font_system.lock(),
-                &mut swash_cache.lock(),
-                self.max_size,
-            ));
-        }
-        let CacheInMemory {
-            size,
-            text_offset,
-            data,
-        } = cache_in_memory.as_ref().unwrap();
-
-        if cache_in_texture.is_none() {
-            *cache_in_texture = Some(self.render_to_texture(*size, data, ctx));
-        }
-        let cache_in_texture = cache_in_texture.as_ref().unwrap();
-
-        // render the texture to widget texture by the render_pass
-
-        let texture_copy = ctx
-            .common_resource()
-            .get_or_insert_default::<texture_copy::TextureCopy>();
-
-        let cache_in_texture_view =
-            cache_in_texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let position = [
-            [
-                text_offset[0] as f32 + offset[0],
-                text_offset[1] as f32 + offset[1] - size[1] as f32,
-            ],
-            [
-                text_offset[0] as f32 + offset[0] + size[0] as f32,
-                text_offset[1] as f32 + offset[1],
-            ],
-        ];
-        texture_copy.render(
-            render_pass,
-            texture_copy::TargetData {
-                target_size,
-                target_format,
-            },
-            texture_copy::RenderData {
-                source_texture_view: &cache_in_texture_view,
-                source_texture_position: position,
-                color_transformation: None,
-                color_offset: None,
-            },
-            ctx,
-        );
+        // TODO: Reimplement with texture atlas and proper text rendering pipeline
     }
 }
