@@ -60,7 +60,7 @@ impl TextureAllocator {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         size: [u32; 2],
-    ) -> Result<texture_atlas::Texture, TextureAllocatorError> {
+    ) -> Result<texture_atlas::AtlasRegion, TextureAllocatorError> {
         self.color.lock().allocate(device, queue, size)
     }
 
@@ -69,7 +69,7 @@ impl TextureAllocator {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         size: [u32; 2],
-    ) -> Result<texture_atlas::Texture, TextureAllocatorError> {
+    ) -> Result<texture_atlas::AtlasRegion, TextureAllocatorError> {
         self.stencil.lock().allocate(device, queue, size)
     }
 

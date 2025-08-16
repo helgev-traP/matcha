@@ -1,12 +1,13 @@
 use std::any::Any;
 
 use matcha_core::{
-    common_resource::CommonResource,
-    context::WidgetContext,
     device_event::DeviceEvent,
-    observer::Observer,
-    types::range::{CoverRange, Range2D},
-    ui::{Background, Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
+    render_node::RenderNode,
+    types::range::CoverRange,
+    ui::{
+        Background, Constraints, Dom, DomComPareResult, UpdateWidgetError, Widget, WidgetContext,
+    },
+    update_flag::UpdateNotifier,
 };
 
 // todo: more documentation
@@ -30,14 +31,13 @@ impl<T: Send + 'static> Dom<T> for Template {
     fn build_widget_tree(&self) -> Box<dyn Widget<T>> {
         Box::new(TemplateNode {
             label: self.label.clone(),
+            update_notifier: None,
         })
     }
 
-    async fn set_observer(&self) -> Observer {
+    async fn set_update_notifier(&self, _notifier: &UpdateNotifier) {
         // If your widget has any child widgets,
-        // you should collect their observers for matcha ui system to catch child component updates.
-
-        Observer::default()
+        // you should propagate the notifier to them.
     }
 }
 
@@ -45,99 +45,83 @@ impl<T: Send + 'static> Dom<T> for Template {
 
 pub struct TemplateNode {
     label: Option<String>,
+    update_notifier: Option<UpdateNotifier>,
 }
 
 // MARK: Widget trait
 
 #[async_trait::async_trait]
 impl<T: Send + 'static> Widget<T> for TemplateNode {
-    // label
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
 
-    // for dom handling
-    // keep in mind to change redraw flag to true if some change is made.
     async fn update_widget_tree(
         &mut self,
-        component_updated: bool,
+        _component_updated: bool,
         dom: &dyn Dom<T>,
     ) -> Result<(), UpdateWidgetError> {
         if let Some(dom) = (dom as &dyn Any).downcast_ref::<Template>() {
-            todo!()
+            self.label = dom.label.clone();
+            Ok(())
         } else {
-            return Err(UpdateWidgetError::TypeMismatch);
+            Err(UpdateWidgetError::TypeMismatch)
         }
     }
 
-    // comparing dom
     fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult {
-        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Template>() {
-            todo!()
+        if (dom as &dyn Any).downcast_ref::<Template>().is_some() {
+            // In a real widget, you would compare properties here.
+            // If properties are different, return DomComPareResult::Changed(hash).
+            DomComPareResult::Same
         } else {
             DomComPareResult::Different
         }
     }
 
-    // widget event
-    fn device_event(
-        &mut self,
-        event: &DeviceEvent,
-        parent_size: [Option<f32>; 2],
-        context: &WidgetContext,
-    ) -> Option<T> {
-        let _ = (event, parent_size, context);
-        todo!()
+    fn device_event(&mut self, _event: &DeviceEvent, _context: &WidgetContext) -> Option<T> {
+        // Handle device events here.
+        // If the widget's state changes and it needs to be redrawn,
+        // call self.update_notifier.as_ref().unwrap().notify();
+        None
     }
 
-    // inside / outside check
-    // implement this if your widget has a non rectangular shape or has transparent area.
-    /*
-    fn is_inside(
-        &mut self,
-        position: [f32; 2],
-        parent_size: [Option<f32>; 2],
-        context: &WidgetContext,
-    ) -> bool {
-        let px_size = Widget::<T>::px_size(self, parent_size, context);
-
-        !(position[0] < 0.0
-            || position[0] > px_size[0]
-            || position[1] < 0.0
-            || position[1] > px_size[1])
-    }
-    */
-
-    // Actual size including its sub widgets with pixel value.
-    fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &WidgetContext) -> [f32; 2] {
-        let _ = (parent_size, context);
-        todo!()
+    fn is_inside(&mut self, _position: [f32; 2], _context: &WidgetContext) -> bool {
+        // Implement this if your widget has a non-rectangular shape or transparent areas.
+        // For a simple template, we can assume it's always inside its bounds.
+        true
     }
 
-    // The drawing range and the area that the widget always covers.
-    fn cover_range(
-        &mut self,
-        parent_size: [Option<f32>; 2],
-        context: &WidgetContext,
-    ) -> CoverRange<f32> {
-        todo!()
+    fn preferred_size(&mut self, _constraints: &Constraints, _context: &WidgetContext) -> [f32; 2] {
+        // This widget has no content, so it takes up no space.
+        [0.0, 0.0]
     }
 
-    // if redraw is needed
+    fn arrange(&mut self, _final_size: [f32; 2], _context: &WidgetContext) {
+        // This widget has no children to arrange.
+    }
+
+    fn cover_range(&mut self, _context: &WidgetContext) -> CoverRange<f32> {
+        // This widget is transparent and covers no area.
+        CoverRange::default()
+    }
+
     fn need_rerendering(&self) -> bool {
-        todo!()
+        // A real widget would have state to track this.
+        // For a template, we can assume it doesn't need rerendering unless updated.
+        false
     }
 
-    // render
     fn render(
         &mut self,
-        render_pass: &mut wgpu::RenderPass<'_>,
-        target_size: [u32; 2],
-        target_format: wgpu::TextureFormat,
-        parent_size: [Option<f32>; 2],
-        background: Background,
-        ctx: &WidgetContext,
-    ) -> Vec<Object> {
-        todo!()
+        _background: Background,
+        animation_update_flag_notifier: UpdateNotifier,
+        _ctx: &WidgetContext,
+    ) -> RenderNode {
+        // Store the notifier so we can request a redraw later.
+        self.update_notifier = Some(animation_update_flag_notifier);
+
+        // This widget doesn't draw anything.
+        RenderNode::new()
     }
 }

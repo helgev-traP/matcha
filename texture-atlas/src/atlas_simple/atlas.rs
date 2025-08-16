@@ -8,16 +8,16 @@ use thiserror::Error;
 use uuid::Uuid;
 
 #[derive(Clone)]
-pub struct Texture {
-    inner: Arc<TextureData>,
+pub struct AtlasRegion {
+    inner: Arc<RegionData>,
 }
 
 // We only store the texture id and reference to the atlas,
 // to make `Texture` remain valid after `TextureAtlas` resizes or changes,
 // except for data loss when the atlas shrinks.
-struct TextureData {
+struct RegionData {
     // allocation info
-    texture_id: TextureId,
+    texture_id: RegionId,
     atlas_id: TextureAtlasId,
     // interaction with the atlas
     atlas: Weak<Mutex<TextureAtlas>>,
@@ -28,7 +28,7 @@ struct TextureData {
 
 /// Public API to interact with a texture.
 /// User code should not need to know about its id, location, or atlas.
-impl Texture {
+impl AtlasRegion {
     pub fn atlas_id(&self) -> TextureAtlasId {
         self.inner.atlas_id
     }
@@ -276,7 +276,7 @@ impl Texture {
 }
 
 // Ensure the texture area will be deallocated when the texture is dropped.
-impl Drop for TextureData {
+impl Drop for RegionData {
     fn drop(&mut self) {
         if let Some(atlas) = self.atlas.upgrade() {
             match atlas.lock().deallocate(self.texture_id) {
@@ -292,12 +292,12 @@ impl Drop for TextureData {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct TextureId {
+struct RegionId {
     texture_uuid: Uuid,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-struct TextureLocation {
+struct RegionLocation {
     page_index: u32,
     /// The bounds in pixels within the atlas.
     bounds: euclid::Rect<i32, euclid::UnknownUnit>,
@@ -305,7 +305,7 @@ struct TextureLocation {
     uv: euclid::Rect<f32, euclid::UnknownUnit>,
 }
 
-impl TextureLocation {
+impl RegionLocation {
     fn area(&self) -> u32 {
         self.bounds.area() as u32
     }
@@ -346,8 +346,8 @@ pub struct TextureAtlas {
 
 struct TextureAtlasState {
     allocators: Vec<AtlasAllocator>,
-    texture_id_to_location: HashMap<TextureId, TextureLocation>,
-    texture_id_to_alloc_id: HashMap<TextureId, AllocId>,
+    texture_id_to_location: HashMap<RegionId, RegionLocation>,
+    texture_id_to_alloc_id: HashMap<RegionId, AllocId>,
     usage: usize,
 }
 
@@ -423,7 +423,7 @@ impl TextureAtlas {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         size: [u32; 2],
-    ) -> Result<Texture, TextureAtlasError> {
+    ) -> Result<AtlasRegion, TextureAtlasError> {
         // Check if size is smaller than the atlas size
         if size[0] > self.size.width || size[1] > self.size.height {
             return Err(TextureAtlasError::AllocationFailedTooLarge);
@@ -444,24 +444,24 @@ impl TextureAtlas {
                         (bounds.height() as f32) / (self.size.height as f32),
                     ),
                 );
-                let location = TextureLocation {
+                let location = RegionLocation {
                     page_index: page_index as u32,
                     bounds,
                     uv: uvs,
                 };
 
                 // Create a new TextureId and Texture
-                let texture_id = TextureId {
+                let texture_id = RegionId {
                     texture_uuid: Uuid::new_v4(),
                 };
-                let texture_inner = TextureData {
+                let texture_inner = RegionData {
                     texture_id,
                     atlas_id: self.id,
                     atlas: self.weak_self.clone(),
                     size: [size.width as u32, size.height as u32],
                     formats: self.formats.clone(),
                 };
-                let texture = Texture {
+                let texture = AtlasRegion {
                     inner: Arc::new(texture_inner),
                 };
 
@@ -497,24 +497,24 @@ impl TextureAtlas {
                     (bounds.height() as f32) / (self.size.height as f32),
                 ),
             );
-            let location = TextureLocation {
+            let location = RegionLocation {
                 page_index: page_index as u32,
                 bounds,
                 uv: uvs,
             };
 
             // Create a new TextureId and Texture
-            let texture_id = TextureId {
+            let texture_id = RegionId {
                 texture_uuid: Uuid::new_v4(),
             };
-            let texture_inner = TextureData {
+            let texture_inner = RegionData {
                 texture_id,
                 atlas_id: self.id,
                 atlas: self.weak_self.clone(),
                 size: [size.width as u32, size.height as u32],
                 formats: self.formats.clone(),
             };
-            let texture = Texture {
+            let texture = AtlasRegion {
                 inner: Arc::new(texture_inner),
             };
 
@@ -537,7 +537,7 @@ impl TextureAtlas {
 
     /// Deallocate a texture from the atlas.
     /// This will be called automatically when the `TextureInner` is dropped.
-    fn deallocate(&mut self, id: TextureId) -> Result<(), DeallocationErrorTextureNotFound> {
+    fn deallocate(&mut self, id: RegionId) -> Result<(), DeallocationErrorTextureNotFound> {
         // Find the texture location and remove it from the id-to-location map.
         let location = self
             .state
@@ -616,7 +616,7 @@ impl TextureAtlas {
 }
 
 impl TextureAtlas {
-    fn get_location(&self, id: TextureId) -> Option<TextureLocation> {
+    fn get_location(&self, id: RegionId) -> Option<RegionLocation> {
         self.state.texture_id_to_location.get(&id).copied()
     }
 
@@ -714,7 +714,7 @@ mod tests {
             .await
             .unwrap();
         adapter
-            .request_device(&wgpu::DeviceDescriptor::default())
+            .request_device(&wgpu::DeviceDescriptor::default(), None)
             .await
             .unwrap()
     }
@@ -727,8 +727,8 @@ mod tests {
     }
 
     #[cfg(test)]
-    impl Texture {
-        fn location(&self) -> Option<TextureLocation> {
+    impl AtlasRegion {
+        fn location(&self) -> Option<RegionLocation> {
             let atlas = self.inner.atlas.upgrade()?;
             let atlas = atlas.lock();
             atlas.get_location(self.inner.texture_id)

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::ui::Object;
+use crate::render_node::RenderNode;
 use texture_atlas::TextureError;
 use thiserror::Error;
 
@@ -355,7 +355,7 @@ impl Renderer {
         destination_view: &wgpu::TextureView,
         destination_size: [f32; 2],
         // objects
-        objects: Object,
+        objects: RenderNode,
         load_color: wgpu::Color,
         // texture atlas
         texture_atlas: wgpu::Texture,
@@ -546,7 +546,7 @@ impl Renderer {
 }
 
 fn create_instance_and_stencil_data(
-    objects: Object,
+    objects: RenderNode,
     texture_format: wgpu::TextureFormat,
     stencil_format: wgpu::TextureFormat,
 ) -> Result<(Vec<InstanceData>, Vec<StencilData>), TextureValidationError> {
@@ -575,7 +575,7 @@ fn create_instance_and_stencil_data(
 fn create_instance_and_stencil_data_recursive(
     texture_format: wgpu::TextureFormat,
     stencil_format: wgpu::TextureFormat,
-    object: &Object,
+    object: &RenderNode,
     transform: nalgebra::Matrix4<f32>,
     instances: &mut Vec<InstanceData>,
     stencils: &mut Vec<StencilData>,

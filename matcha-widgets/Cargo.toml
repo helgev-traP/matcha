@@ -8,6 +8,7 @@ publish = false
 # matcha
 matcha-core = { workspace = true }
 utils = { workspace = true }
+texture-atlas = { workspace = true }
 
 # runtime
 tokio = { workspace = true }

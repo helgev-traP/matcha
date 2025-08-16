@@ -4,7 +4,7 @@ use dashmap::DashMap;
 use parking_lot::Mutex;
 use thiserror::Error;
 
-use crate::atlas_simple::{Texture, TextureAtlas, TextureAtlasError};
+use crate::atlas_simple::{AtlasRegion, TextureAtlas, TextureAtlasError};
 
 pub struct MemoryAllocateStrategy {
     pub initial_pages: u32,
@@ -69,7 +69,7 @@ impl AtlasManager {
         &self,
         size: [u32; 2],
         formats: &[wgpu::TextureFormat],
-    ) -> Result<Texture, AtlasManagerError> {
+    ) -> Result<AtlasRegion, AtlasManagerError> {
         if size[0] == 0 || size[1] == 0 {
             return Err(AtlasManagerError::InvalidTextureSize);
         }
@@ -128,7 +128,7 @@ mod tests {
             .await
             .unwrap();
         adapter
-            .request_device(&wgpu::DeviceDescriptor::default())
+            .request_device(&wgpu::DeviceDescriptor::default(), None)
             .await
             .unwrap()
     }

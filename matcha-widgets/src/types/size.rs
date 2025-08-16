@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use matcha_core::context::WidgetContext;
+use matcha_core::ui::WidgetContext;
 
 pub struct ChildSize<'a> {
     get_size: Box<dyn FnMut() -> [f32; 2] + 'a>,

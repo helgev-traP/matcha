@@ -14,6 +14,7 @@ pub mod error;
 mod benchmark;
 mod builder;
 mod render_control;
+mod ticker;
 mod ui_control;
 mod window_surface;
 
@@ -43,6 +44,8 @@ pub struct WinitInstance<
     pub(crate) backend: B,
     // --- benchmark / monitoring ---
     pub(crate) benchmarker: benchmark::Benchmark,
+    // --- ticker ---
+    pub(crate) ticker: ticker::Ticker,
 }
 
 impl<
@@ -74,6 +77,7 @@ fn create_widget_context<
     render_control: &'a render_control::RenderControl,
     ui_control: &ui_control::UiControl<Model, Message, Event, InnerEvent>,
     any_resource: &'a AnyResource,
+    current_time: std::time::Duration,
 ) -> Option<WidgetContext<'a>> {
     let size = window.inner_size()?;
     let size = [size.width as f32, size.height as f32];
@@ -89,6 +93,7 @@ fn create_widget_context<
         render_control.texture_allocator(),
         any_resource,
         ui_control.default_font_size(),
+        current_time,
     ))
 }
 
@@ -117,6 +122,7 @@ impl<
                     &self.render_control,
                     &self.ui_control,
                     &self.any_resource,
+                    self.ticker.current_time(),
                 )
                 .expect(
                     "Window must exist when render is called, as it is only called after resumed",
@@ -130,6 +136,10 @@ impl<
                             background,
                             &ctx,
                         ))
+                };
+
+                let Some(object) = object else {
+                    return Ok(());
                 };
 
                 let size = self.window.inner_size().expect(
@@ -241,6 +251,7 @@ impl<
             &self.render_control,
             &self.ui_control,
             &self.any_resource,
+            self.ticker.current_time(),
         ) else {
             return;
         };
@@ -279,6 +290,8 @@ impl<
         _: &winit::event_loop::ActiveEventLoop,
         cause: winit::event::StartCause,
     ) {
+        self.ticker.tick();
+
         match cause {
             winit::event::StartCause::Init => {}
             winit::event::StartCause::WaitCancelled { .. } => {}

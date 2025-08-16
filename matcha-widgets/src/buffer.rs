@@ -1,4 +1,4 @@
-use matcha_core::{context::WidgetContext, types::range::Range2D, ui::Style};
+use matcha_core::{types::range::Range2D, ui::Style, ui::WidgetContext};
 use utils::cache::Cache;
 
 pub struct Buffer {

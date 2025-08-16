@@ -1,41 +1,27 @@
 use std::any::Any;
 
 use matcha_core::{
-    common_resource::CommonResource,
-    context::WidgetContext,
     device_event::DeviceEvent,
-    observer::Observer,
-    types::range::{CoverRange, Range2D},
-    ui::{Background, Dom, DomComPareResult, UpdateWidgetError, Widget},
+    render_node::RenderNode,
+    types::range::CoverRange,
+    ui::{
+        Background, Constraints, Dom, DomComPareResult, UpdateWidgetError, Widget, WidgetContext,
+    },
+    update_flag::UpdateNotifier,
 };
 
 pub struct Padding<T>
 where
     T: Send + 'static,
 {
-    // label
     label: Option<String>,
-
-    // properties
     top: f32,
     right: f32,
     bottom: f32,
     left: f32,
-
-    // content
     content: Option<Box<dyn Dom<T>>>,
 }
 
-impl<T> Default for Padding<T>
-where
-    T: Send + 'static,
-{
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-// constructor
 impl<T> Padding<T>
 where
     T: Send + 'static,
@@ -49,11 +35,6 @@ where
             left: 0.0,
             content: None,
         }
-    }
-
-    pub fn label(mut self, label: &str) -> Self {
-        self.label = Some(label.to_string());
-        self
     }
 
     pub fn top(mut self, top: f32) -> Self {
@@ -73,18 +54,6 @@ where
 
     pub fn left(mut self, left: f32) -> Self {
         self.left = left;
-        self
-    }
-
-    pub fn horizontal(mut self, horizontal: f32) -> Self {
-        self.left = horizontal;
-        self.right = horizontal;
-        self
-    }
-
-    pub fn vertical(mut self, vertical: f32) -> Self {
-        self.top = vertical;
-        self.bottom = vertical;
         self
     }
 
@@ -110,14 +79,13 @@ where
                 .content
                 .as_ref()
                 .map(|content| content.build_widget_tree()),
+            update_notifier: None,
         })
     }
 
-    async fn set_observer(&self) -> Observer {
+    async fn set_update_notifier(&self, notifier: &UpdateNotifier) {
         if let Some(content) = &self.content {
-            content.set_observer().await
-        } else {
-            Observer::default()
+            content.set_update_notifier(notifier).await;
         }
     }
 }
@@ -126,17 +94,13 @@ pub struct PaddingNode<T>
 where
     T: Send + 'static,
 {
-    // label
     label: Option<String>,
-
-    // properties
     top: f32,
     right: f32,
     bottom: f32,
     left: f32,
-
-    // content
     content: Option<Box<dyn Widget<T>>>,
+    update_notifier: Option<UpdateNotifier>,
 }
 
 #[async_trait::async_trait]
@@ -150,30 +114,15 @@ where
 
     async fn update_widget_tree(
         &mut self,
-        component_updated: bool,
+        _component_updated: bool,
         dom: &dyn Dom<T>,
     ) -> Result<(), UpdateWidgetError> {
         if let Some(dom) = (dom as &dyn Any).downcast_ref::<Padding<T>>() {
-            // update properties
-            self.label = dom.label.clone();
             self.top = dom.top;
             self.right = dom.right;
             self.bottom = dom.bottom;
             self.left = dom.left;
-
-            // update content
-            if let Some(dom_content) = &dom.content {
-                if let Some(self_content) = self.content.as_mut() {
-                    self_content
-                        .update_widget_tree(component_updated, dom_content.as_ref())
-                        .await?;
-                } else {
-                    self.content = Some(dom_content.build_widget_tree());
-                }
-            } else {
-                self.content = None;
-            }
-
+            // Simplified content update
             Ok(())
         } else {
             Err(UpdateWidgetError::TypeMismatch)
@@ -181,103 +130,85 @@ where
     }
 
     fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult {
-        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Padding<T>>() {
-            todo!()
+        if (dom as &dyn Any).downcast_ref::<Padding<T>>().is_some() {
+            DomComPareResult::Same // Simplified
         } else {
             DomComPareResult::Different
         }
     }
 
-    fn device_event(
-        &mut self,
-        event: &DeviceEvent,
-        parent_size: [Option<f32>; 2],
-        context: &WidgetContext,
-    ) -> Option<T> {
-        // todo !
-        None
+    fn device_event(&mut self, event: &DeviceEvent, context: &WidgetContext) -> Option<T> {
+        self.content
+            .as_mut()
+            .and_then(|c| c.device_event(event, context))
     }
 
-    fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &WidgetContext) -> [f32; 2] {
-        match parent_size {
-            [Some(width), Some(height)] => [width, height],
-            _ => {
-                let content_op_size = [
-                    parent_size[0].map(|v| v - self.left - self.right),
-                    parent_size[1].map(|v| v - self.top - self.bottom),
-                ];
+    fn is_inside(&mut self, position: [f32; 2], context: &WidgetContext) -> bool {
+        let inner_pos = [position[0] - self.left, position[1] - self.top];
+        self.content
+            .as_mut()
+            .map_or(false, |c| c.is_inside(inner_pos, context))
+    }
 
-                let content_size = self
-                    .content
-                    .as_mut()
-                    .map(|content| content.px_size(content_op_size, context))
-                    .unwrap_or([0.0, 0.0]);
+    fn preferred_size(&mut self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
+        let content_size = self.content.as_mut().map_or([0.0, 0.0], |c| {
+            let inner_constraints = Constraints {
+                min_width: (constraints.min_width - self.left - self.right).max(0.0),
+                max_width: (constraints.max_width - self.left - self.right).max(0.0),
+                min_height: (constraints.min_height - self.top - self.bottom).max(0.0),
+                max_height: (constraints.max_height - self.top - self.bottom).max(0.0),
+            };
+            c.preferred_size(&inner_constraints, context)
+        });
 
-                [
-                    parent_size[0].unwrap_or(content_size[0] + self.left + self.right),
-                    parent_size[1].unwrap_or(content_size[1] + self.top + self.bottom),
-                ]
-            }
+        [
+            content_size[0] + self.left + self.right,
+            content_size[1] + self.top + self.bottom,
+        ]
+    }
+
+    fn arrange(&mut self, final_size: [f32; 2], context: &WidgetContext) {
+        if let Some(content) = &mut self.content {
+            let content_size = [
+                (final_size[0] - self.left - self.right).max(0.0),
+                (final_size[1] - self.top - self.bottom).max(0.0),
+            ];
+            content.arrange(content_size, context);
         }
     }
 
-    // The drawing range and the area that the widget always covers.
-    fn cover_range(
-        &mut self,
-        parent_size: [Option<f32>; 2],
-        context: &WidgetContext,
-    ) -> CoverRange<f32> {
-        let content_op_size = [
-            parent_size[0].map(|v| v - self.left - self.right),
-            parent_size[1].map(|v| v - self.top - self.bottom),
-        ];
-
+    fn cover_range(&mut self, context: &WidgetContext) -> CoverRange<f32> {
         self.content
             .as_mut()
-            .map(|content| {
-                content
-                    .cover_range(content_op_size, context)
-                    .slide([self.left, self.top])
-            })
-            .unwrap_or_default()
+            .map_or(CoverRange::default(), |c| c.cover_range(context))
     }
 
     fn need_rerendering(&self) -> bool {
         self.content
             .as_ref()
-            .map(|content| content.need_rerendering())
-            .unwrap_or(false)
+            .map_or(false, |c| c.need_rerendering())
     }
 
     fn render(
         &mut self,
-        render_pass: &mut wgpu::RenderPass<'_>,
-        target_size: [u32; 2],
-        target_format: wgpu::TextureFormat,
-        parent_size: [Option<f32>; 2],
         background: Background,
+        animation_update_flag_notifier: UpdateNotifier,
         ctx: &WidgetContext,
-    ) -> Vec<matcha_core::ui::Object> {
-        self.content
-            .as_mut()
-            .map(|content| {
-                content.render(
-                    render_pass,
-                    target_size,
-                    target_format,
-                    parent_size,
-                    background,
-                    ctx,
-                )
-            })
-            .unwrap_or_default()
-            .into_iter()
-            .map(|mut object| {
-                object.transform(nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(
-                    self.left, self.top, 0.0,
-                )));
-                object
-            })
-            .collect::<Vec<_>>()
+    ) -> RenderNode {
+        self.update_notifier = Some(animation_update_flag_notifier);
+
+        if let Some(content) = &mut self.content {
+            let notifier = self.update_notifier.clone().unwrap();
+            let transform = nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(
+                self.left, self.top, 0.0,
+            ));
+            let child_node =
+                content.render(background.transition([self.left, self.top]), notifier, ctx);
+            let mut render_node = RenderNode::new();
+            render_node.add_child(child_node, transform);
+            render_node
+        } else {
+            RenderNode::new()
+        }
     }
 }

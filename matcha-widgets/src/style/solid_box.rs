@@ -1,105 +1,44 @@
 use matcha_core::{
-    context::WidgetContext,
-    renderer::ObjectRenderer,
-    vertex::{BoxDescriptor, BoxMesh, ColorVertex, box_mesh},
+    render_node::RenderNode,
+    types::range::Range2D,
+    ui::{Style, WidgetContext},
 };
 
 // todo: more documentation
 
-// MARK: DOM
+// MARK: Style
 
 pub struct SolidBox {
-    label: Option<String>,
-
-    // box settings
-    radius: f32,
-
-    // background settings
-    background_color: [f32; 4],
-    background_blur: f32,
-
-    // border settings
-    border_width: f32,
-    border_color: [f32; 4],
-    border_blur: f32,
-
-    // render context
-    resources: Option<RenderResource>,
+    pub color: [f32; 4],
 }
 
-struct RenderResource {
-    vertices: Option<Vec<ColorVertex>>,
-    rect_indices: Option<Vec<u16>>,
-    border_indices: Option<Vec<u16>>,
-}
-
-impl SolidBox {
-    pub fn new(label: Option<&str>) -> Box<Self> {
-        Box::new(Self {
-            label: label.map(|s| s.to_string()),
-            radius: 0.0,
-            background_color: [0.0, 0.0, 0.0, 0.0],
-            background_blur: 0.0,
-            border_width: 0.0,
-            border_color: [0.0, 0.0, 0.0, 0.0],
-            border_blur: 0.0,
-            resources: None,
-        })
+impl Style for SolidBox {
+    fn clone_boxed(&self) -> Box<dyn Style> {
+        Box::new(Self { color: self.color })
     }
 
-    pub fn radius(mut self, radius: f32) -> Self {
-        self.radius = radius;
-        self
+    fn is_inside(&self, position: [f32; 2], boundary_size: [f32; 2], _ctx: &WidgetContext) -> bool {
+        position[0] >= 0.0
+            && position[0] <= boundary_size[0]
+            && position[1] >= 0.0
+            && position[1] <= boundary_size[1]
     }
 
-    pub fn background_color(mut self, color: [f32; 4]) -> Self {
-        self.background_color = color;
-        self
+    fn draw_range(&self, boundary_size: [f32; 2], _ctx: &WidgetContext) -> Range2D<f32> {
+        Range2D::new([0.0, boundary_size[0]], [0.0, boundary_size[1]])
     }
 
-    pub fn background_blur(mut self, blur: f32) -> Self {
-        self.background_blur = blur;
-        self
-    }
-
-    pub fn border_width(mut self, width: f32) -> Self {
-        self.border_width = width;
-        self
-    }
-
-    pub fn border_color(mut self, color: [f32; 4]) -> Self {
-        self.border_color = color;
-        self
-    }
-
-    pub fn border_blur(mut self, blur: f32) -> Self {
-        self.border_blur = blur;
-        self
-    }
-}
-
-impl SolidBox {
-    pub fn render(&mut self, size: [f32; 2], target: wgpu::TextureView, ctx: &WidgetContext) {
-        let renderer = ctx
-            .common_resource()
-            .get_or_insert_with(|| ObjectRenderer::new(ctx));
-
-        let resource = self.resources.get_or_insert_with(|| {
-            // make vertices and indices
-            let box_desc = BoxDescriptor::new(size[0], size[1], self.border_width);
-
-            match box_mesh(&box_desc) {
-                Some(BoxMesh {
-                    vertices,
-                    rect_indices,
-                    border_indices,
-                }) => {
-                    // make border vertices
-
-                    todo!()
-                }
-                None => todo!(),
-            }
-        });
+    fn draw(
+        &self,
+        _render_pass: &mut wgpu::RenderPass<'_>,
+        _target_size: [u32; 2],
+        _target_format: wgpu::TextureFormat,
+        _boundary_size: [f32; 2],
+        _offset: [f32; 2],
+        _ctx: &WidgetContext,
+    ) {
+        // This is where the actual drawing logic using wgpu would go.
+        // For now, it's a placeholder. A real implementation would create a render pipeline
+        // and draw a colored rectangle.
     }
 }

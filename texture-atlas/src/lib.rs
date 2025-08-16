@@ -4,7 +4,7 @@ pub mod atlas_simple;
 pub mod atlas_with_runtime;
 
 pub use atlas_simple::{
-    AtlasManager, AtlasManagerError, MemoryAllocateStrategy, Texture, TextureAtlas,
+    AtlasManager, AtlasManagerError, AtlasRegion, MemoryAllocateStrategy, TextureAtlas,
     TextureAtlasError, TextureAtlasId, TextureError,
 };
 

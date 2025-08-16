@@ -11,8 +11,9 @@ use crate::{
         mouse_state::{MousePrimaryButton, MouseState},
         window_state::WindowState,
     },
-    observer::Observer,
-    ui::{Background, Object, Widget, WidgetContext},
+    render_node::RenderNode,
+    ui::{Background, Constraints, Widget, WidgetContext},
+    update_flag::UpdateFlag,
 };
 
 pub struct UiControl<
@@ -22,8 +23,9 @@ pub struct UiControl<
     InnerEvent: 'static = Event,
 > {
     component: Component<Model, Message, Event, InnerEvent>,
+    model_update_flag: UpdateFlag,
     widget: Option<Box<dyn Widget<Event>>>,
-    observer: Observer,
+    animation_update_flag: UpdateFlag,
 
     window_state: WindowState,
     mouse_state: MouseState,
@@ -51,8 +53,9 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
     ) -> Result<Self, UiControlError> {
         Ok(Self {
             component,
+            model_update_flag: UpdateFlag::new_true(),
             widget: None,
-            observer: Observer::new_render_trigger(),
+            animation_update_flag: UpdateFlag::new(),
             window_state: WindowState::default(),
             mouse_state: MouseState::new(
                 double_click_duration,
@@ -99,29 +102,52 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
         size: [f32; 2],
         background: Background<'a>,
         ctx: &WidgetContext<'a>,
-    ) -> Object {
-        if self.widget.is_none() {
+    ) -> Option<RenderNode> {
+        if self.model_update_flag.is_true() || self.widget.is_none() {
+            // Dom update is required
             let dom = self.component.view().await;
 
-            self.observer = Observer::new_render_trigger();
-            dom.set_observer(&self.observer).await;
+            self.model_update_flag = UpdateFlag::new();
+            dom.set_update_notifier(&self.model_update_flag.notifier())
+                .await;
 
-            self.widget = Some(dom.build_widget_tree());
-        } else if self.observer.is_updated() {
-            let dom = self.component.view().await;
-
-            self.observer = Observer::new();
-            dom.set_observer(&self.observer).await;
-
-            let widget = self.widget.as_mut().expect("checked existence above");
-            if let Err(e) = widget.update_widget_tree(true, &*dom).await {
-                eprintln!("Failed to update widget tree: {e:?}. Rebuilding.");
+            if let Some(widget) = self.widget.as_mut() {
+                if widget.update_widget_tree(false, &*dom).await.is_err() {
+                    self.widget = None;
+                }
+            }
+            if self.widget.is_none() {
+                // Initialize widget
                 self.widget = Some(dom.build_widget_tree());
             }
+
+            // trigger rendering
+            self.animation_update_flag = UpdateFlag::new_true();
         }
 
-        let widget = self.widget.as_mut().expect("widget initialized above");
-        widget.render([Some(size[0]), Some(size[1])], background, ctx)
+        if self.animation_update_flag.is_true() {
+            let widget = self.widget.as_mut().expect("widget initialized above");
+
+            let constraints = Constraints {
+                min_width: 0.0,
+                max_width: size[0],
+                min_height: 0.0,
+                max_height: size[1],
+            };
+            let preferred_size = widget.preferred_size(&constraints, ctx);
+            widget.arrange(
+                [
+                    preferred_size[0].min(size[0]),
+                    preferred_size[1].min(size[1]),
+                ],
+                ctx,
+            );
+
+            self.animation_update_flag = UpdateFlag::new();
+            Some(widget.render(background, self.animation_update_flag.notifier(), ctx))
+        } else {
+            None
+        }
     }
 
     fn convert_winit_to_window_event(
@@ -235,11 +261,21 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
             self.convert_winit_to_window_event(window_event, get_window_size, get_window_position);
 
         if let (Some(widget), Some(event)) = (&mut self.widget, event) {
-            widget.device_event(
-                &event,
-                [Some(viewport_size[0]), Some(viewport_size[1])],
+            let constraints = Constraints {
+                min_width: 0.0,
+                max_width: viewport_size[0],
+                min_height: 0.0,
+                max_height: viewport_size[1],
+            };
+            let preferred_size = widget.preferred_size(&constraints, ctx);
+            widget.arrange(
+                [
+                    preferred_size[0].min(viewport_size[0]),
+                    preferred_size[1].min(viewport_size[1]),
+                ],
                 ctx,
-            )
+            );
+            widget.device_event(&event, ctx)
         } else {
             None
         }

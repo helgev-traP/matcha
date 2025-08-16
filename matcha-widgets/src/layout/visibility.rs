@@ -1,44 +1,31 @@
 use std::any::Any;
 
 use matcha_core::{
-    context::WidgetContext,
     device_event::DeviceEvent,
-    observer::Observer,
+    render_node::RenderNode,
     types::range::CoverRange,
-    ui::{Background, Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
+    ui::{
+        Background, Constraints, Dom, DomComPareResult, UpdateWidgetError, Widget, WidgetContext,
+    },
+    update_flag::UpdateNotifier,
 };
 
-#[derive(Debug, Clone, Copy)]
-enum VisibilityState {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VisibilityState {
     Visible,
     Hidden,
-    None,
+    Gone,
 }
 
 pub struct Visibility<T>
 where
     T: Send + 'static,
 {
-    // label
     label: Option<String>,
-
-    // properties
-    visible: VisibilityState,
-
-    // content
+    visibility: VisibilityState,
     content: Option<Box<dyn Dom<T>>>,
 }
 
-impl<T> Default for Visibility<T>
-where
-    T: Send + 'static,
-{
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-// constructor
 impl<T> Visibility<T>
 where
     T: Send + 'static,
@@ -46,7 +33,7 @@ where
     pub fn new() -> Self {
         Self {
             label: None,
-            visible: VisibilityState::Visible,
+            visibility: VisibilityState::Visible,
             content: None,
         }
     }
@@ -56,18 +43,19 @@ where
         self
     }
 
-    pub fn visible(mut self) -> Self {
-        self.visible = VisibilityState::Visible;
+    pub fn visible(mut self, visible: bool) -> Self {
+        self.visibility = if visible {
+            VisibilityState::Visible
+        } else {
+            VisibilityState::Hidden
+        };
         self
     }
 
-    pub fn hidden(mut self) -> Self {
-        self.visible = VisibilityState::Hidden;
-        self
-    }
-
-    pub fn none(mut self) -> Self {
-        self.visible = VisibilityState::None;
+    pub fn gone(mut self, gone: bool) -> Self {
+        if gone {
+            self.visibility = VisibilityState::Gone;
+        }
         self
     }
 
@@ -85,24 +73,18 @@ where
     fn build_widget_tree(&self) -> Box<dyn Widget<T>> {
         Box::new(VisibilityNode {
             label: self.label.clone(),
-            visible: self.visible,
+            visibility: self.visibility,
             content: self
                 .content
                 .as_ref()
                 .map(|content| content.build_widget_tree()),
+            update_notifier: None,
         })
     }
 
-    async fn set_observer(&self) -> Observer {
-        match self.visible {
-            VisibilityState::Visible => {
-                if let Some(content) = &self.content {
-                    content.set_observer().await
-                } else {
-                    Observer::default()
-                }
-            }
-            VisibilityState::Hidden | VisibilityState::None => Observer::default(),
+    async fn set_update_notifier(&self, notifier: &UpdateNotifier) {
+        if let Some(content) = &self.content {
+            content.set_update_notifier(notifier).await;
         }
     }
 }
@@ -111,14 +93,10 @@ pub struct VisibilityNode<T>
 where
     T: Send + 'static,
 {
-    // label
     label: Option<String>,
-
-    // properties
-    visible: VisibilityState,
-
-    // content
+    visibility: VisibilityState,
     content: Option<Box<dyn Widget<T>>>,
+    update_notifier: Option<UpdateNotifier>,
 }
 
 #[async_trait::async_trait]
@@ -136,10 +114,9 @@ where
         dom: &dyn Dom<T>,
     ) -> Result<(), UpdateWidgetError> {
         if let Some(dom) = (dom as &dyn Any).downcast_ref::<Visibility<T>>() {
-            // update properties
             self.label = dom.label.clone();
+            self.visibility = dom.visibility;
 
-            // update content
             if let Some(dom_content) = &dom.content {
                 if let Some(self_content) = self.content.as_mut() {
                     self_content
@@ -159,88 +136,78 @@ where
     }
 
     fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult {
-        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Visibility<T>>() {
-            let _ = dom;
-            todo!()
+        if (dom as &dyn Any).downcast_ref::<Visibility<T>>().is_some() {
+            DomComPareResult::Same // Simplified
         } else {
             DomComPareResult::Different
         }
     }
 
-    fn device_event(
-        &mut self,
-        event: &DeviceEvent,
-        parent_size: [Option<f32>; 2],
-        context: &WidgetContext,
-    ) -> Option<T> {
-        match self.visible {
-            VisibilityState::Visible => self
-                .content
+    fn device_event(&mut self, event: &DeviceEvent, context: &WidgetContext) -> Option<T> {
+        if self.visibility == VisibilityState::Visible {
+            self.content
                 .as_mut()
-                .map(|content| content.device_event(event, parent_size, context))
-                .unwrap_or_default(),
-            VisibilityState::Hidden | VisibilityState::None => None,
+                .and_then(|content| content.device_event(event, context))
+        } else {
+            None
         }
     }
 
-    fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &WidgetContext) -> [f32; 2] {
-        match self.visible {
-            VisibilityState::Visible | VisibilityState::Hidden => self
-                .content
+    fn is_inside(&mut self, position: [f32; 2], context: &WidgetContext) -> bool {
+        if self.visibility == VisibilityState::Visible {
+            self.content
                 .as_mut()
-                .map(|content| content.px_size(parent_size, context))
-                .unwrap_or([0.0, 0.0]),
-            VisibilityState::None => [0.0, 0.0],
+                .map_or(false, |content| content.is_inside(position, context))
+        } else {
+            false
         }
     }
 
-    fn cover_range(
-        &mut self,
-        parent_size: [Option<f32>; 2],
-        context: &WidgetContext,
-    ) -> CoverRange<f32> {
-        match self.visible {
-            VisibilityState::Visible => self
-                .content
+    fn preferred_size(&mut self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
+        if self.visibility == VisibilityState::Gone {
+            return [0.0, 0.0];
+        }
+        self.content
+            .as_mut()
+            .map_or([0.0, 0.0], |c| c.preferred_size(constraints, context))
+    }
+
+    fn arrange(&mut self, final_size: [f32; 2], context: &WidgetContext) {
+        if let Some(content) = &mut self.content {
+            content.arrange(final_size, context);
+        }
+    }
+
+    fn cover_range(&mut self, context: &WidgetContext) -> CoverRange<f32> {
+        if self.visibility == VisibilityState::Visible {
+            self.content
                 .as_mut()
-                .map(|content| content.cover_range(parent_size, context))
-                .unwrap_or_default(),
-            VisibilityState::Hidden | VisibilityState::None => CoverRange::default(),
+                .map_or(CoverRange::default(), |c| c.cover_range(context))
+        } else {
+            CoverRange::default()
         }
     }
 
     fn need_rerendering(&self) -> bool {
         self.content
             .as_ref()
-            .map(|content| content.need_rerendering())
-            .unwrap_or(false)
+            .map_or(false, |content| content.need_rerendering())
     }
 
     fn render(
         &mut self,
-        render_pass: &mut wgpu::RenderPass<'_>,
-        target_size: [u32; 2],
-        target_format: wgpu::TextureFormat,
-        parent_size: [Option<f32>; 2],
         background: Background,
+        animation_update_flag_notifier: UpdateNotifier,
         ctx: &WidgetContext,
-    ) -> Vec<Object> {
-        match self.visible {
-            VisibilityState::Visible => self
-                .content
-                .as_mut()
-                .map(|content| {
-                    content.render(
-                        render_pass,
-                        target_size,
-                        target_format,
-                        parent_size,
-                        background,
-                        ctx,
-                    )
-                })
-                .unwrap_or_default(),
-            VisibilityState::Hidden | VisibilityState::None => vec![],
+    ) -> RenderNode {
+        self.update_notifier = Some(animation_update_flag_notifier);
+
+        if self.visibility == VisibilityState::Visible {
+            if let Some(content) = &mut self.content {
+                return content.render(background, self.update_notifier.clone().unwrap(), ctx);
+            }
         }
+
+        RenderNode::new()
     }
 }

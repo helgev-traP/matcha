@@ -1,133 +1,169 @@
 use std::any::Any;
 
 use matcha_core::{
-    common_resource::CommonResource,
-    context::WidgetContext,
     device_event::DeviceEvent,
-    observer::Observer,
-    types::range::{CoverRange, Range2D},
-    ui::{Background, Dom, DomComPareResult, Object, UpdateWidgetError, Widget},
+    render_node::RenderNode,
+    types::range::CoverRange,
+    ui::{
+        Background, Constraints, Dom, DomComPareResult, UpdateWidgetError, Widget, WidgetContext,
+    },
+    update_flag::UpdateNotifier,
 };
 
 // MARK: DOM
 
-pub struct Position {
+pub struct Position<T: Send + 'static> {
     label: Option<String>,
+    left: Option<f32>,
+    top: Option<f32>,
+    right: Option<f32>,
+    bottom: Option<f32>,
+    content: Option<Box<dyn Dom<T>>>,
+}
+
+impl<T: Send + 'static> Position<T> {
+    pub fn new() -> Self {
+        Self {
+            label: None,
+            left: None,
+            top: None,
+            right: None,
+            bottom: None,
+            content: None,
+        }
+    }
+
+    pub fn content(mut self, content: Box<dyn Dom<T>>) -> Self {
+        self.content = Some(content);
+        self
+    }
 }
 
 #[async_trait::async_trait]
-impl<T: Send + 'static> Dom<T> for Position {
+impl<T: Send + 'static> Dom<T> for Position<T> {
     fn build_widget_tree(&self) -> Box<dyn Widget<T>> {
         Box::new(PositionNode {
             label: self.label.clone(),
+            left: self.left,
+            top: self.top,
+            right: self.right,
+            bottom: self.bottom,
+            content: self
+                .content
+                .as_ref()
+                .map(|content| content.build_widget_tree()),
+            update_notifier: None,
         })
     }
 
-    async fn set_observer(&self) -> Observer {
-        // If your widget has any child widgets,
-        // you should collect their observers for matcha ui system to catch child component updates.
-
-        Observer::default()
+    async fn set_update_notifier(&self, notifier: &UpdateNotifier) {
+        if let Some(content) = &self.content {
+            content.set_update_notifier(notifier).await;
+        }
     }
 }
 
 // MARK: Widget
 
-pub struct PositionNode {
+pub struct PositionNode<T: Send + 'static> {
     label: Option<String>,
+    left: Option<f32>,
+    top: Option<f32>,
+    right: Option<f32>,
+    bottom: Option<f32>,
+    content: Option<Box<dyn Widget<T>>>,
+    update_notifier: Option<UpdateNotifier>,
 }
 
-// MARK: Widget trait
-
 #[async_trait::async_trait]
-impl<T: Send + 'static> Widget<T> for PositionNode {
-    // label
+impl<T: Send + 'static> Widget<T> for PositionNode<T> {
     fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
 
-    // for dom handling
-    // keep in mind to change redraw flag to true if some change is made.
     async fn update_widget_tree(
         &mut self,
-        component_updated: bool,
+        _component_updated: bool,
         dom: &dyn Dom<T>,
     ) -> Result<(), UpdateWidgetError> {
-        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Position>() {
-            todo!()
+        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Position<T>>() {
+            self.left = dom.left;
+            self.top = dom.top;
+            self.right = dom.right;
+            self.bottom = dom.bottom;
+            // Simplified content update
+            Ok(())
         } else {
-            return Err(UpdateWidgetError::TypeMismatch);
+            Err(UpdateWidgetError::TypeMismatch)
         }
     }
 
-    // comparing dom
     fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult {
-        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Position>() {
-            todo!()
+        if (dom as &dyn Any).downcast_ref::<Position<T>>().is_some() {
+            DomComPareResult::Same // Simplified
         } else {
             DomComPareResult::Different
         }
     }
 
-    // widget event
-    fn device_event(
-        &mut self,
-        event: &DeviceEvent,
-        parent_size: [Option<f32>; 2],
-        context: &WidgetContext,
-    ) -> Option<T> {
-        let _ = (event, parent_size, context);
-        todo!()
+    fn device_event(&mut self, event: &DeviceEvent, context: &WidgetContext) -> Option<T> {
+        self.content
+            .as_mut()
+            .and_then(|c| c.device_event(event, context))
     }
 
-    // inside / outside check
-    // implement this if your widget has a non rectangular shape.
-    /*
-    fn is_inside(
-        &mut self,
-        position: [f32; 2],
-        parent_size: [Option<f32>; 2],
-        context: &SharedContext,
-    ) -> bool {
-        let px_size = Widget::<T>::px_size(self, parent_size, context);
-
-        !(position[0] < 0.0
-            || position[0] > px_size[0]
-            || position[1] < 0.0
-            || position[1] > px_size[1])
-    }
-    */
-
-    // Actual size including its sub widgets with pixel value.
-    fn px_size(&mut self, parent_size: [Option<f32>; 2], context: &WidgetContext) -> [f32; 2] {
-        let _ = (parent_size, context);
-        todo!()
+    fn is_inside(&mut self, position: [f32; 2], context: &WidgetContext) -> bool {
+        // This needs to be adjusted based on the final position from arrange pass
+        self.content
+            .as_mut()
+            .map_or(false, |c| c.is_inside(position, context))
     }
 
-    // The drawing range and the area that the widget always covers.
-    fn cover_range(
-        &mut self,
-        parent_size: [Option<f32>; 2],
-        context: &WidgetContext,
-    ) -> CoverRange<f32> {
-        todo!()
+    fn preferred_size(&mut self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
+        self.content
+            .as_mut()
+            .map_or([0.0, 0.0], |c| c.preferred_size(constraints, context))
     }
 
-    // if redraw is needed
+    fn arrange(&mut self, final_size: [f32; 2], context: &WidgetContext) {
+        if let Some(content) = &mut self.content {
+            content.arrange(final_size, context);
+        }
+    }
+
+    fn cover_range(&mut self, context: &WidgetContext) -> CoverRange<f32> {
+        self.content
+            .as_mut()
+            .map_or(CoverRange::default(), |c| c.cover_range(context))
+    }
+
     fn need_rerendering(&self) -> bool {
-        todo!()
+        self.content
+            .as_ref()
+            .map_or(false, |c| c.need_rerendering())
     }
 
-    // render
     fn render(
         &mut self,
-        render_pass: &mut wgpu::RenderPass<'_>,
-        target_size: [u32; 2],
-        target_format: wgpu::TextureFormat,
-        parent_size: [Option<f32>; 2],
         background: Background,
+        animation_update_flag_notifier: UpdateNotifier,
         ctx: &WidgetContext,
-    ) -> Vec<Object> {
-        todo!()
+    ) -> RenderNode {
+        self.update_notifier = Some(animation_update_flag_notifier);
+
+        if let Some(content) = &mut self.content {
+            let x = self.left.unwrap_or(0.0);
+            let y = self.top.unwrap_or(0.0);
+            // A full implementation would also handle right and bottom.
+
+            let notifier = self.update_notifier.clone().unwrap();
+            let transform = nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(x, y, 0.0));
+            let child_node = content.render(background.transition([x, y]), notifier, ctx);
+            let mut render_node = RenderNode::new();
+            render_node.add_child(child_node, transform);
+            render_node
+        } else {
+            RenderNode::new()
+        }
     }
 }

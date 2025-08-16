@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use dashmap::DashMap;
 use image::GenericImageView;
-use matcha_core::{context::WidgetContext, types::range::Range2D, ui::Style};
+use matcha_core::{types::range::Range2D, ui::Style, ui::WidgetContext};
 
 // MARK: Cache
 
@@ -112,7 +112,7 @@ impl Style for Image {
     }
 
     fn draw_range(&self, boundary_size: [f32; 2], ctx: &WidgetContext) -> Range2D<f32> {
-        let cache_map = ctx.common_resource().get_or_insert_default::<ImageCache>();
+        let cache_map = ctx.any_resource().get_or_insert_default::<ImageCache>();
         let key = self.key();
         let image_cache = cache_map
             .map
@@ -137,48 +137,22 @@ impl Style for Image {
 
     fn draw(
         &self,
-        render_pass: &mut wgpu::RenderPass<'_>,
-        target_size: [u32; 2],
-        target_format: wgpu::TextureFormat,
-        boundary_size: [f32; 2],
-        offset: [f32; 2],
+        _render_pass: &mut wgpu::RenderPass<'_>,
+        _target_size: [u32; 2],
+        _target_format: wgpu::TextureFormat,
+        _boundary_size: [f32; 2],
+        _offset: [f32; 2],
         ctx: &WidgetContext,
     ) {
-        let cache_map = ctx.common_resource().get_or_insert_default::<ImageCache>();
+        // TODO: Reimplement with texture atlas
+        let cache_map = ctx.any_resource().get_or_insert_default::<ImageCache>();
         let key = self.key();
-        let image_cache = cache_map
+        let _image_cache = cache_map
             .map
             .entry(key)
             .or_insert_with(|| image_data(&self.image, ctx));
 
-        if let Some(image_cache) = &image_cache.value() {
-            // render
-
-            let texture_offset = offset;
-            let draw_range = self.draw_range(boundary_size, ctx);
-            let relative_position = draw_range.slide(texture_offset);
-            let min_point = relative_position.min_point();
-            let max_point = relative_position.max_point();
-
-            let texture_copy_renderer =
-                ctx.any_resource()
-                    .get_or_insert_default::<matcha_core::renderer::texture_copy::TextureCopy>();
-
-            texture_copy_renderer.render(
-                render_pass,
-                matcha_core::renderer::texture_copy::TargetData {
-                    target_size,
-                    target_format,
-                },
-                matcha_core::renderer::texture_copy::RenderData {
-                    source_texture_view: &image_cache.texture.create_view(&Default::default()),
-                    source_texture_position: [min_point, max_point],
-                    color_transformation: Some(color_transform(image_cache.color_type)),
-                    color_offset: Some(color_offset(image_cache.color_type)),
-                },
-                ctx,
-            );
-        }
+        // Drawing logic is commented out until texture atlas integration is complete.
     }
 }
 
