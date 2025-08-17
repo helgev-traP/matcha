@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use crate::renderer::vertex_color_renderer::VertexColorRenderer;
+use crate::vertex::ColorVertex;
 use matcha_core::{
     types::{color::Color, range::Range2D},
     ui::Style,
@@ -184,13 +186,107 @@ impl Style for Polygon {
     fn draw(
         &self,
         render_pass: &mut wgpu::RenderPass<'_>,
-        texture_size: [u32; 2],
-        texture_format: wgpu::TextureFormat,
+        target_size: [u32; 2],
+        target_format: wgpu::TextureFormat,
         boundary_size: [f32; 2],
         offset: [f32; 2],
         ctx: &WidgetContext,
     ) {
-        todo!()
+        let mut cache = self.caches.lock();
+        let mesh = if self.cache_the_mesh {
+            &cache
+                .get_or_insert_with(boundary_size, || Caches {
+                    mesh: (self.polygon)(boundary_size, ctx),
+                    draw_range: None,
+                })
+                .1
+                .mesh
+        } else {
+            &(self.polygon)(boundary_size, ctx)
+        };
+
+        let renderer = ctx
+            .any_resource()
+            .get_or_insert_with::<VertexColorRenderer, _>(|| {
+                VertexColorRenderer::new(ctx.device(), target_format)
+            });
+
+        let (vertices, indices): (Vec<ColorVertex>, Vec<u16>) = match mesh {
+            Mesh::TriangleStrip { vertices } => {
+                let color_vertices = vertices
+                    .iter()
+                    .map(|v| ColorVertex {
+                        position: nalgebra::Point3::new(v.position[0], v.position[1], 0.0),
+                        color: v.color.to_rgba_f32(),
+                    })
+                    .collect();
+                let indices = (0..vertices.len() as u16 - 2)
+                    .flat_map(|i| [i, i + 1, i + 2])
+                    .collect();
+                (color_vertices, indices)
+            }
+            Mesh::TriangleList { vertices } => {
+                let color_vertices = vertices
+                    .iter()
+                    .map(|v| ColorVertex {
+                        position: nalgebra::Point3::new(v.position[0], v.position[1], 0.0),
+                        color: v.color.to_rgba_f32(),
+                    })
+                    .collect();
+                let indices = (0..vertices.len() as u16).collect();
+                (color_vertices, indices)
+            }
+            Mesh::TriangleFan { vertices } => {
+                let color_vertices = vertices
+                    .iter()
+                    .map(|v| ColorVertex {
+                        position: nalgebra::Point3::new(v.position[0], v.position[1], 0.0),
+                        color: v.color.to_rgba_f32(),
+                    })
+                    .collect();
+                let indices = (1..vertices.len() as u16 - 1)
+                    .flat_map(|i| [0, i, i + 1])
+                    .collect();
+                (color_vertices, indices)
+            }
+            Mesh::TriangleIndexed { indices, vertices } => {
+                let color_vertices = vertices
+                    .iter()
+                    .map(|v| ColorVertex {
+                        position: nalgebra::Point3::new(v.position[0], v.position[1], 0.0),
+                        color: v.color.to_rgba_f32(),
+                    })
+                    .collect();
+                (color_vertices, indices.clone())
+            }
+        };
+
+        if vertices.is_empty() {
+            return;
+        }
+
+        let screen_to_clip =
+            nalgebra::Matrix4::new_nonuniform_scaling(&nalgebra::Vector3::new(
+                2.0 / target_size[0] as f32,
+                -2.0 / target_size[1] as f32,
+                1.0,
+            )) * nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(-1.0, 1.0, 0.0));
+
+        let local_to_screen =
+            nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(offset[0], offset[1], 0.0));
+
+        let adaptive_affine = (self.adaptive_affine)(boundary_size, ctx);
+
+        let transform_matrix = screen_to_clip * local_to_screen * adaptive_affine;
+
+        renderer.render(
+            ctx.device(),
+            render_pass,
+            &transform_matrix,
+            &vertices,
+            &indices,
+            false,
+        );
     }
 }
 

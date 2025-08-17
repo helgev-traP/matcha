@@ -1,4 +1,9 @@
-use crate::types::range::Range2D;
+mod colored_vertex;
+pub use colored_vertex::*;
+mod uv_vertex;
+pub use uv_vertex::*;
+
+use matcha_core::types::range::Range2D;
 use nalgebra::Point3;
 
 #[repr(C)]

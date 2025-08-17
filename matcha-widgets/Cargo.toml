@@ -32,7 +32,7 @@ image = { workspace = true }
 
 # other
 num = { workspace = true }
-cosmic-text = "0.14"
+cosmic-text = { workspace = true }
 fxhash = { workspace = true }
 dashmap = { workspace = true }
 moka = { workspace = true }

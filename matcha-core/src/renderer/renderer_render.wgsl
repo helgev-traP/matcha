@@ -1,18 +1,23 @@
 struct InstanceData {
     viewport_position: mat4x4<f32>,
     atlas_page: u32,
+    _padding1: u32,
     in_atlas_offset: vec2<f32>,
     in_atlas_size: vec2<f32>,
     stencil_index: u32,
+    _padding2: u32,
 };
 
 struct StencilData {
     viewport_position: mat4x4<f32>,
     viewport_position_inverse_exists: u32,
+    _padding1: array<u32, 3>,
     viewport_position_inverse: mat4x4<f32>,
     atlas_page: u32,
+    _padding2: u32,
     in_atlas_offset: vec2<f32>,
     in_atlas_size: vec2<f32>,
+    _padding3: array<u32, 2>,
 };
 
 struct VertexOutput {
@@ -36,7 +41,7 @@ struct VertexOutput {
 
 @group(1) @binding(0) var<storage, read> all_instances: array<InstanceData>;
 @group(1) @binding(1) var<storage, read> all_stencils: array<StencilData>;
-@group(1) @binding(2) var<storage, read> visible_instances: array<u32>;
+@group(1) @binding(2) var<storage, read_write> visible_instances: array<u32>;
 
 var<push_constant> normalize_matrix: mat4x4<f32>;
 

@@ -13,6 +13,7 @@ struct InstanceData {
     /// transform vertex: {[0, 0], [0, -1], [1, 0], [1, -1]} to where the texture should be rendered
     viewport_position: nalgebra::Matrix4<f32>,
     atlas_page: u32,
+    _padding1: u32,
     /// [x, y]
     in_atlas_offset: [f32; 2],
     /// [width, height]
@@ -20,6 +21,7 @@ struct InstanceData {
     /// the index of the stencil in the stencil data array.
     /// 0 if no stencil is used. Use `stencil_index - 1` in the shader.
     stencil_index: u32,
+    _padding2: u32,
 }
 
 #[repr(C)]
@@ -30,14 +32,17 @@ struct StencilData {
     /// if the inverse of the viewport position exists.
     /// 0 if the inverse does not exist.
     viewport_position_inverse_exists: u32,
+    _padding1: [u32; 3],
     /// inverse of the viewport position matrix.
     /// used to calculate stencil uv coordinates in the shader.
     viewport_position_inverse: nalgebra::Matrix4<f32>,
     atlas_page: u32,
+    _padding2: u32,
     /// [x, y]
     in_atlas_offset: [f32; 2],
     /// [width, height]
     in_atlas_size: [f32; 2],
+    _padding3: [u32; 2],
 }
 
 pub struct Renderer {
@@ -60,6 +65,7 @@ pub struct Renderer {
     // reusable buffers
     atomic_counter: wgpu::Buffer,
     draw_command: wgpu::Buffer,
+    draw_command_storage: wgpu::Buffer,
 }
 
 impl Renderer {
@@ -120,7 +126,7 @@ impl Renderer {
                     // All Instances Buffer
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
-                        visibility: wgpu::ShaderStages::COMPUTE,
+                        visibility: wgpu::ShaderStages::COMPUTE | wgpu::ShaderStages::VERTEX,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
@@ -131,7 +137,9 @@ impl Renderer {
                     // All Stencils Buffer
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
-                        visibility: wgpu::ShaderStages::COMPUTE | wgpu::ShaderStages::FRAGMENT,
+                        visibility: wgpu::ShaderStages::COMPUTE
+                            | wgpu::ShaderStages::FRAGMENT
+                            | wgpu::ShaderStages::VERTEX,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Storage { read_only: true },
                             has_dynamic_offset: false,
@@ -202,9 +210,14 @@ impl Renderer {
         let draw_command = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("ObjectRenderer Draw Command Buffer"),
             size: (std::mem::size_of::<wgpu::util::DrawIndirectArgs>()) as u64,
-            usage: wgpu::BufferUsages::STORAGE
-                | wgpu::BufferUsages::INDIRECT
-                | wgpu::BufferUsages::COPY_DST,
+            usage: wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let draw_command_storage = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("ObjectRenderer Draw Command Storage Buffer"),
+            size: (std::mem::size_of::<wgpu::util::DrawIndirectArgs>()) as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });
 
@@ -221,6 +234,7 @@ impl Renderer {
             render_pipeline,
             atomic_counter,
             draw_command,
+            draw_command_storage,
         }
     }
 
@@ -392,7 +406,7 @@ impl Renderer {
 
         let all_stencil_data_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("ObjectRenderer Stencil Buffer"),
-            size: (std::mem::size_of::<StencilData>() * stencils.len()) as u64,
+            size: (std::mem::size_of::<StencilData>() * stencils.len().max(1)) as u64,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -458,7 +472,7 @@ impl Renderer {
                 },
                 wgpu::BindGroupEntry {
                     binding: 4,
-                    resource: self.draw_command.as_entire_binding(),
+                    resource: self.draw_command_storage.as_entire_binding(),
                 },
             ],
         });
@@ -510,6 +524,14 @@ impl Renderer {
             command_pass.set_bind_group(0, &data_bind_group, &[]);
             command_pass.dispatch_workgroups(1, 1, 1);
         }
+
+        command_encoder.copy_buffer_to_buffer(
+            &self.draw_command_storage,
+            0,
+            &self.draw_command,
+            0,
+            std::mem::size_of::<wgpu::util::DrawIndirectArgs>() as u64,
+        );
 
         // render pass
         {
@@ -611,6 +633,9 @@ fn create_instance_and_stencil_data_recursive(
             atlas_page: page,
             in_atlas_offset: [position_in_atlas.min_x(), position_in_atlas.min_y()],
             in_atlas_size: [position_in_atlas.width(), position_in_atlas.height()],
+            _padding1: [0; 3],
+            _padding2: 0,
+            _padding3: [0; 2],
         });
 
         current_stencil = stencils.len() as u32;
@@ -635,6 +660,8 @@ fn create_instance_and_stencil_data_recursive(
             in_atlas_offset: [position_in_atlas.min_x(), position_in_atlas.min_y()],
             in_atlas_size: [position_in_atlas.width(), position_in_atlas.height()],
             stencil_index: current_stencil,
+            _padding1: 0,
+            _padding2: 0,
         });
     }
 

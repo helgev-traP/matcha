@@ -5,7 +5,7 @@ struct DrawIndirectCommand {
     first_instance: u32,
 };
 
-@group(0) @binding(3) var<storage, read> visible_instance_count: atomic<u32>;
+@group(0) @binding(3) var<storage, read_write> visible_instance_count: atomic<u32>;
 @group(0) @binding(4) var<storage, read_write> indirect_command: DrawIndirectCommand;
 
 @compute @workgroup_size(1)

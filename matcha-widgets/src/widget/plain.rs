@@ -2,10 +2,10 @@ use std::any::Any;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
+use crate::renderer::texture_color_renderer::TextureObjectRenderer;
 use matcha_core::{
     device_event::DeviceEvent,
     render_node::RenderNode,
-    texture_color_renderer::TextureObjectRenderer,
     types::range::{CoverRange, Range2D},
     ui::{
         Background, Constraints, Dom, DomComPareResult, Style, UpdateWidgetError, Widget,

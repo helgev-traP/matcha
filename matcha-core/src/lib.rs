@@ -21,15 +21,16 @@ pub mod gpu;
 // renderer of object tree
 pub mod renderer;
 
-#[path = "renderer/texture_color_renderer.rs"]
-pub mod texture_color_renderer;
-#[path = "renderer/texture_copy.rs"]
-pub mod texture_copy;
-#[path = "renderer/vertex_color_renderer.rs"]
-pub mod vertex_color_renderer;
 // allocator for area in texture atlas
 pub mod texture_allocator;
 
 // types
 pub mod types;
-pub mod vertex;
+
+// Re-export key components
+pub use app::App;
+pub use component::{Component, ComponentDom};
+pub use ui::{Dom, Style, Widget, WidgetContext, Background, Constraints};
+pub use device_event::DeviceEvent;
+pub use render_node::RenderNode;
+pub use update_flag::UpdateNotifier;
