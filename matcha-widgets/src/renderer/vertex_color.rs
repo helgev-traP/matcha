@@ -3,7 +3,8 @@ push constants:
     [[f32; 4]; 4] // composed affine matrix
 */
 
-use matcha_core::{ui::WidgetContext, vertex::ColorVertex};
+use crate::vertex::ColorVertex;
+use matcha_core::ui::WidgetContext;
 use wgpu::{PipelineCompilationOptions, util::DeviceExt};
 
 pub struct VertexColor {

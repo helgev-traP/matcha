@@ -1,23 +1,28 @@
 struct InstanceData {
     viewport_position: mat4x4<f32>,
     atlas_page: u32,
+    _padding1: u32,
     in_atlas_offset: vec2<f32>,
     in_atlas_size: vec2<f32>,
     stencil_index: u32,
+    _padding2: u32,
 };
 
 struct StencilData {
     viewport_position: mat4x4<f32>,
     viewport_position_inverse_exists: u32,
+    _padding1: array<u32, 3>,
     viewport_position_inverse: mat4x4<f32>,
     atlas_page: u32,
+    _padding2: u32,
     in_atlas_offset: vec2<f32>,
     in_atlas_size: vec2<f32>,
+    _padding3: array<u32, 2>,
 };
 
 @group(0) @binding(0) var<storage, read> all_instances: array<InstanceData>;
 @group(0) @binding(1) var<storage, read> all_stencils: array<StencilData>;
-@group(0) @binding(2) var<storage, read_write> visible_instances: array<InstanceData>;
+@group(0) @binding(2) var<storage, read_write> visible_instances: array<u32>;
 @group(0) @binding(3) var<storage, read_write> visible_instance_count: atomic<u32>;
 
 var<push_constant> normalize_matrix: mat4x4<f32>;
@@ -73,7 +78,7 @@ fn culling_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     if (is_visible) {
         let visible_count = atomicAdd(&visible_instance_count, 1u);
-        visible_instances[visible_count] = instance;
+        visible_instances[visible_count] = instance_index;
     }
 }
 
@@ -89,6 +94,10 @@ fn is_overlapping(
         flag = flag || point_in_polygon(b[i], a);
     }
     return flag;
+}
+
+fn cross_2d(a: vec2<f32>, b: vec2<f32>) -> f32 {
+    return a.x * b.y - a.y * b.x;
 }
 
 fn point_in_polygon(
@@ -110,10 +119,10 @@ fn point_in_polygon(
     );
 
     let signs = array<bool, 4>(
-        cross(points[0], lines[0]) > 0,
-        cross(points[1], lines[1]) > 0,
-        cross(points[2], lines[2]) > 0,
-        cross(points[3], lines[3]) > 0,
+        cross_2d(points[0], lines[0]) > 0.0,
+        cross_2d(points[1], lines[1]) > 0.0,
+        cross_2d(points[2], lines[2]) > 0.0,
+        cross_2d(points[3], lines[3]) > 0.0,
     );
 
     return signs[0] == signs[1] && signs[1] == signs[2] && signs[2] == signs[3];

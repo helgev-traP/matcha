@@ -1,4 +1,5 @@
+pub mod button;
+pub mod image;
 pub mod plain;
-
-// templates
 pub mod template_widget;
+pub mod text;

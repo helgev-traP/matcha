@@ -1,4 +1,4 @@
-use crate::ui::WidgetContext;
+use matcha_core::ui::WidgetContext;
 use nalgebra::Matrix4;
 use wgpu::PipelineCompilationOptions;
 

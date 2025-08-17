@@ -46,11 +46,9 @@ impl Gpu {
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: None,
-                    required_features: wgpu::Features::PUSH_CONSTANTS,
-                    required_limits: wgpu::Limits {
-                        max_push_constant_size: 128,
-                        ..wgpu::Limits::downlevel_defaults()
-                    },
+                    required_features: wgpu::Features::PUSH_CONSTANTS
+                        | wgpu::Features::VERTEX_WRITABLE_STORAGE,
+                    required_limits: adapter.limits(),
                     memory_hints: wgpu::MemoryHints::default(),
                 },
                 None,
