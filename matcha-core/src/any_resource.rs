@@ -41,6 +41,20 @@ impl AnyResource {
             .downcast()
             .expect("Type map in `CommonResource` should ensure `key == value.type_id()`")
     }
+
+    pub fn get_or_try_insert_with<T, E, F>(&self, f: F) -> Result<Arc<T>, E>
+    where
+        T: Send + Sync + 'static,
+        F: FnOnce() -> Result<T, E>,
+    {
+        Ok(self
+            .resource
+            .entry(TypeId::of::<T>())
+            .or_try_insert_with(|| f().map(|f| Arc::new(f) as Arc<dyn Any + Send + Sync>))?
+            .clone()
+            .downcast()
+            .expect("Type map in `CommonResource` should ensure `key == value.type_id()`"))
+    }
 }
 
 #[cfg(test)]

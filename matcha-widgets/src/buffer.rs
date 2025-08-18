@@ -1,10 +1,10 @@
 use matcha_core::{types::range::Range2D, ui::Style, ui::WidgetContext};
-use utils::cache::Cache;
+use utils::single_cache::SingleCache;
 
 pub struct Buffer {
     style: Vec<Box<dyn Style>>,
     buffer_format: wgpu::TextureFormat,
-    cache: Cache<[f32; 2], BufferData>,
+    cache: SingleCache<[f32; 2], BufferData>,
 }
 
 pub struct BufferData {
@@ -17,7 +17,7 @@ impl Buffer {
         Self {
             style,
             buffer_format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            cache: Cache::new(),
+            cache: SingleCache::new(),
         }
     }
 

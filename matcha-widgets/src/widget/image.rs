@@ -13,7 +13,7 @@ use matcha_core::{
     update_flag::UpdateNotifier,
 };
 use texture_atlas::atlas_simple::atlas::AtlasRegion;
-use utils::cache::Cache;
+use utils::single_cache::SingleCache;
 
 // MARK: DOM
 
@@ -24,10 +24,7 @@ pub struct Image {
 
 impl Image {
     pub fn new(image: DynamicImage) -> Box<Self> {
-        Box::new(Self {
-            label: None,
-            image,
-        })
+        Box::new(Self { label: None, image })
     }
 
     pub fn label(mut self, label: &str) -> Self {
@@ -42,7 +39,7 @@ impl<T: Send + 'static> Dom<T> for Image {
         Box::new(ImageNode {
             label: self.label.clone(),
             image: self.image.clone(),
-            texture_cache: Cache::new(),
+            texture_cache: SingleCache::new(),
             update_notifier: None,
         })
     }
@@ -55,7 +52,7 @@ impl<T: Send + 'static> Dom<T> for Image {
 pub struct ImageNode {
     label: Option<String>,
     image: DynamicImage,
-    texture_cache: Cache<u64, AtlasRegion>,
+    texture_cache: SingleCache<u64, AtlasRegion>,
     update_notifier: Option<UpdateNotifier>,
 }
 
@@ -74,7 +71,7 @@ impl<T: Send + 'static> Widget<T> for ImageNode {
             // For simplicity, we'll just replace the image.
             // A more sophisticated implementation might compare image data.
             self.image = dom.image.clone();
-            self.texture_cache = Cache::new(); // Invalidate cache
+            self.texture_cache = SingleCache::new(); // Invalidate cache
             self.label = dom.label.clone();
             Ok(())
         } else {
@@ -137,7 +134,9 @@ impl<T: Send + 'static> Widget<T> for ImageNode {
                 .allocate_color(ctx.device(), ctx.queue(), [width, height])
                 .unwrap();
 
-            texture_region.write_data(ctx.queue(), &[&rgba_image]).unwrap();
+            texture_region
+                .write_data(ctx.queue(), &[&rgba_image])
+                .unwrap();
 
             texture_region
         });

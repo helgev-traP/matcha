@@ -427,6 +427,9 @@ mod tests {
             );
             assert_eq!(*event.raw_event(), expected);
 
+            // シナリオ間のコンボ持ち越しを防ぐため、コンボ継続時間を超えて待機
+            thread::sleep(COMBO_DURATION + Duration::from_millis(10));
+
             // --- Test double click ---
             let _ = mouse_state.mouse_input(b, WinitElementState::Pressed);
             thread::sleep(Duration::from_millis(10));
@@ -447,6 +450,9 @@ mod tests {
             );
             assert_eq!(*event.raw_event(), expected);
             let _ = mouse_state.mouse_input(b, WinitElementState::Released);
+
+            // シナリオ間のコンボ持ち越しを防ぐため、コンボ継続時間を超えて待機
+            thread::sleep(COMBO_DURATION + Duration::from_millis(10));
 
             // --- Test long press ---
             let _ = mouse_state.mouse_input(b, WinitElementState::Pressed);

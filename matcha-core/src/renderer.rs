@@ -7,16 +7,43 @@ use thiserror::Error;
 const PIPELINE_CACHE_SIZE: u64 = 3;
 const COMPUTE_WORKGROUP_SIZE: u32 = 64;
 
+// PERF NOTE:
+// - BindGroup/Buffer の再利用・リング化を検討（毎フレームの生成/全量 write を抑制）
+// - 2 Compute パス（cull→command）の統合可能性検討（最後のスレッドで間接引数を書き込む）
+// - ステンシル/テクスチャの BindGroup はアトラス更新時のみ再生成
+// - カリングの多角形交差でエッジ交差のみのケース対策（必要性を確認し、線分交差チェックを追加）
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+/// InstanceData describes a single textured instance to be rendered.
+///
+/// Semantics:
+/// - `viewport_position`: 4x4 matrix that maps the unit quad vertices
+///   (defined as {[0, 0], [0, -1], [1, 0], [1, -1]} in this renderer)
+///   into the destination coordinate space prior to normalization.
+///   This matrix is consumed by the vertex shader together with the
+///   `normalize_matrix` push-constant to produce final clip-space positions.
+/// - `atlas_page`: index of the texture array layer (page) inside the texture atlas.
+/// - `in_atlas_offset`: (x, y) offset of the sub-image inside the atlas page.
+///   Expected units: NORMALIZED UVS (0.0 .. 1.0) relative to the atlas page by default.
+///   If the atlas implementation returns pixel coordinates, the host MUST convert
+///   them to normalized coordinates before writing InstanceData into GPU memory.
+/// - `in_atlas_size`: (width, height) size of the sub-image. Expected as NORMALIZED
+///   values (0.0 .. 1.0). If atlas returns pixel sizes, normalize on the host side.
+/// - `stencil_index`: index+1 of the associated stencil in the stencil data array.
+///   0 indicates "no stencil". The shader uses `stencil_index - 1` to access the stencil.
+///
+/// NOTE: Keep Rust-side layout (#[repr(C)] + bytemuck) compatible with the WGSL
+/// `InstanceData` struct (field order, types, and padding). When changing fields,
+/// update both Rust and WGSL declarations simultaneously.
 struct InstanceData {
     /// transform vertex: {[0, 0], [0, -1], [1, 0], [1, -1]} to where the texture should be rendered
     viewport_position: nalgebra::Matrix4<f32>,
     atlas_page: u32,
     _padding1: u32,
-    /// [x, y]
+    /// [x, y] (normalized UVs expected)
     in_atlas_offset: [f32; 2],
-    /// [width, height]
+    /// [width, height] (normalized size expected)
     in_atlas_size: [f32; 2],
     /// the index of the stencil in the stencil data array.
     /// 0 if no stencil is used. Use `stencil_index - 1` in the shader.
@@ -26,6 +53,21 @@ struct InstanceData {
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+/// StencilData describes a stencil polygon used to mask instances.
+///
+/// Semantics:
+/// - `viewport_position`: transform mapping the unit quad into stencil space.
+/// - `viewport_position_inverse_exists`: non-zero if `viewport_position` is invertible.
+/// - `viewport_position_inverse`: inverse matrix used by the vertex shader to compute
+///   stencil-space UV coordinates for masking.
+/// - `atlas_page`: index of the stencil atlas page (texture array layer).
+/// - `in_atlas_offset` / `in_atlas_size`: offset and size of the stencil image inside
+///   the atlas page. Expected to be NORMALIZED UVs (0.0 .. 1.0). If atlas returns
+///   pixel coordinates, the host MUST normalize them before uploading to GPU.
+///
+/// NOTE: Maintain identical memory layout between this Rust struct and the WGSL
+/// `StencilData` declaration (including explicit padding fields). Update both
+/// definitions when changing sizes/types.
 struct StencilData {
     /// transform vertex: {[0, 0], [0, -1], [1, 0], [1, -1]} to where the stencil should be rendered
     viewport_position: nalgebra::Matrix4<f32>,
@@ -38,11 +80,24 @@ struct StencilData {
     viewport_position_inverse: nalgebra::Matrix4<f32>,
     atlas_page: u32,
     _padding2: u32,
-    /// [x, y]
+    /// [x, y] (normalized UVs expected)
     in_atlas_offset: [f32; 2],
-    /// [width, height]
+    /// [width, height] (normalized size expected)
     in_atlas_size: [f32; 2],
     _padding3: [u32; 2],
+}
+
+const _: () = {
+    assert!(std::mem::size_of::<InstanceData>() == 96);
+    assert!(std::mem::size_of::<StencilData>() == 176);
+};
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct CullingPushConstants {
+    normalize_matrix: nalgebra::Matrix4<f32>,
+    instance_count: u32,
+    _pad: [u32; 3],
 }
 
 pub struct Renderer {
@@ -60,7 +115,8 @@ pub struct Renderer {
     // Pipelines
     culling_pipeline: wgpu::ComputePipeline,
     command_pipeline: wgpu::ComputePipeline,
-    render_pipeline: moka::sync::Cache<wgpu::TextureFormat, Arc<wgpu::RenderPipeline>>, // key: surface format
+    render_pipeline:
+        moka::sync::Cache<wgpu::TextureFormat, Arc<wgpu::RenderPipeline>, fxhash::FxBuildHasher>, // key: surface format
 
     // reusable buffers
     atomic_counter: wgpu::Buffer,
@@ -198,7 +254,7 @@ impl Renderer {
 
         let render_pipeline = moka::sync::Cache::builder()
             .max_capacity(PIPELINE_CACHE_SIZE)
-            .build();
+            .build_with_hasher(fxhash::FxBuildHasher::default());
 
         // Create buffers
         let atomic_counter = device.create_buffer(&wgpu::BufferDescriptor {
@@ -252,7 +308,7 @@ impl Renderer {
             bind_group_layouts: &[bind_group_layout],
             push_constant_ranges: &[wgpu::PushConstantRange {
                 stages: wgpu::ShaderStages::COMPUTE,
-                range: 0..std::mem::size_of::<nalgebra::Matrix4<f32>>() as u32,
+                range: 0..std::mem::size_of::<CullingPushConstants>() as u32,
             }],
         });
 
@@ -372,8 +428,8 @@ impl Renderer {
         objects: RenderNode,
         load_color: wgpu::Color,
         // texture atlas
-        texture_atlas: wgpu::Texture,
-        stencil_atlas: wgpu::Texture,
+        texture_atlas: &wgpu::Texture,
+        stencil_atlas: &wgpu::Texture,
     ) -> Result<(), TextureValidationError> {
         // get or create render pipeline that matches given surface format
         let render_pipeline = self.render_pipeline.get_with(surface_format, || {
@@ -486,6 +542,19 @@ impl Renderer {
 
         if !stencils.is_empty() {
             queue.write_buffer(&all_stencil_data_buffer, 0, bytemuck::cast_slice(&stencils));
+        } else {
+            let default_stencil = StencilData {
+                viewport_position: nalgebra::Matrix4::identity(),
+                viewport_position_inverse_exists: 1,
+                _padding1: [0; 3],
+                viewport_position_inverse: nalgebra::Matrix4::identity(),
+                atlas_page: 0,
+                _padding2: 0,
+                in_atlas_offset: [0.0, 0.0],
+                in_atlas_size: [0.0, 0.0],
+                _padding3: [0; 2],
+            };
+            queue.write_buffer(&all_stencil_data_buffer, 0, bytemuck::bytes_of(&default_stencil));
         }
 
         queue.write_buffer(&self.atomic_counter, 0, bytemuck::cast_slice(&[0u32]));
@@ -495,6 +564,11 @@ impl Renderer {
         });
 
         let normalize_matrix = make_normalize_matrix(destination_size);
+        let cull_pc = CullingPushConstants {
+            normalize_matrix,
+            instance_count: instances.len() as u32,
+            _pad: [0; 3],
+        };
 
         // culling compute pass
         {
@@ -505,7 +579,7 @@ impl Renderer {
                 });
             culling_pass.set_pipeline(&self.culling_pipeline);
             culling_pass.set_bind_group(0, &data_bind_group, &[]);
-            culling_pass.set_push_constants(0, bytemuck::cast_slice(normalize_matrix.as_slice()));
+            culling_pass.set_push_constants(0, bytemuck::bytes_of(&cull_pc));
             culling_pass.dispatch_workgroups(
                 (instances.len() as u32).div_ceil(COMPUTE_WORKGROUP_SIZE),
                 1,

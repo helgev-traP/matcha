@@ -70,8 +70,8 @@ impl RenderControl {
                 viewport_size,
                 object,
                 self.base_color,
-                self.texture_allocator.color_texture(),
-                self.texture_allocator.stencil_texture(),
+                &self.texture_allocator.color_texture(),
+                &self.texture_allocator.stencil_texture(),
             )
             .map_err(RenderControlError::TextureValidation)?;
 

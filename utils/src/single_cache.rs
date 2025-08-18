@@ -1,16 +1,16 @@
-pub struct Cache<K: PartialEq, V> {
+pub struct SingleCache<K: PartialEq, V> {
     data: Option<(K, V)>,
 }
 
-impl<K: PartialEq, V> Default for Cache<K, V> {
+impl<K: PartialEq, V> Default for SingleCache<K, V> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<K: PartialEq, V> Cache<K, V> {
+impl<K: PartialEq, V> SingleCache<K, V> {
     pub fn new() -> Self {
-        Cache { data: None }
+        SingleCache { data: None }
     }
 
     pub fn set(&mut self, key: K, value: V) {
