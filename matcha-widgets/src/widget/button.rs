@@ -154,7 +154,8 @@ impl<T: Send + 'static + Clone> Widget<T> for ButtonNode<T> {
                         }
                     }
                 }
-                _ => { // CursorMoved, Wheel, etc.
+                _ => {
+                    // CursorMoved, Wheel, etc.
                     if is_inside {
                         if self.state == ButtonState::Normal {
                             new_state = ButtonState::Hovered;
@@ -164,7 +165,8 @@ impl<T: Send + 'static + Clone> Widget<T> for ButtonNode<T> {
                     }
                 }
             },
-            DeviceEventData::MouseEvent { event: None, .. } => { // Cursor just moved
+            DeviceEventData::MouseEvent { event: None, .. } => {
+                // Cursor just moved
                 if is_inside {
                     if self.state == ButtonState::Normal {
                         new_state = ButtonState::Hovered;
@@ -256,11 +258,11 @@ impl<T: Send + 'static + Clone> Widget<T> for ButtonNode<T> {
             .allocate_color(ctx.device(), ctx.queue(), texture_size)
             .unwrap();
 
-        let mut encoder =
-            ctx.device()
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Button BG Render Encoder"),
-                });
+        let mut encoder = ctx
+            .device()
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Button BG Render Encoder"),
+            });
 
         {
             let mut render_pass = style_region.begin_render_pass(&mut encoder).unwrap();

@@ -1,4 +1,4 @@
-use crate::renderer::vertex_color_renderer::VertexColorRenderer;
+use crate::renderer::vertex_color::{VertexColor, TargetData, RenderData};
 use crate::vertex::ColorVertex;
 use matcha_core::{
     types::{color::Color, range::Range2D},
@@ -38,11 +38,7 @@ impl Style for SolidBox {
         offset: [f32; 2],
         ctx: &WidgetContext,
     ) {
-        let renderer = ctx
-            .any_resource()
-            .get_or_insert_with::<VertexColorRenderer, _>(|| {
-                VertexColorRenderer::new(ctx.device(), target_format)
-            });
+        let renderer = ctx.any_resource().get_or_insert_default::<VertexColor>();
 
         let vertices = [
             ColorVertex {
@@ -78,12 +74,17 @@ impl Style for SolidBox {
         let transform_matrix = screen_to_clip * local_to_screen;
 
         renderer.render(
-            ctx.device(),
             render_pass,
-            &transform_matrix,
-            &vertices,
-            &indices,
-            false,
+            TargetData {
+                target_size,
+                target_format,
+            },
+            RenderData {
+                position: offset,
+                vertices: &vertices,
+                indices: &indices,
+            },
+            ctx,
         );
     }
 }

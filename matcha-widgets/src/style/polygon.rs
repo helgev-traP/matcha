@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::renderer::vertex_color_renderer::VertexColorRenderer;
+use crate::renderer::vertex_color::{VertexColor, TargetData, RenderData};
 use crate::vertex::ColorVertex;
 use matcha_core::{
     types::{color::Color, range::Range2D},
@@ -17,7 +17,7 @@ pub struct Polygon {
     polygon: Arc<PolygonFn>,
     adaptive_affine: Arc<AdaptFn>,
     cache_the_mesh: bool,
-    caches: Mutex<utils::cache::Cache<[f32; 2], Caches>>,
+    caches: Mutex<utils::single_cache::SingleCache<[f32; 2], Caches>>,
 }
 
 #[derive(Clone)]
@@ -56,7 +56,7 @@ impl Clone for Polygon {
             polygon: self.polygon.clone(),
             adaptive_affine: self.adaptive_affine.clone(),
             cache_the_mesh: self.cache_the_mesh,
-            caches: Mutex::new(utils::cache::Cache::default()),
+            caches: Mutex::new(utils::single_cache::SingleCache::default()),
         }
     }
 }
@@ -70,7 +70,7 @@ impl Polygon {
             polygon: Arc::new(polygon),
             adaptive_affine: Arc::new(|_, _| nalgebra::Matrix4::identity()),
             cache_the_mesh: true,
-            caches: Mutex::new(utils::cache::Cache::default()),
+            caches: Mutex::new(utils::single_cache::SingleCache::default()),
         })
     }
 
@@ -205,11 +205,7 @@ impl Style for Polygon {
             &(self.polygon)(boundary_size, ctx)
         };
 
-        let renderer = ctx
-            .any_resource()
-            .get_or_insert_with::<VertexColorRenderer, _>(|| {
-                VertexColorRenderer::new(ctx.device(), target_format)
-            });
+        let renderer = ctx.any_resource().get_or_insert_default::<VertexColor>();
 
         let (vertices, indices): (Vec<ColorVertex>, Vec<u16>) = match mesh {
             Mesh::TriangleStrip { vertices } => {
@@ -280,12 +276,17 @@ impl Style for Polygon {
         let transform_matrix = screen_to_clip * local_to_screen * adaptive_affine;
 
         renderer.render(
-            ctx.device(),
             render_pass,
-            &transform_matrix,
-            &vertices,
-            &indices,
-            false,
+            TargetData {
+                target_size,
+                target_format,
+            },
+            RenderData {
+                position: offset,
+                vertices: &vertices,
+                indices: &indices,
+            },
+            ctx,
         );
     }
 }

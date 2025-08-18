@@ -52,6 +52,14 @@ pub struct RenderData<'a> {
     pub indices: &'a [u16],
 }
 
+impl Default for VertexColor {
+    fn default() -> Self {
+        Self {
+            inner: utils::RwOption::new(),
+        }
+    }
+}
+
 impl VertexColor {
     pub fn render(
         &self,
@@ -107,30 +115,17 @@ impl VertexColor {
     }
 }
 
-#[rustfmt::skip]
-fn affine_transform(
-    viewport_size: [f32; 2],
-    position: [f32; 2],
-) -> nalgebra::Matrix4<f32> {
-    let position = nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(
-        position[0],
-        position[1],
-        0.0,
-    ));
+fn affine_transform(viewport_size: [f32; 2], position: [f32; 2]) -> nalgebra::Matrix4<f32> {
+    let position =
+        nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(position[0], position[1], 0.0));
 
-    let transform = nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(
-        -1.0,
+    let scale = nalgebra::Matrix4::new_nonuniform_scaling(&nalgebra::Vector3::new(
+        2.0 / viewport_size[0],
+        -2.0 / viewport_size[1],
         1.0,
-        0.0,
     ));
 
-    let scale = nalgebra::Matrix4::new_nonuniform_scaling(
-        &nalgebra::Vector3::new(
-            2.0 / viewport_size[0],
-            -2.0 / viewport_size[1],
-            1.0,
-        ),
-    );
+    let transform = nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(-1.0, 1.0, 0.0));
 
     transform * scale * position
 }

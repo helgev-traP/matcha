@@ -30,7 +30,7 @@ pub mod types;
 // Re-export key components
 pub use app::App;
 pub use component::{Component, ComponentDom};
-pub use ui::{Dom, Style, Widget, WidgetContext, Background, Constraints};
 pub use device_event::DeviceEvent;
 pub use render_node::RenderNode;
+pub use ui::{Background, Constraints, Dom, Style, Widget, WidgetContext};
 pub use update_flag::UpdateNotifier;

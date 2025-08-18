@@ -2,7 +2,7 @@ use std::any::Any;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-use crate::renderer::texture_color_renderer::TextureObjectRenderer;
+use crate::renderer::texture_color::TextureColor;
 use matcha_core::{
     device_event::DeviceEvent,
     render_node::RenderNode,
@@ -14,7 +14,7 @@ use matcha_core::{
     update_flag::UpdateNotifier,
 };
 use texture_atlas::atlas_simple::atlas::AtlasRegion;
-use utils::cache::Cache;
+use utils::single_cache::SingleCache;
 
 // todo: more documentation
 
@@ -58,7 +58,7 @@ impl<T: Send + 'static> Dom<T> for Plain<T> {
                 .map(|content| content.build_widget_tree()),
             update_notifier: None,
             size: [0.0, 0.0],
-            style_cache: Cache::new(),
+            style_cache: SingleCache::new(),
         })
     }
 
@@ -77,7 +77,7 @@ pub struct PlainNode<T> {
     content: Option<Box<dyn Widget<T>>>,
     update_notifier: Option<UpdateNotifier>,
     size: [f32; 2],
-    style_cache: Cache<u64, AtlasRegion>,
+    style_cache: SingleCache<u64, AtlasRegion>,
 }
 
 // MARK: Widget trait

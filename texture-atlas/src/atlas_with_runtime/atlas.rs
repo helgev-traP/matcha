@@ -337,7 +337,7 @@ impl TextureAtlas {
         todo!()
     }
 
-    pub fn deallocate(&self, id: RegionId) -> Result<(), DeallocationErrorTextureNotFound> {
+    fn deallocate(&self, id: RegionId) -> Result<(), DeallocationErrorTextureNotFound> {
         todo!()
     }
 }

@@ -134,7 +134,11 @@ impl TextCosmic<'_> {
         buffer.draw(swash_cache, color, |x, y, _w, _h, color| {
             let x = (x - x_min) as usize;
             let y = (y - y_min) as usize;
-            if let Some(index) = y.checked_mul(size[0]).and_then(|v| v.checked_add(x)).and_then(|v| v.checked_mul(4)) {
+            if let Some(index) = y
+                .checked_mul(size[0])
+                .and_then(|v| v.checked_add(x))
+                .and_then(|v| v.checked_mul(4))
+            {
                 if index + 3 < data_rgba.len() {
                     data_rgba[index] = color.r();
                     data_rgba[index + 1] = color.g();
@@ -172,6 +176,32 @@ impl TextCosmic<'_> {
             view_formats: &[],
         });
 
+        // Ensure bytes_per_row aligns to wgpu's required COPY_BYTES_PER_ROW_ALIGNMENT (usually 256)
+        let bytes_per_pixel = 4u32;
+        let unaligned_bytes_per_row = size[0].saturating_mul(bytes_per_pixel);
+        let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let padded_bytes_per_row = if unaligned_bytes_per_row == 0 {
+            0
+        } else {
+            ((unaligned_bytes_per_row + align - 1) / align) * align
+        };
+
+        if padded_bytes_per_row == 0 {
+            // empty texture (width or height 0) - nothing to upload
+            return texture;
+        }
+
+        // copy into a padded buffer so bytes_per_row meets alignment requirements
+        let padded_row_bytes = padded_bytes_per_row as usize;
+        let src_row_bytes = (size[0] as usize) * (bytes_per_pixel as usize);
+        let mut padded_data = vec![0u8; padded_row_bytes * (size[1] as usize)];
+        for y in 0..(size[1] as usize) {
+            let src_off = y * src_row_bytes;
+            let dst_off = y * padded_row_bytes;
+            padded_data[dst_off..dst_off + src_row_bytes]
+                .copy_from_slice(&data[src_off..src_off + src_row_bytes]);
+        }
+
         queue.write_texture(
             wgpu::TexelCopyTextureInfo {
                 texture: &texture,
@@ -179,10 +209,10 @@ impl TextCosmic<'_> {
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
-            data,
+            &padded_data,
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(size[0] * 4),
+                bytes_per_row: Some(padded_bytes_per_row),
                 rows_per_image: Some(size[1]),
             },
             wgpu::Extent3d {

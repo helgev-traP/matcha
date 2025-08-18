@@ -1,3 +1,22 @@
+// InstanceData describes a single textured instance uploaded from the host.
+// Semantics:
+// - `viewport_position`: 4x4 matrix that maps the unit quad vertices
+//   (defined as {[0, 0], [0, -1], [1, 0], [1, -1]} in this renderer)
+//   into the destination coordinate space prior to normalization. The shader
+//   multiplies this with the push-constant `normalize_matrix` to produce
+//   clip-space positions.
+// - `atlas_page`: index of the texture array layer (page) inside the texture atlas.
+// - `in_atlas_offset`: (x, y) offset of the sub-image inside the atlas page.
+//   Expected units: NORMALIZED UVs (0.0 .. 1.0) relative to the atlas page.
+//   If the atlas implementation provides pixel coordinates, the host MUST
+//   convert them to normalized coordinates before writing InstanceData into GPU memory.
+// - `in_atlas_size`: (width, height) size of the sub-image. Expected as NORMALIZED
+//   values (0.0 .. 1.0). If atlas returns pixel sizes, normalize on the host side.
+// - `stencil_index`: index+1 of the associated stencil in the stencil data array.
+//   0 indicates "no stencil". The shader uses `stencil_index - 1` to access the stencil.
+//
+// NOTE: Keep WGSL-side layout (field order and explicit padding) compatible with the
+// Rust `InstanceData` declaration. When changing fields, update both Rust and WGSL.
 struct InstanceData {
     viewport_position: mat4x4<f32>,
     atlas_page: u32,
@@ -8,6 +27,20 @@ struct InstanceData {
     _padding2: u32,
 };
 
+// StencilData describes a stencil polygon used to mask instances.
+// Semantics:
+// - `viewport_position`: transform mapping the unit quad into stencil space.
+// - `viewport_position_inverse_exists`: non-zero if `viewport_position` is invertible.
+// - `viewport_position_inverse`: inverse matrix used by the vertex shader to compute
+//   stencil-space UV coordinates for masking.
+// - `atlas_page`: index of the stencil atlas page (texture array layer).
+// - `in_atlas_offset` / `in_atlas_size`: offset and size of the stencil image inside
+//   the atlas page. Expected to be NORMALIZED UVs (0.0 .. 1.0). If the atlas returns
+//   pixel coordinates, the host MUST normalize them before uploading to GPU.
+//
+// NOTE: Maintain identical memory layout between this WGSL struct and the Rust
+// `StencilData` declaration (including explicit padding fields). Update both
+// definitions when changing sizes/types.
 struct StencilData {
     viewport_position: mat4x4<f32>,
     viewport_position_inverse_exists: u32,
@@ -80,14 +113,14 @@ fn vertex_main(
     let stencil = all_stencils[stencil_index];
 
     // vertex position
-    let vertex_position = normalize_matrix * instance.viewport_position * VERTICES[vertex_index];
+    let pre = instance.viewport_position * VERTICES[vertex_index];
+    let vertex_position = normalize_matrix * pre;
     let texture_uv = instance.in_atlas_offset + instance.in_atlas_size * UVS[vertex_index];
 
     // stencil uv
     // space that stencil position becomes {(0, 0), (0, -1), (1, -1), (1, 0)}
-    let stencil_space_vertex_position_y_up = stencil.viewport_position_inverse * vertex_position;
-    let stencil_space_vertex_position_y_down = stencil_space_vertex_position_y_up * vec4<f32>(1.0, -1.0, 1.0, 1.0);
-    let stencil_uv = stencil_space_vertex_position_y_down.xy / stencil_space_vertex_position_y_down.w;
+    let stencil_space_y_up = stencil.viewport_position_inverse * pre;
+    let stencil_uv = (stencil_space_y_up.xy / stencil_space_y_up.w) * vec2<f32>(1.0, -1.0);
 
     // output
     var output: VertexOutput;
@@ -148,9 +181,9 @@ fn fragment_main(
     );
 
     let stencil = select(
-        /*false*/ 0.0,
+        /*false*/ 1.0,
         /*true*/  stencil_color.r,
-        use_stencil,
+        use_stencil
     );
 
     let final_color = texture_color * stencil;

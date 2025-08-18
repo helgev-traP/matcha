@@ -23,7 +23,7 @@ impl LineStripColorImpl {
         let device = ctx.device();
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("vertex_color_pipeline_layout"),
+            label: Some("line_strip_pipeline_layout"),
             bind_group_layouts: &[],
             push_constant_ranges: &[wgpu::PushConstantRange {
                 stages: wgpu::ShaderStages::VERTEX,
@@ -79,7 +79,7 @@ impl LineStripColor {
         let device = ctx.device();
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("vertex_color_vertex_buffer"),
+            label: Some("line_strip_vertex_buffer"),
             contents: bytemuck::cast_slice(vertices),
             usage: wgpu::BufferUsages::VERTEX,
         });
@@ -131,12 +131,12 @@ fn make_pipeline(
     let device = ctx.device();
 
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-        label: Some("vertex_color_shader"),
-        source: wgpu::ShaderSource::Wgsl(include_str!("vertex_color.wgsl").into()),
+        label: Some("line_strip_shader"),
+        source: wgpu::ShaderSource::Wgsl(include_str!("line_strip.wgsl").into()),
     });
 
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("vertex_color_pipeline"),
+        label: Some("line_strip_pipeline"),
         layout: Some(pipeline_layout),
         vertex: wgpu::VertexState {
             module: &shader,
