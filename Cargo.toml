@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "main",
+    "matcha",
     "matcha-core",
     "matcha-widgets",
     "renderer",
@@ -15,7 +15,7 @@ version = "0.0.5"
 
 [workspace.dependencies]
 # self
-matcha = { path = "main" }
+matcha = { path = "matcha" }
 matcha-core = { path = "matcha-core" }
 matcha-widgets = { path = "matcha-widgets" }
 text-render = { path = "text-render" }
