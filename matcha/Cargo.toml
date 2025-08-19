@@ -1,5 +1,5 @@
 [package]
-name = "main"
+name = "matcha"
 version = { workspace = true }
 edition = "2024"
 
