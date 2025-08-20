@@ -5,14 +5,11 @@ var copy_source: texture_2d<f32>;
 var texture_sampler: sampler;
 
 struct PushConstants {
-    // [width, height] of the target texture
-    size: vec2<f32>,
-    // [bottom-left, top-right] corners of the target texture
-    position: array<vec2<f32>, 2>,
-    // color transform matrix (rgba)
-    color_transform: mat4x4<f32>,
-    // color offset (rgba)
+    color_transformation: mat4x4<f32>,
     color_offset: vec4<f32>,
+    target_texture_size: vec2<f32>,
+    source_texture_position_min: vec2<f32>,
+    source_texture_position_max: vec2<f32>,
 };
 var<push_constant> pc: PushConstants;
 
@@ -21,33 +18,33 @@ var<push_constant> pc: PushConstants;
 fn vs_main(
     @builtin(vertex_index) vertex_index: u32
 ) -> VertexOutput {
-    var positions: vec2<f32>;
+    var pixel_positions: vec2<f32>;
     var tex_coords: vec2<f32>;
 
     // tex_coords are y-flipped
 
     if vertex_index == 0 {
         // top-left corner
-        positions = vec2<f32>(pc.position[0].x, pc.position[1].y);
+        pixel_positions = vec2<f32>(pc.source_texture_position_min.x, pc.source_texture_position_min.y);
         tex_coords = vec2<f32>(0.0, 0.0);
     } else if vertex_index == 1 {
         // bottom-left corner
-        positions = vec2<f32>(pc.position[0].x, pc.position[0].y);
+        pixel_positions = vec2<f32>(pc.source_texture_position_min.x, pc.source_texture_position_max.y);
         tex_coords = vec2<f32>(0.0, 1.0);
     } else if vertex_index == 2 {
-        // bottom-right corner
-        positions = vec2<f32>(pc.position[1].x, pc.position[0].y);
-        tex_coords = vec2<f32>(1.0, 1.0);
-    } else {
         // top-right corner
-        positions = vec2<f32>(pc.position[1].x, pc.position[1].y);
+        pixel_positions = vec2<f32>(pc.source_texture_position_max.x, pc.source_texture_position_min.y);
         tex_coords = vec2<f32>(1.0, 0.0);
+    } else {
+        // bottom-right corner
+        pixel_positions = vec2<f32>(pc.source_texture_position_max.x, pc.source_texture_position_max.y);
+        tex_coords = vec2<f32>(1.0, 1.0);
     }
 
-    let position = (positions * 2.0) / pc.size + vec2<f32>(-1.0, 1.0);
+    let position_y_down = (pixel_positions * 2.0) / pc.target_texture_size - vec2<f32>(1.0, 1.0);
 
     return VertexOutput(
-        vec4<f32>(position, 0.0, 1.0),
+        vec4<f32>(position_y_down.x, position_y_down.y, 0.0, 10.0),
         tex_coords
     );
 }
@@ -60,10 +57,8 @@ struct VertexOutput {
 // fragment shader
 @fragment
 fn fs_main(
-    @builtin(position) position: vec4<f32>,
     @location(0) tex_coords: vec2<f32>
 ) -> @location(0) vec4<f32> {
-    let color = textureSample(copy_source, texture_sampler, tex_coords);
-    // Apply color transform
-    return pc.color_transform * color.rgba + pc.color_offset;
+    let source_color = textureSample(copy_source, texture_sampler, tex_coords);
+    return pc.color_transformation * source_color + pc.color_offset;
 }

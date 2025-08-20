@@ -214,23 +214,26 @@ impl AtlasRegion {
             return Err(TextureError::AtlasGone);
         };
         let atlas = atlas.lock();
-        let texture_views = atlas.texture_views();
         let Some(location) = atlas.get_location(self.inner.texture_id) else {
             return Err(TextureError::TextureNotFoundInAtlas);
         };
 
-        // Create a render pass for the texture area
+        // Create a render pass for the texture area, targeting the specific array layer (page) with 2D views
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Texture Atlas Render Pass"),
-            color_attachments: texture_views
+            color_attachments: atlas
+                .layer_texture_views
                 .iter()
-                .map(|view| wgpu::RenderPassColorAttachment {
-                    view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                        store: wgpu::StoreOp::Store,
-                    },
+                .map(|views| {
+                    let view = &views[location.page_index as usize];
+                    wgpu::RenderPassColorAttachment {
+                        view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    }
                 })
                 .map(Option::Some)
                 .collect::<Vec<_>>()
@@ -336,6 +339,7 @@ pub struct TextureAtlas {
 
     textures: Vec<wgpu::Texture>,
     texture_views: Vec<wgpu::TextureView>,
+    layer_texture_views: Vec<Vec<wgpu::TextureView>>,
     size: wgpu::Extent3d,
     formats: Vec<wgpu::TextureFormat>,
 
@@ -358,7 +362,8 @@ impl TextureAtlas {
         size: wgpu::Extent3d,
         formats: &[wgpu::TextureFormat],
     ) -> Arc<Mutex<Self>> {
-        let (textures, texture_views) = Self::create_texture_and_view(device, formats, size);
+        let (textures, texture_views, layer_texture_views) =
+            Self::create_texture_and_view(device, formats, size);
 
         // Initialize the state with an empty allocator and allocation map.
         let state = TextureAtlasState {
@@ -376,6 +381,7 @@ impl TextureAtlas {
                 id: TextureAtlasId::new(),
                 textures,
                 texture_views,
+                layer_texture_views,
                 size,
                 formats: formats.to_vec(),
                 state,
@@ -425,8 +431,14 @@ impl TextureAtlas {
         size: [u32; 2],
     ) -> Result<AtlasRegion, TextureAtlasError> {
         // Check if size is smaller than the atlas size
+        if size[0] == 0 || size[1] == 0 {
+            return Err(TextureAtlasError::AllocationFailedInvalidSize { requested: size });
+        }
         if size[0] > self.size.width || size[1] > self.size.height {
-            return Err(TextureAtlasError::AllocationFailedTooLarge);
+            return Err(TextureAtlasError::AllocationFailedTooLarge {
+                requested: size,
+                available: [self.size.width, self.size.height],
+            });
         }
 
         let size = Size::new(size[0] as i32, size[1] as i32);
@@ -485,54 +497,57 @@ impl TextureAtlas {
         // Retry allocation after adding a new page
         let page_index = self.state.allocators.len() - 1;
         let allocator = &mut self.state.allocators[page_index];
-        if let Some(alloc) = allocator.allocate(size) {
-            let bounds = alloc.rectangle.to_rect();
-            let uvs = euclid::Rect::new(
-                euclid::Point2D::new(
-                    (bounds.min_x() as f32) / (self.size.width as f32),
-                    (bounds.min_y() as f32) / (self.size.height as f32),
-                ),
-                euclid::Size2D::new(
-                    (bounds.width() as f32) / (self.size.width as f32),
-                    (bounds.height() as f32) / (self.size.height as f32),
-                ),
-            );
-            let location = RegionLocation {
-                page_index: page_index as u32,
-                bounds,
-                uv: uvs,
-            };
 
-            // Create a new TextureId and Texture
-            let texture_id = RegionId {
-                texture_uuid: Uuid::new_v4(),
-            };
-            let texture_inner = RegionData {
-                texture_id,
-                atlas_id: self.id,
-                atlas: self.weak_self.clone(),
-                size: [size.width as u32, size.height as u32],
-                formats: self.formats.clone(),
-            };
-            let texture = AtlasRegion {
-                inner: Arc::new(texture_inner),
-            };
+        let alloc = match allocator.allocate(size) {
+            Some(a) => a,
+            None => {
+                return Err(TextureAtlasError::AllocationFailedNotEnoughSpace);
+            }
+        };
+        let bounds = alloc.rectangle.to_rect();
+        let uvs = euclid::Rect::new(
+            euclid::Point2D::new(
+                (bounds.min_x() as f32) / (self.size.width as f32),
+                (bounds.min_y() as f32) / (self.size.height as f32),
+            ),
+            euclid::Size2D::new(
+                (bounds.width() as f32) / (self.size.width as f32),
+                (bounds.height() as f32) / (self.size.height as f32),
+            ),
+        );
+        let location = RegionLocation {
+            page_index: page_index as u32,
+            bounds,
+            uv: uvs,
+        };
 
-            // Store the texture location and allocation id in the atlas state.
-            self.state
-                .texture_id_to_location
-                .insert(texture_id, location);
-            self.state
-                .texture_id_to_alloc_id
-                .insert(texture_id, alloc.id);
-            // Update usage
-            self.state.usage += location.bounds.area() as usize;
+        // Create a new TextureId and Texture
+        let texture_id = RegionId {
+            texture_uuid: Uuid::new_v4(),
+        };
+        let texture_inner = RegionData {
+            texture_id,
+            atlas_id: self.id,
+            atlas: self.weak_self.clone(),
+            size: [size.width as u32, size.height as u32],
+            formats: self.formats.clone(),
+        };
+        let texture = AtlasRegion {
+            inner: Arc::new(texture_inner),
+        };
 
-            // Return the allocated texture
-            Ok(texture)
-        } else {
-            panic!("We checked for enough space at the beginning, so this should never happen.");
-        }
+        // Store the texture location and allocation id in the atlas state.
+        self.state
+            .texture_id_to_location
+            .insert(texture_id, location);
+        self.state
+            .texture_id_to_alloc_id
+            .insert(texture_id, alloc.id);
+        // Update usage
+        self.state.usage += location.bounds.area() as usize;
+
+        // Return the allocated texture
+        Ok(texture)
     }
 
     /// Deallocate a texture from the atlas.
@@ -571,7 +586,7 @@ impl TextureAtlas {
             depth_or_array_layers: self.size.depth_or_array_layers + 1,
         };
 
-        let (new_textures, new_texture_views) =
+        let (new_textures, new_texture_views, new_layer_texture_views) =
             Self::create_texture_and_view(device, &self.formats, new_size);
 
         self.state.allocators.push(AtlasAllocator::new(Size::new(
@@ -600,7 +615,7 @@ impl TextureAtlas {
                 },
                 wgpu::Extent3d {
                     width: self.size.width,
-                    height: self.size.width,
+                    height: self.size.height,
                     depth_or_array_layers: self.size.depth_or_array_layers,
                 },
             );
@@ -609,8 +624,9 @@ impl TextureAtlas {
         queue.submit(Some(encoder.finish()));
 
         // Update the atlas state with the new textures and views.
-        self.textures.extend(new_textures);
-        self.texture_views.extend(new_texture_views);
+        self.textures = new_textures;
+        self.texture_views = new_texture_views;
+        self.layer_texture_views = new_layer_texture_views;
         self.size = new_size;
     }
 }
@@ -635,9 +651,14 @@ impl TextureAtlas {
         device: &wgpu::Device,
         formats: &[wgpu::TextureFormat],
         page_size: wgpu::Extent3d,
-    ) -> (Vec<wgpu::Texture>, Vec<wgpu::TextureView>) {
+    ) -> (
+        Vec<wgpu::Texture>,
+        Vec<wgpu::TextureView>,
+        Vec<Vec<wgpu::TextureView>>,
+    ) {
         let mut textures = Vec::with_capacity(formats.len());
         let mut texture_views = Vec::with_capacity(formats.len());
+        let mut layer_texture_views = Vec::with_capacity(formats.len());
 
         for &format in formats {
             let texture_label = format!("texture_atlas_texture_{format:?}");
@@ -657,17 +678,37 @@ impl TextureAtlas {
                 view_formats: &[],
             };
             let texture = device.create_texture(&texture_descriptor);
+
+            // D2Array view for sampling all layers
             let texture_view = texture.create_view(&wgpu::TextureViewDescriptor {
                 label: Some(&texture_view_label),
                 dimension: Some(wgpu::TextureViewDimension::D2Array),
                 aspect: wgpu::TextureAspect::All,
                 ..Default::default()
             });
+
+            // Per-layer D2 views for render attachments (one per array layer)
+            let mut per_layer_views = Vec::with_capacity(page_size.depth_or_array_layers as usize);
+            for layer in 0..page_size.depth_or_array_layers {
+                let layer_view = texture.create_view(&wgpu::TextureViewDescriptor {
+                    label: Some(&format!("texture_atlas_layer_view_{format:?}_{layer}")),
+                    dimension: Some(wgpu::TextureViewDimension::D2),
+                    base_mip_level: 0,
+                    mip_level_count: Some(1),
+                    base_array_layer: layer,
+                    array_layer_count: Some(1),
+                    aspect: wgpu::TextureAspect::All,
+                    ..Default::default()
+                });
+                per_layer_views.push(layer_view);
+            }
+
             textures.push(texture);
             texture_views.push(texture_view);
+            layer_texture_views.push(per_layer_views);
         }
 
-        (textures, texture_views)
+        (textures, texture_views, layer_texture_views)
     }
 }
 
@@ -692,8 +733,15 @@ pub enum TextureAtlasError {
     AllocationFailedNotEnoughSpace,
     #[error("Resizing the atlas failed because there was not enough space for all the textures.")]
     ResizeFailedNotEnoughSpace,
-    #[error("Allocation failed because the requested size is too large for the atlas.")]
-    AllocationFailedTooLarge,
+    #[error(
+        "Allocation failed because the requested size is too large for the atlas. requested: {requested:?} available: {available:?}"
+    )]
+    AllocationFailedTooLarge {
+        requested: [u32; 2],
+        available: [u32; 2],
+    },
+    #[error("Allocation failed because the requested size is invalid. requested: {requested:?}")]
+    AllocationFailedInvalidSize { requested: [u32; 2] },
 }
 
 #[cfg(test)]

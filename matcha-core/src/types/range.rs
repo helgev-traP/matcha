@@ -8,6 +8,15 @@ pub struct Range2D<T: Float = f32> {
 
 // MARK: Initialization
 
+impl<T: Float> Default for Range2D<T> {
+    fn default() -> Self {
+        Range2D {
+            x: [T::zero(), T::zero()],
+            y: [T::zero(), T::zero()],
+        }
+    }
+}
+
 impl<T: Float> Range2D<T> {
     pub const fn new(x: [T; 2], y: [T; 2]) -> Self {
         Range2D { x, y }

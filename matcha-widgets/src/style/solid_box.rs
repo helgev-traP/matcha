@@ -1,4 +1,4 @@
-use crate::renderer::vertex_color::{VertexColor, TargetData, RenderData};
+use crate::renderer::vertex_color::{RenderData, TargetData, VertexColor};
 use crate::vertex::ColorVertex;
 use matcha_core::{
     types::{color::Color, range::Range2D},

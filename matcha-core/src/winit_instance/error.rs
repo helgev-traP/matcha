@@ -14,8 +14,8 @@ pub enum InitError {
 
 #[derive(Debug, Error)]
 pub enum RenderError {
-    #[error("Window surface error")]
-    WindowSurface,
+    #[error("Window surface error: {0}")]
+    WindowSurface(&'static str),
     #[error(transparent)]
     Surface(#[from] wgpu::SurfaceError),
     #[error(transparent)]

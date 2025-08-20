@@ -45,7 +45,7 @@ impl Gpu {
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
-                    label: None,
+                    label: Some("Gpu: request device"),
                     required_features: wgpu::Features::PUSH_CONSTANTS
                         | wgpu::Features::VERTEX_WRITABLE_STORAGE,
                     required_limits: adapter.limits(),

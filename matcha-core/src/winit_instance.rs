@@ -105,11 +105,18 @@ impl<
     InnerEvent: 'static,
 > WinitInstance<Model, Message, B, Event, InnerEvent>
 {
-    fn render(&mut self) -> Result<(), error::RenderError> {
-        let surface_texture = self
-            .window
-            .get_current_texture()
-            .ok_or(error::RenderError::WindowSurface)??;
+    fn render(&mut self, force: bool) -> Result<(), error::RenderError> {
+        // Check if the UI needs to be re-rendered before getting the surface texture
+        if !self.ui_control.needs_render() && !force {
+            return Ok(());
+        }
+
+        let surface_texture =
+            self.window
+                .get_current_texture()
+                .ok_or(error::RenderError::WindowSurface(
+                    "Failed to get current texture",
+                ))??;
 
         self.benchmarker
             .with_benchmark(|| -> Result<(), error::RenderError> {
@@ -130,16 +137,11 @@ impl<
 
                 let object = {
                     let background = Background::new(&target_view, [0.0, 0.0]);
-                    self.tokio_runtime
-                        .block_on(self.ui_control.render_to_object_tree(
-                            ctx.viewport_size(),
-                            background,
-                            &ctx,
-                        ))
-                };
-
-                let Some(object) = object else {
-                    return Ok(());
+                    self.tokio_runtime.block_on(self.ui_control.render(
+                        ctx.viewport_size(),
+                        background,
+                        &ctx,
+                    ))
                 };
 
                 let size = self.window.inner_size().expect(
@@ -171,6 +173,29 @@ impl<
         surface_texture.present();
 
         Ok(())
+    }
+
+    fn try_render(&mut self, force: bool) {
+        if let Err(e) = self.render(force) {
+            match e {
+                error::RenderError::Surface(
+                    wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated,
+                ) => {
+                    // reconfigure the surface
+                    let size = self
+                        .window
+                        .inner_size()
+                        .expect("Window must exist to render");
+                    self.window
+                        .set_size(size, self.render_control.device_queue().device);
+                    // request redraw in the next frame
+                    self.window.request_redraw();
+                }
+                _ => {
+                    eprintln!("Render error: {e:?}");
+                }
+            }
+        }
     }
 }
 
@@ -214,32 +239,13 @@ impl<
         // events which are to be handled by render system
         match event {
             winit::event::WindowEvent::RedrawRequested => {
-                if let Err(e) = self.render() {
-                    match e {
-                        error::RenderError::Surface(
-                            wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated,
-                        ) => {
-                            // reconfigure the surface
-                            let size = self
-                                .window
-                                .inner_size()
-                                .expect("Window must exist to render");
-                            self.window
-                                .set_size(size, self.render_control.device_queue().device);
-                            // request redraw in the next frame
-                            self.window.request_redraw();
-                        }
-                        _ => {
-                            eprintln!("Render error: {e:?}");
-                        }
-                    }
-                }
+                self.try_render(false);
             }
             winit::event::WindowEvent::Resized(physical_size) => {
                 // update the window size
                 self.window
                     .set_size(physical_size, self.render_control.device_queue().device);
-                self.window.request_redraw();
+                self.try_render(true);
             }
             _ => {}
         }

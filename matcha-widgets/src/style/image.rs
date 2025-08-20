@@ -4,98 +4,294 @@ use dashmap::DashMap;
 use image::GenericImageView;
 use matcha_core::{types::range::Range2D, ui::Style, ui::WidgetContext};
 
-// MARK: Cache
+use crate::types::size::Size;
 
 #[derive(Default)]
 struct ImageCache {
-    map: DashMap<ImageCacheKey, Option<ImageCacheData>, fxhash::FxBuildHasher>,
+    map: DashMap<ImageSourceKey, Option<ImageCacheData>, fxhash::FxBuildHasher>,
+}
+
+#[derive(Clone)]
+pub enum ImageSource {
+    Path(String),
+    StaticSlice { data: &'static [u8] },
+    Arc(Arc<Vec<u8>>),
+}
+
+impl ImageSource {
+    fn to_key(&self) -> ImageSourceKey {
+        match self {
+            ImageSource::Path(path) => ImageSourceKey::Path(path.clone()),
+            ImageSource::StaticSlice { data } => ImageSourceKey::StaticSlice {
+                ptr: data.as_ptr() as usize,
+                size: data.len(),
+            },
+            ImageSource::Arc(data) => ImageSourceKey::Arc {
+                ptr: Arc::as_ptr(data) as usize,
+                size: data.len(),
+            },
+        }
+    }
+}
+
+impl From<&str> for ImageSource {
+    fn from(path: &str) -> Self {
+        ImageSource::Path(path.to_string())
+    }
+}
+
+impl From<String> for ImageSource {
+    fn from(path: String) -> Self {
+        ImageSource::Path(path)
+    }
+}
+
+impl<const N: usize> From<&'static [u8; N]> for ImageSource {
+    fn from(data: &'static [u8; N]) -> Self {
+        ImageSource::StaticSlice { data }
+    }
+}
+
+impl From<Arc<Vec<u8>>> for ImageSource {
+    fn from(data: Arc<Vec<u8>>) -> Self {
+        ImageSource::Arc(data)
+    }
+}
+
+impl From<Vec<u8>> for ImageSource {
+    fn from(data: Vec<u8>) -> Self {
+        ImageSource::Arc(Arc::new(data))
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-enum ImageCacheKey {
+enum ImageSourceKey {
     /// Full path to the image file
     Path(String),
-    /// Hash of the image data
-    Data(u64),
+    /// pointer address (as usize) and size of the image data
+    /// This is safe because the data is guaranteed to be static
+    StaticSlice {
+        ptr: usize,
+        size: usize,
+    },
+    Arc {
+        ptr: usize,
+        size: usize,
+    },
 }
 
 struct ImageCacheData {
-    data: image::DynamicImage,
+    width: u32,
+    height: u32,
     color_type: image::ColorType,
     texture: wgpu::Texture,
 }
 
 // MARK: Image Construct
 
-type SizeFn =
-    dyn for<'a> Fn([f32; 2], [f32; 2], &'a WidgetContext) -> [f32; 2] + Send + Sync + 'static;
+pub enum HAlign {
+    Left,
+    Center,
+    Right,
+}
+
+pub enum VAlign {
+    Top,
+    Center,
+    Bottom,
+}
 
 #[derive(Clone)]
 pub struct Image {
     image: ImageSource,
-    size: Arc<SizeFn>,
-    offset: Arc<SizeFn>,
-}
-
-#[derive(Clone)]
-pub enum ImageSource {
-    Path(String),
-    Slice { data: &'static [u8], hash: u64 },
-    Vec { data: Vec<u8>, hash: u64 },
+    size: Arc<[Size; 2]>,
+    offset: Arc<[Size; 2]>,
 }
 
 impl Image {
-    pub fn new(source: impl IntoImageSource) -> Self {
+    pub fn new(source: impl Into<ImageSource>) -> Self {
         Self {
-            image: source.into_source(),
-            size: Arc::new(|_, size, _| size),
-            offset: Arc::new(|_, _, _| [0.0, 0.0]),
+            image: source.into(),
+            size: Arc::new([Size::child(1.0), Size::child(1.0)]),
+            offset: Arc::new([Size::px(0.0), Size::px(0.0)]),
         }
     }
 
-    pub fn size<F>(mut self, size: F) -> Self
-    where
-        F: Fn([f32; 2], [f32; 2], &WidgetContext) -> [f32; 2] + Send + Sync + 'static,
-    {
+    pub fn stretch_to_boundary(mut self) -> Self {
+        self.size = Arc::new([Size::parent(1.0), Size::parent(1.0)]);
+        self
+    }
+
+    /// Set absolute size in pixels.
+    pub fn size_px(mut self, w: f32, h: f32) -> Self {
+        self.size = Arc::new([Size::px(w), Size::px(h)]);
+        self
+    }
+
+    /// Set width in pixels, keep height as is.
+    pub fn size_px_w(mut self, w: f32) -> Self {
+        let h = self.size[1].clone();
+        self.size = Arc::new([Size::px(w), h]);
+        self
+    }
+
+    /// Set height in pixels, keep width as is.
+    pub fn size_px_h(mut self, h: f32) -> Self {
+        let w = self.size[0].clone();
+        self.size = Arc::new([w, Size::px(h)]);
+        self
+    }
+
+    /// Set size as percentage of parent (percent values, e.g. 50.0 == 50%).
+    pub fn size_percent(mut self, w_percent: f32, h_percent: f32) -> Self {
+        self.size = Arc::new([
+            Size::parent(w_percent / 100.0),
+            Size::parent(h_percent / 100.0),
+        ]);
+        self
+    }
+
+    /// Set absolute offset in pixels.
+    pub fn offset_px(mut self, x: f32, y: f32) -> Self {
+        self.offset = Arc::new([Size::px(x), Size::px(y)]);
+        self
+    }
+
+    /// Set offset as percentage of parent (percent values).
+    pub fn offset_percent(mut self, x_percent: f32, y_percent: f32) -> Self {
+        self.offset = Arc::new([
+            Size::parent(x_percent / 100.0),
+            Size::parent(y_percent / 100.0),
+        ]);
+        self
+    }
+
+    /// Align center both axes.
+    pub fn align_center(mut self) -> Self {
+        // offset = (parent - child) * 0.5
+        let ox = Size::size_f(|parent, child, _ctx| {
+            let parent_w = parent[0].unwrap_or(child.get()[0]);
+            (parent_w - child.get()[0]) * 0.5
+        });
+        let oy = Size::size_f(|parent, child, _ctx| {
+            let parent_h = parent[1].unwrap_or(child.get()[1]);
+            (parent_h - child.get()[1]) * 0.5
+        });
+        self.offset = Arc::new([ox, oy]);
+        self
+    }
+
+    /// Align horizontally (left/center/right) with optional margin (Size).
+    pub fn align_h(mut self, align: HAlign, margin: Size) -> Self {
+        let m1 = margin.clone();
+        let m2 = margin.clone();
+        let m3 = margin.clone();
+        let ox = match align {
+            HAlign::Left => {
+                Size::size_f(move |_parent, _child, ctx| m1.calc([None, None], || [0.0, 0.0], ctx))
+            }
+            HAlign::Center => Size::size_f(move |parent, child, ctx| {
+                let parent_w = parent[0].unwrap_or(child.get()[0]);
+                (parent_w - child.get()[0]) * 0.5
+                    + m2.calc(parent, || [child.get()[0], child.get()[1]], ctx)
+            }),
+            HAlign::Right => Size::size_f(move |parent, child, ctx| {
+                let parent_w = parent[0].unwrap_or(child.get()[0]);
+                parent_w
+                    - child.get()[0]
+                    - m3.calc(parent, || [child.get()[0], child.get()[1]], ctx)
+            }),
+        };
+        let oy = self.offset[1].clone();
+        self.offset = Arc::new([ox, oy]);
+        self
+    }
+
+    /// Align vertically (top/center/bottom) with optional margin (Size).
+    pub fn align_v(mut self, align: VAlign, margin: Size) -> Self {
+        let m1 = margin.clone();
+        let m2 = margin.clone();
+        let m3 = margin.clone();
+        let oy = match align {
+            VAlign::Top => {
+                Size::size_f(move |_parent, _child, ctx| m1.calc([None, None], || [0.0, 0.0], ctx))
+            }
+            VAlign::Center => Size::size_f(move |parent, child, ctx| {
+                let parent_h = parent[1].unwrap_or(child.get()[1]);
+                (parent_h - child.get()[1]) * 0.5
+                    + m2.calc(parent, || [child.get()[0], child.get()[1]], ctx)
+            }),
+            VAlign::Bottom => Size::size_f(move |parent, child, ctx| {
+                let parent_h = parent[1].unwrap_or(child.get()[1]);
+                parent_h
+                    - child.get()[1]
+                    - m3.calc(parent, || [child.get()[0], child.get()[1]], ctx)
+            }),
+        };
+        let ox = self.offset[0].clone();
+        self.offset = Arc::new([ox, oy]);
+        self
+    }
+
+    /// Generic anchor: sets horizontal and vertical alignment with margins.
+    pub fn anchor(mut self, halign: HAlign, valign: VAlign, margin: [Size; 2]) -> Self {
+        self = self.align_h(halign, margin[0].clone());
+        self = self.align_v(valign, margin[1].clone());
+        self
+    }
+
+    // Existing simple setters kept below (they will overwrite)
+    pub fn size(mut self, size: [Size; 2]) -> Self {
         self.size = Arc::new(size);
         self
     }
 
-    fn key(&self) -> ImageCacheKey {
-        match &self.image {
-            ImageSource::Path(path) => ImageCacheKey::Path(path.clone()),
-            ImageSource::Slice { hash, .. } | ImageSource::Vec { hash, .. } => {
-                ImageCacheKey::Data(*hash)
-            }
-        }
+    pub fn offset(mut self, offset: [Size; 2]) -> Self {
+        self.offset = Arc::new(offset);
+        self
     }
 }
 
-pub trait IntoImageSource {
-    fn into_source(self) -> ImageSource;
-}
-
-impl IntoImageSource for &str {
-    fn into_source(self) -> ImageSource {
-        ImageSource::Path(self.to_string())
+impl Image {
+    fn key(&self) -> ImageSourceKey {
+        self.image.to_key()
     }
 }
 
-impl IntoImageSource for (&'static [u8], u64) {
-    fn into_source(self) -> ImageSource {
-        ImageSource::Slice {
-            data: self.0,
-            hash: self.1,
-        }
+// helper methods
+impl Image {
+    fn boundary_opt(boundary_size: [f32; 2]) -> [Option<f32>; 2] {
+        [Some(boundary_size[0]), Some(boundary_size[1])]
     }
-}
 
-impl IntoImageSource for (Vec<u8>, u64) {
-    fn into_source(self) -> ImageSource {
-        ImageSource::Vec {
-            data: self.0,
-            hash: self.1,
-        }
+    fn calc_layout(
+        &self,
+        boundary: [Option<f32>; 2],
+        base: [f32; 2],
+        ctx: &WidgetContext,
+    ) -> (f32, f32, f32, f32) {
+        let size_x = self.size[0].calc(boundary, || base, ctx);
+        let size_y = self.size[1].calc(boundary, || base, ctx);
+        let offset_x = self.offset[0].calc(boundary, || base, ctx);
+        let offset_y = self.offset[1].calc(boundary, || base, ctx);
+        (size_x, size_y, offset_x, offset_y)
+    }
+
+    fn with_image<R>(
+        &self,
+        ctx: &WidgetContext,
+        f: impl FnOnce(&ImageCacheData) -> R,
+    ) -> Option<R> {
+        let cache_map = ctx.any_resource().get_or_insert_default::<ImageCache>();
+        let image_cache = cache_map
+            .map
+            .entry(self.key())
+            .or_insert_with(|| load_image_to_texture(&self.image, ctx));
+
+        let Some(image) = image_cache.value() else {
+            return None;
+        };
+        Some(f(image))
     }
 }
 
@@ -106,63 +302,72 @@ impl Style for Image {
         Box::new(self.clone())
     }
 
+    fn required_size(&self, ctx: &WidgetContext) -> Option<[f32; 2]> {
+        self.with_image(ctx, |image| [image.width as f32, image.height as f32])
+    }
+
     fn is_inside(&self, position: [f32; 2], boundary_size: [f32; 2], ctx: &WidgetContext) -> bool {
         let draw_range = self.draw_range(boundary_size, ctx);
         draw_range.contains(position)
     }
 
     fn draw_range(&self, boundary_size: [f32; 2], ctx: &WidgetContext) -> Range2D<f32> {
-        let cache_map = ctx.any_resource().get_or_insert_default::<ImageCache>();
-        let key = self.key();
-        let image_cache = cache_map
-            .map
-            .entry(key)
-            .or_insert_with(|| image_data(&self.image, ctx));
-
-        let Some(image) = image_cache.value() else {
-            // If the image is not loaded, return an empty range
-            return Range2D::new([0.0, 0.0], [0.0, 0.0]);
-        };
-
-        let (width, height) = image.data.dimensions();
-
-        let size = (self.size)([width as f32, height as f32], boundary_size, ctx);
-        let offset = (self.offset)([width as f32, height as f32], boundary_size, ctx);
-
-        Range2D::new(
-            [offset[0], -size[1] - offset[1]],
-            [size[0] + offset[0], -offset[1]],
-        )
+        self.with_image(ctx, |image| {
+            let base = [image.width as f32, image.height as f32];
+            let boundary = Self::boundary_opt(boundary_size);
+            let (size_x, size_y, offset_x, offset_y) = self.calc_layout(boundary, base, ctx);
+            Range2D::new([offset_x, offset_x + size_x], [offset_y, offset_y + size_y])
+        })
+        .unwrap_or_default()
     }
 
     fn draw(
         &self,
-        _render_pass: &mut wgpu::RenderPass<'_>,
-        _target_size: [u32; 2],
-        _target_format: wgpu::TextureFormat,
-        _boundary_size: [f32; 2],
-        _offset: [f32; 2],
+        render_pass: &mut wgpu::RenderPass<'_>,
+        target_size: [u32; 2],
+        target_format: wgpu::TextureFormat,
+        boundary_size: [f32; 2],
+        offset: [f32; 2],
         ctx: &WidgetContext,
     ) {
-        // TODO: Reimplement with texture atlas
-        let cache_map = ctx.any_resource().get_or_insert_default::<ImageCache>();
-        let key = self.key();
-        let _image_cache = cache_map
-            .map
-            .entry(key)
-            .or_insert_with(|| image_data(&self.image, ctx));
+        self.with_image(ctx, |image| {
+            let base = [image.width as f32, image.height as f32];
+            let boundary = Self::boundary_opt(boundary_size);
+            let (size_x, size_y, offset_x, offset_y) = self.calc_layout(boundary, base, ctx);
+            let draw_offset = [offset_x + offset[0], offset_y + offset[1]];
 
-        // Drawing logic is commented out until texture atlas integration is complete.
+            let texture_copy = crate::renderer::texture_copy::TextureCopy::default();
+            texture_copy.render(
+                render_pass,
+                crate::renderer::texture_copy::TargetData {
+                    target_size,
+                    target_format,
+                },
+                crate::renderer::texture_copy::RenderData {
+                    source_texture_view: &image
+                        .texture
+                        .create_view(&wgpu::TextureViewDescriptor::default()),
+                    source_texture_position_min: [draw_offset[0], draw_offset[1]],
+                    source_texture_position_max: [draw_offset[0] + size_x, draw_offset[1] + size_y],
+                    color_transformation: None,
+                    color_offset: None,
+                },
+                ctx,
+            );
+        });
     }
 }
 
-fn image_data(image_source: &ImageSource, ctx: &WidgetContext) -> Option<ImageCacheData> {
+fn load_image_to_texture(
+    image_source: &ImageSource,
+    ctx: &WidgetContext,
+) -> Option<ImageCacheData> {
     // load the image from the source
 
     let dynamic_image = match image_source {
         ImageSource::Path(path) => image::open(path).ok(),
-        ImageSource::Slice { data, .. } => image::load_from_memory(data).ok(),
-        ImageSource::Vec { data, .. } => image::load_from_memory(data).ok(),
+        ImageSource::StaticSlice { data, .. } => image::load_from_memory(data).ok(),
+        ImageSource::Arc(data) => image::load_from_memory(data).ok(),
     };
 
     let Some(dynamic_image) = dynamic_image else {
@@ -171,37 +376,17 @@ fn image_data(image_source: &ImageSource, ctx: &WidgetContext) -> Option<ImageCa
     };
 
     // Create a texture and upload image data
+    let (image, format) = prepare_image_and_format(dynamic_image);
+    make_cache(image, format, ctx).into()
+}
 
-    match dynamic_image.color() {
-        image::ColorType::L8 => make_cache(dynamic_image, wgpu::TextureFormat::R8Snorm, ctx),
-        image::ColorType::L16 => make_cache(dynamic_image, wgpu::TextureFormat::R16Snorm, ctx),
-        image::ColorType::La8 => make_cache(dynamic_image, wgpu::TextureFormat::Rg8Snorm, ctx),
-        image::ColorType::La16 => make_cache(dynamic_image, wgpu::TextureFormat::Rg16Snorm, ctx),
-        image::ColorType::Rgb8 => {
-            // Convert to RGBA8 because wgpu do not support RGB8 format
-            let image = image::DynamicImage::ImageRgba8(dynamic_image.to_rgba8());
-            make_cache(image, wgpu::TextureFormat::Rgba8Unorm, ctx)
-        }
-        image::ColorType::Rgb16 => {
-            // Convert to RGBA16 because wgpu do not support RGB16 format
-            let image = image::DynamicImage::ImageRgba16(dynamic_image.to_rgba16());
-            make_cache(image, wgpu::TextureFormat::Rgba16Unorm, ctx)
-        }
-        image::ColorType::Rgba8 => make_cache(dynamic_image, wgpu::TextureFormat::Rgba8Unorm, ctx),
-        image::ColorType::Rgba16 => {
-            make_cache(dynamic_image, wgpu::TextureFormat::Rgba16Unorm, ctx)
-        }
-        image::ColorType::Rgb32F => {
-            // Convert to RGBA32F because wgpu do not support RGB32F format
-            let image = image::DynamicImage::ImageRgba32F(dynamic_image.to_rgba32f());
-            make_cache(image, wgpu::TextureFormat::Rgba32Float, ctx)
-        }
-        image::ColorType::Rgba32F => {
-            make_cache(dynamic_image, wgpu::TextureFormat::Rgba32Float, ctx)
-        }
-        _ => unimplemented!("Unsupported image color type: {:?}", dynamic_image.color()),
-    }
-    .into()
+fn prepare_image_and_format(
+    dynamic_image: image::DynamicImage,
+) -> (image::DynamicImage, wgpu::TextureFormat) {
+    // Normalize all incoming images to RGBA8 to simplify bytes_per_row handling.
+    // This avoids format-dependent byte-per-pixel calculations and prevents copy overruns.
+    let image_rgba8 = image::DynamicImage::ImageRgba8(dynamic_image.to_rgba8());
+    (image_rgba8, wgpu::TextureFormat::Rgba8Unorm)
 }
 
 fn make_cache(
@@ -231,6 +416,7 @@ fn make_cache(
         view_formats: &[],
     });
 
+    // We converted image bytes to RGBA8 in prepare_image_and_format, so use 4 bytes per pixel.]
     queue.write_texture(
         wgpu::TexelCopyTextureInfo {
             texture: &texture,
@@ -241,7 +427,8 @@ fn make_cache(
         data,
         wgpu::TexelCopyBufferLayout {
             offset: 0,
-            bytes_per_row: Some(format.target_pixel_byte_cost().unwrap() * width),
+            // use explicit 4 bytes per pixel for RGBA8
+            bytes_per_row: Some(4 * width),
             rows_per_image: None,
         },
         wgpu::Extent3d {
@@ -254,13 +441,15 @@ fn make_cache(
     let color_type = image.color();
 
     ImageCacheData {
-        data: image,
+        width,
+        height,
         color_type,
         texture,
     }
 }
 
 #[rustfmt::skip]
+// note: this function is currently not being used but may be useful in the future
 fn color_transform(color_type: image::ColorType) -> nalgebra::Matrix4<f32> {
     match color_type {
         // stored as r
@@ -295,6 +484,7 @@ fn color_transform(color_type: image::ColorType) -> nalgebra::Matrix4<f32> {
     }
 }
 
+// note: this function is currently not being used but may be useful in the future
 fn color_offset(color_type: image::ColorType) -> [f32; 4] {
     match color_type {
         // alpha is not stored, so we set it to 1.0

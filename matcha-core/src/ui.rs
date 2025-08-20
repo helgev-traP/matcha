@@ -152,6 +152,7 @@ impl WidgetContext<'_> {
 ///
 /// The `Dom` tree is a stateless, declarative representation of the UI based on the application's `Model`.
 /// Its primary responsibility is to build the stateful `Widget` tree.
+/// Note: Coordinates used by the Dom/Widget/Style APIs use the top-left as the origin, the Y axis points downwards, and units are pixels.
 #[async_trait::async_trait]
 pub trait Dom<T>: Sync + Any {
     /// Builds the corresponding stateful `Widget` tree from this `Dom` node.
@@ -177,16 +178,31 @@ pub trait Style: Send + Sync {
     /// Creates a clone of this style inside a `Box`.
     fn clone_boxed(&self) -> Box<dyn Style>;
 
+    /// Calculates the minimum size required to draw this style.
+    ///
+    /// This method returns the intrinsic size of the visual content defined by the style,
+    /// such as the dimensions of an image or the bounding box of a piece of text.
+    /// The layout system may use this information to determine the widget's final size.
+    ///
+    /// # Returns
+    ///
+    /// An array `[width, height]` representing the required size in pixels.
+    fn required_size(&self, ctx: &WidgetContext) -> Option<[f32; 2]> {
+        let _ = ctx;
+        None
+    }
+
     /// Checks if a given position is inside the shape defined by this style.
     fn is_inside(&self, position: [f32; 2], boundary_size: [f32; 2], ctx: &WidgetContext) -> bool;
 
-    /// Calculates the drawing range of the style. The y-axis in `Range2D` points upward.
+    /// Calculates the drawing range of the style.
+    /// Coordinates are in pixels with the origin at the top-left and the Y axis pointing downwards.
     fn draw_range(&self, boundary_size: [f32; 2], ctx: &WidgetContext) -> Range2D<f32>;
 
     /// Draws the style onto the render pass.
     ///
     /// - `offset`: The position of the upper left corner of the texture relative to the upper left corner of the boundary.
-    /// - The y-axis of `offset` points upward.
+    /// - Coordinates are in pixels; the origin is the upper-left of the boundary and the Y axis points downwards.
     fn draw(
         &self,
         render_pass: &mut wgpu::RenderPass<'_>,
@@ -217,6 +233,7 @@ pub enum UpdateWidgetError {
 ///
 /// The `Widget` tree is constructed from the `Dom` tree and holds the state of the UI,
 /// including layout information and animation state. It follows a specific lifecycle for processing.
+/// Note: Widget/Style APIs operate in a coordinate system with the origin at the top-left, the Y axis pointing downwards, and units in pixels.
 ///
 /// # Lifecycle
 ///

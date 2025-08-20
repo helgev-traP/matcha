@@ -24,6 +24,9 @@ pub struct Plain<T> {
     label: Option<String>,
     style: Vec<Box<dyn Style>>,
     content: Option<Box<dyn Dom<T>>>,
+
+    // fix
+    boundary_size: [f32; 2],
 }
 
 impl<T> Plain<T> {
@@ -32,6 +35,7 @@ impl<T> Plain<T> {
             label: label.map(|s| s.to_string()),
             style: Vec::new(),
             content: None,
+            boundary_size: [0.0, 0.0],
         })
     }
 
@@ -42,6 +46,11 @@ impl<T> Plain<T> {
 
     pub fn content(mut self, content: Box<dyn Dom<T>>) -> Self {
         self.content = Some(content);
+        self
+    }
+
+    pub fn boundary_size(mut self, size: [f32; 2]) -> Self {
+        self.boundary_size = size;
         self
     }
 }
@@ -57,7 +66,7 @@ impl<T: Send + 'static> Dom<T> for Plain<T> {
                 .as_ref()
                 .map(|content| content.build_widget_tree()),
             update_notifier: None,
-            size: [0.0, 0.0],
+            size: self.boundary_size,
             style_cache: SingleCache::new(),
         })
     }
@@ -77,7 +86,7 @@ pub struct PlainNode<T> {
     content: Option<Box<dyn Widget<T>>>,
     update_notifier: Option<UpdateNotifier>,
     size: [f32; 2],
-    style_cache: SingleCache<u64, AtlasRegion>,
+    style_cache: SingleCache<u64, Option<AtlasRegion>>,
 }
 
 // MARK: Widget trait
@@ -175,7 +184,7 @@ impl<T: Send + 'static> Widget<T> for PlainNode<T> {
             self.size.iter().for_each(|f| f.to_bits().hash(&mut hasher));
             let hash = hasher.finish();
 
-            let (_, style_texture) = self.style_cache.get_or_insert_with(hash, || {
+            let (_, style_texture_opt) = self.style_cache.get_or_insert_with(hash, || {
                 let mut x_min = f32::MAX;
                 let mut x_max = f32::MIN;
                 let mut y_min = f32::MAX;
@@ -185,16 +194,25 @@ impl<T: Send + 'static> Widget<T> for PlainNode<T> {
                     let range = style.draw_range(self.size, ctx);
                     x_min = x_min.min(range.left());
                     x_max = x_max.max(range.right());
-                    y_min = y_min.min(range.bottom());
-                    y_max = y_max.max(range.top());
+                    y_min = y_min.min(range.top());
+                    y_max = y_max.max(range.bottom());
                 }
 
-                let texture_size = [(x_max - x_min).ceil() as u32, (y_max - y_min).ceil() as u32];
+                let width = ((x_max - x_min).ceil()).max(0.0) as u32;
+                let height = ((y_max - y_min).ceil()).max(0.0) as u32;
+                if width == 0 || height == 0 {
+                    return None;
+                }
+                let texture_size = [width, height];
 
-                let style_region = ctx
-                    .texture_atlas()
-                    .allocate_color(ctx.device(), ctx.queue(), texture_size)
-                    .unwrap();
+                let style_region = match ctx.texture_atlas().allocate_color(
+                    ctx.device(),
+                    ctx.queue(),
+                    texture_size,
+                ) {
+                    Ok(r) => r,
+                    Err(_) => return None,
+                };
 
                 let mut encoder =
                     ctx.device()
@@ -203,7 +221,13 @@ impl<T: Send + 'static> Widget<T> for PlainNode<T> {
                         });
 
                 {
-                    let mut render_pass = style_region.begin_render_pass(&mut encoder).unwrap();
+                    let mut render_pass = match style_region.begin_render_pass(&mut encoder) {
+                        Ok(rp) => rp,
+                        Err(_) => {
+                            // Skip drawing if we cannot begin a render pass (e.g., invalid view)
+                            return None;
+                        }
+                    };
 
                     for style in &self.style {
                         style.draw(
@@ -218,11 +242,15 @@ impl<T: Send + 'static> Widget<T> for PlainNode<T> {
                 }
                 ctx.queue().submit(Some(encoder.finish()));
 
-                style_region
+                Some(style_region)
             });
 
-            render_node.texture_and_position =
-                Some((style_texture.clone(), nalgebra::Matrix4::identity()));
+            if let Some(style_texture) = style_texture_opt.clone() {
+                render_node.texture_and_position = Some((
+                    style_texture,
+                    nalgebra::Matrix4::from_scaled_axis(nalgebra::Vector3::new(self.size[0], self.size[1], 1.0)),
+                ));
+            }
         }
 
         if let Some(content) = &mut self.content {

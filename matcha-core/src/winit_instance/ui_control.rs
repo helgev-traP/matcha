@@ -4,6 +4,7 @@ use thiserror::Error;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 
 use crate::{
+    UpdateNotifier,
     component::Component,
     device_event::{
         DeviceEvent, DeviceEventData,
@@ -97,12 +98,22 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
 impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent: 'static>
     UiControl<Model, Message, Event, InnerEvent>
 {
-    pub async fn render_to_object_tree<'a>(
+    /// Returns true if a render should be performed.
+    /// Render is required when the model update flag or animation update flag is true,
+    /// or when the widget is not yet initialized.
+    pub fn needs_render(&self) -> bool {
+        self.model_update_flag.is_true()
+            || self.animation_update_flag.is_true()
+            || self.widget.is_none()
+    }
+
+    // if this method is called, it means we already have a current surface texture so we must re-render it to prevent flickering.
+    pub async fn render<'a>(
         &mut self,
         size: [f32; 2],
         background: Background<'a>,
         ctx: &WidgetContext<'a>,
-    ) -> Option<RenderNode> {
+    ) -> RenderNode {
         if self.model_update_flag.is_true() || self.widget.is_none() {
             // Dom update is required
             let dom = self.component.view().await;
@@ -125,29 +136,41 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
             self.animation_update_flag = UpdateFlag::new_true();
         }
 
-        if self.animation_update_flag.is_true() {
-            let widget = self.widget.as_mut().expect("widget initialized above");
+        let widget = self.widget.as_mut().expect("widget initialized above");
 
-            let constraints = Constraints {
-                min_width: 0.0,
-                max_width: size[0],
-                min_height: 0.0,
-                max_height: size[1],
-            };
-            let preferred_size = widget.preferred_size(&constraints, ctx);
-            widget.arrange(
-                [
-                    preferred_size[0].min(size[0]),
-                    preferred_size[1].min(size[1]),
-                ],
-                ctx,
-            );
+        self.animation_update_flag = UpdateFlag::new();
 
-            self.animation_update_flag = UpdateFlag::new();
-            Some(widget.render(background, self.animation_update_flag.notifier(), ctx))
-        } else {
-            None
-        }
+        Self::render_current_widget(
+            &mut **widget,
+            size,
+            background,
+            self.animation_update_flag.notifier(),
+            ctx,
+        )
+    }
+
+    fn render_current_widget(
+        widget: &mut dyn Widget<Event>,
+        size: [f32; 2],
+        background: Background,
+        animation_update_flag_notifier: UpdateNotifier,
+        ctx: &WidgetContext,
+    ) -> RenderNode {
+        let constraints = Constraints {
+            min_width: 0.0,
+            max_width: size[0],
+            min_height: 0.0,
+            max_height: size[1],
+        };
+        let preferred_size = widget.preferred_size(&constraints, ctx);
+        widget.arrange(
+            [
+                preferred_size[0].min(size[0]),
+                preferred_size[1].min(size[1]),
+            ],
+            ctx,
+        );
+        widget.render(background, animation_update_flag_notifier, ctx)
     }
 
     fn convert_winit_to_window_event(

@@ -4,25 +4,38 @@ use wgpu::PipelineCompilationOptions;
 
 /*
 bind group 0:
-    texture
-    sampler
-push constants:
-    [f32; 2] // target texture size
-    [[f32; 2]; 2] // source texture position relative to target texture. [[x_min, y_min], [x_max, y_max]]
-    [[f32; 4]; 4] // color transformation matrix (optional, can be used for color adjustments)
-    [f32; 4] // color offset
+    @binding(0) texture_2d<f32>
+    @binding(1) sampler
+
+push constants (as PushConstant struct):
+    target_texture_size: vec2<f32>
+    source_texture_position_min: vec2<f32>
+    source_texture_position_max: vec2<f32>
+    color_transformation: mat4x4<f32>
+    color_offset: vec4<f32>
 */
 
-// vertex position will be calculated as:
-// position = (position * 2.0) / target_texture_size + [-1.0, 1.0]
+// vertex position will be calculated in the vertex shader (`vs_main`)
+// color will be calculated in the fragment shader (`fs_main`)
 
-// color will be calculated as:
-// color = color_transformation * source_color + color_offset
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct PushConstant {
+    color_transformation: Matrix4<f32>,
+    color_offset: [f32; 4],
+    target_texture_size: [f32; 2],
+    source_texture_position_min: [f32; 2],
+    source_texture_position_max: [f32; 2],
+}
 
-const RANGE_TEXTURE_SIZE: u32 = std::mem::size_of::<[f32; 2]>() as u32;
-const RANGE_SRC_POSITION: u32 = RANGE_TEXTURE_SIZE + std::mem::size_of::<[[f32; 2]; 2]>() as u32;
-const RANGE_COL_TRANSFORM: u32 = RANGE_SRC_POSITION + std::mem::size_of::<[[f32; 4]; 4]>() as u32;
-const RANGE_COL_OFFSET: u32 = RANGE_COL_TRANSFORM + std::mem::size_of::<[f32; 4]>() as u32;
+const _: () = {
+    assert!(
+        wgpu::PUSH_CONSTANT_ALIGNMENT == 4,
+        "PushConstant alignment changed. check memory layout"
+    );
+};
+
+const PUSH_CONSTANTS_SIZE: u32 = std::mem::size_of::<PushConstant>() as u32;
 
 /// Copy texture data from one texture to another in a wgpu pipeline,
 /// with offset and size parameters.
@@ -83,24 +96,10 @@ impl TextureCopyImpl {
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("texture_copy_pipeline_layout"),
             bind_group_layouts: &[&texture_bind_group_layout],
-            push_constant_ranges: &[
-                wgpu::PushConstantRange {
-                    stages: wgpu::ShaderStages::VERTEX,
-                    range: 0..RANGE_TEXTURE_SIZE,
-                },
-                wgpu::PushConstantRange {
-                    stages: wgpu::ShaderStages::VERTEX,
-                    range: RANGE_TEXTURE_SIZE..RANGE_SRC_POSITION,
-                },
-                wgpu::PushConstantRange {
-                    stages: wgpu::ShaderStages::FRAGMENT,
-                    range: RANGE_SRC_POSITION..RANGE_COL_TRANSFORM,
-                },
-                wgpu::PushConstantRange {
-                    stages: wgpu::ShaderStages::FRAGMENT,
-                    range: RANGE_COL_TRANSFORM..RANGE_COL_OFFSET,
-                },
-            ],
+            push_constant_ranges: &[wgpu::PushConstantRange {
+                stages: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+                range: 0..PUSH_CONSTANTS_SIZE,
+            }],
         });
 
         let pipeline = moka::sync::CacheBuilder::new(PIPELINE_CACHE_SIZE)
@@ -122,10 +121,8 @@ pub struct TargetData {
 
 pub struct RenderData<'a> {
     pub source_texture_view: &'a wgpu::TextureView,
-    /// y-axis heads upward, x-axis heads rightward.
-    ///
-    /// `[[x_min, y_min], [x_max, y_max]]`
-    pub source_texture_position: [[f32; 2]; 2],
+    pub source_texture_position_min: [f32; 2],
+    pub source_texture_position_max: [f32; 2],
     pub color_transformation: Option<Matrix4<f32>>,
     pub color_offset: Option<[f32; 4]>,
 }
@@ -140,7 +137,8 @@ impl TextureCopy {
         }: TargetData,
         RenderData {
             source_texture_view: source_texture,
-            source_texture_position,
+            source_texture_position_min,
+            source_texture_position_max,
             color_transformation,
             color_offset,
         }: RenderData<'_>,
@@ -178,29 +176,17 @@ impl TextureCopy {
             }),
             &[],
         );
+        let push_constants = PushConstant {
+            target_texture_size: [target_size[0] as f32, target_size[1] as f32],
+            source_texture_position_min,
+            source_texture_position_max,
+            color_transformation: color_transformation.unwrap_or_else(Matrix4::identity),
+            color_offset: color_offset.unwrap_or([0.0; 4]),
+        };
         render_pass.set_push_constants(
-            wgpu::ShaderStages::VERTEX,
+            wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
             0,
-            bytemuck::cast_slice(&[target_size[0] as f32, target_size[1] as f32]),
-        );
-        render_pass.set_push_constants(
-            wgpu::ShaderStages::VERTEX,
-            RANGE_TEXTURE_SIZE,
-            bytemuck::cast_slice(&source_texture_position),
-        );
-        render_pass.set_push_constants(
-            wgpu::ShaderStages::FRAGMENT,
-            RANGE_SRC_POSITION,
-            bytemuck::cast_slice(
-                color_transformation
-                    .unwrap_or(Matrix4::identity())
-                    .as_slice(),
-            ),
-        );
-        render_pass.set_push_constants(
-            wgpu::ShaderStages::FRAGMENT,
-            RANGE_COL_TRANSFORM,
-            bytemuck::cast_slice(&color_offset.unwrap_or([0.0, 0.0, 0.0, 0.0])),
+            bytemuck::cast_slice(&[push_constants]),
         );
         render_pass.draw(0..4, 0..1);
     }

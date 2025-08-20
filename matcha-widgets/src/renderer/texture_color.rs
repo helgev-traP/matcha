@@ -1,7 +1,10 @@
-use std::sync::Arc;
 use wgpu::util::DeviceExt;
 
 use crate::vertex::UvVertex;
+/* NOTE: This renderer assumes textures use top-origin UV coordinates (v = 0 at the top).
+UvVertex.tex_coords passed to this pipeline must have v = 0 at the top of the image.
+If your texture data uses bottom-origin coordinates, invert the v component before
+rendering (e.g. use 1.0 - v). */
 use matcha_core::ui::WidgetContext;
 
 // API similar to line_strip.rs:
@@ -90,7 +93,7 @@ pub struct RenderData<'a> {
     pub position: [f32; 2],
     pub vertices: &'a [UvVertex],
     pub indices: &'a [u16],
-    pub texture: Arc<wgpu::Texture>,
+    pub texture_view: &'a wgpu::TextureView,
 }
 
 impl Default for TextureColor {
@@ -113,7 +116,7 @@ impl TextureColor {
             position,
             vertices,
             indices,
-            texture,
+            texture_view,
         }: RenderData,
         ctx: &WidgetContext,
     ) {
@@ -148,14 +151,13 @@ impl TextureColor {
         });
 
         // texture bind group
-        let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let texture_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("TextureColor: Texture Bind Group"),
             layout: &inner.texture_bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&texture_view),
+                    resource: wgpu::BindingResource::TextureView(texture_view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
