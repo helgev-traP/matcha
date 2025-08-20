@@ -89,6 +89,10 @@ impl Size {
         }))
     }
 
+    pub fn child(mag: f32) -> Self {
+        Size::Size(Arc::new(move |_, child_size, _| child_size.get()[0] * mag))
+    }
+
     /// Specify size in magnification of font size.
     pub fn em(em: f32) -> Self {
         Size::Size(Arc::new(move |_, _, ctx| em * ctx.font_size()))
@@ -154,5 +158,18 @@ impl Size {
         F: Fn([Option<f32>; 2], &mut ChildSize, &WidgetContext) -> f32 + Send + Sync + 'static,
     {
         Size::Grow(Arc::new(f))
+    }
+}
+
+impl Size {
+    pub fn calc<F>(&self, parent_size: [Option<f32>; 2], child_size: F, ctx: &WidgetContext) -> f32
+    where
+        F: FnMut() -> [f32; 2],
+    {
+        let mut child_size = ChildSize::new(child_size);
+
+        match self {
+            Size::Size(f) | Size::Grow(f) => f(parent_size, &mut child_size, ctx),
+        }
     }
 }

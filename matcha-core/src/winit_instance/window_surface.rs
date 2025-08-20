@@ -128,6 +128,10 @@ impl WindowSurface {
     }
 
     pub fn set_size(&mut self, size: PhysicalSize<u32>, device: &wgpu::Device) {
+        if size.width == 0 || size.height == 0 {
+            return;
+        }
+
         if let (Some(surface), Some(surface_config)) = (&self.surface, &mut self.surface_config) {
             surface_config.width = size.width;
             surface_config.height = size.height;

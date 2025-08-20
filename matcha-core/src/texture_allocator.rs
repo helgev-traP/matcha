@@ -20,7 +20,7 @@ impl TextureAllocator {
         color_format: wgpu::TextureFormat,
         stencil_format: wgpu::TextureFormat,
     ) -> Self {
-        let max_size = gpu.max_texture_dimension_3d();
+        let max_size = gpu.max_texture_dimension_2d();
 
         let size = wgpu::Extent3d {
             width: max_size,
@@ -73,11 +73,11 @@ impl TextureAllocator {
         self.stencil.lock().allocate(device, queue, size)
     }
 
-    pub(super) fn color_texture(&self) -> wgpu::Texture {
+    pub fn color_texture(&self) -> wgpu::Texture {
         self.color.lock().textures()[0].clone()
     }
 
-    pub(super) fn stencil_texture(&self) -> wgpu::Texture {
+    pub fn stencil_texture(&self) -> wgpu::Texture {
         self.stencil.lock().textures()[0].clone()
     }
 }

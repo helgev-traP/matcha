@@ -40,22 +40,18 @@ fn update(message: &MyMessage, model_accessor: ModelAccessor<MyModel>) {
 
 fn view(model: &MyModel) -> Box<dyn Dom<MyMessage>> {
     Box::new(
-        Column::new(None)
-            .push(Image::new(model.image.clone()))
-            .push(Box::new(
-                Row::new(None)
-                    .push(Box::new(
-                        Button::new(Text::new("-")).on_click(|| MyMessage::Decrement),
-                    ))
-                    .push(Text::new(&model.count.to_string()))
-                    .push(Box::new(
-                        Button::new(Text::new("+")).on_click(|| MyMessage::Increment),
-                    )),
+        matcha_widgets::Plain::new(None)
+            .style(Box::new(
+                matcha_widgets::style::image::Image::new(include_bytes!(
+                    "assets/videoframe_21710.png"
+                ))
+                .size([
+                    matcha_widgets::types::size::Size::child(1.0),
+                    matcha_widgets::types::size::Size::child(1.0),
+                ]),
             ))
-            .push(Box::new(Text::new("Hello, Matcha!").attrs(
-                Attrs::new().color(cosmic_text::Color::rgba(0, 0, 255, 255)),
-            ))),
-    )
+            .boundary_size([200.0, 100.0]),
+    ) as Box<dyn Dom<MyMessage>>
 }
 
 #[allow(clippy::unwrap_used)]

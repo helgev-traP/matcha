@@ -1,7 +1,7 @@
 //// InstanceData describes a single textured instance uploaded from the host.
 //// Semantics:
 //// - `viewport_position`: 4x4 matrix that maps the unit quad vertices
-////   (defined as {[0, 0], [0, -1], [1, 0], [1, -1]} in this renderer)
+////   (defined as {[0, 0], [0, 1], [1, 1], [1, 0]} in this renderer)
 ////   into the destination coordinate space prior to normalization. The shader
 ////   multiplies this with the push-constant `normalize_matrix` to produce
 ////   clip-space positions.
@@ -71,8 +71,8 @@ var<push_constant> pc: Pc;
 // 1 - 2
 const QUAD_VERTICES = array<vec4<f32>, 4>(
     vec4<f32>(0.0, 0.0, 0.0, 1.0),
-    vec4<f32>(0.0,-1.0, 0.0, 1.0),
-    vec4<f32>(1.0,-1.0, 0.0, 1.0),
+    vec4<f32>(0.0, 1.0, 0.0, 1.0),
+    vec4<f32>(1.0, 1.0, 0.0, 1.0),
     vec4<f32>(1.0, 0.0, 0.0, 1.0),
 );
 
@@ -119,7 +119,14 @@ stencil_position[i] = pc.normalize_matrix * stencil.viewport_position * QUAD_VER
         !use_stencil || (stencil_is_in_viewport && texture_and_stencil_overlap)
     );
 
-    if (is_visible) {
+    // if (is_visible) {
+    //     let visible_count = atomicAdd(&visible_instance_count, 1u);
+    //     visible_instances[visible_count] = instance_index;
+    // }
+
+    // currently show every instance for debugging purposes
+    // todo: implement proper visibility culling
+    if true {
         let visible_count = atomicAdd(&visible_instance_count, 1u);
         visible_instances[visible_count] = instance_index;
     }

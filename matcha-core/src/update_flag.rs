@@ -27,6 +27,10 @@ impl UpdateFlag {
         self.flag.store(false, Ordering::Release);
     }
 
+    pub fn set_true(&self) {
+        self.flag.store(true, Ordering::Release);
+    }
+
     pub fn notifier(&self) -> UpdateNotifier {
         UpdateNotifier {
             flag: Arc::downgrade(&self.flag),

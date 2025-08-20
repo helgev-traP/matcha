@@ -164,31 +164,50 @@ impl AtlasRegion {
             return Err(AtlasRegionError::AtlasGone);
         };
         let atlas = atlas.read();
-        let texture_views = atlas.texture_views();
         let Some(location) = atlas.get_location(self.inner.texture_id) else {
             return Err(AtlasRegionError::TextureNotFoundInAtlas);
         };
 
         // Create a render pass for the texture area
-        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Texture Atlas Render Pass"),
-            color_attachments: texture_views
-                .iter()
-                .map(|view| wgpu::RenderPassColorAttachment {
-                    view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })
-                .map(Option::Some)
-                .collect::<Vec<_>>()
-                .as_slice(),
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-        });
+        let mut render_pass = {
+            // Keep the state read guard alive for the duration of the descriptor construction.
+            let state_guard = atlas.state.read();
+            let layer_texture_views = match &*state_guard {
+                TextureAtlasState::Solid(atlas_solid) => &atlas_solid.layer_texture_views,
+                TextureAtlasState::Resize(atlas_resize) => {
+                    if let Some(views) = &atlas_resize.new_layer_texture_views {
+                        views
+                    } else {
+                        &atlas_resize.old_layer_texture_views
+                    }
+                }
+            };
+
+            // Build color attachments slice referencing per-layer D2 views.
+            let color_attachments_vec: Vec<Option<wgpu::RenderPassColorAttachment>> =
+                layer_texture_views
+                    .iter()
+                    .map(|views| {
+                        let view = &views[location.page_index as usize];
+                        Some(wgpu::RenderPassColorAttachment {
+                            view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                                store: wgpu::StoreOp::Store,
+                            },
+                        })
+                    })
+                    .collect();
+
+            encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Texture Atlas Render Pass"),
+                color_attachments: color_attachments_vec.as_slice(),
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            })
+        };
 
         // Set the viewport to the texture area
         render_pass.set_viewport(
@@ -360,6 +379,7 @@ impl TextureAtlas {
 struct TextureAtlasSolid {
     textures: Vec<wgpu::Texture>,
     texture_views: Vec<wgpu::TextureView>,
+    layer_texture_views: Vec<Vec<wgpu::TextureView>>,
     size: wgpu::Extent3d,
 
     allocators: Vec<Mutex<AtlasAllocator>>,
@@ -370,10 +390,12 @@ struct TextureAtlasSolid {
 
 impl TextureAtlasSolid {
     fn new(device: &wgpu::Device, size: wgpu::Extent3d, formats: &[wgpu::TextureFormat]) -> Self {
-        let (textures, texture_views) = helper::create_texture_and_view(device, formats, size);
+        let (textures, texture_views, layer_texture_views) =
+            helper::create_texture_and_view(device, formats, size);
         Self {
             textures,
             texture_views,
+            layer_texture_views,
             size,
             allocators: Vec::new(),
             texture_id_to_location: DashMap::new(),
@@ -412,6 +434,7 @@ struct TextureAtlasResize {
     // The new atlas state
     new_textures: Option<Vec<wgpu::Texture>>,
     new_texture_views: Option<Vec<wgpu::TextureView>>,
+    new_layer_texture_views: Option<Vec<Vec<wgpu::TextureView>>>,
     new_size: wgpu::Extent3d,
 
     new_allocators: Vec<Mutex<AtlasAllocator>>,
@@ -422,6 +445,7 @@ struct TextureAtlasResize {
     // The previous atlas state
     old_textures: Vec<wgpu::Texture>,
     old_texture_views: Vec<wgpu::TextureView>,
+    old_layer_texture_views: Vec<Vec<wgpu::TextureView>>,
     old_size: wgpu::Extent3d,
     old_allocators: Vec<Mutex<AtlasAllocator>>,
     old_texture_id_to_location: DashMap<RegionId, RegionLocation>,
@@ -457,9 +481,14 @@ mod helper {
         device: &wgpu::Device,
         formats: &[wgpu::TextureFormat],
         page_size: wgpu::Extent3d,
-    ) -> (Vec<wgpu::Texture>, Vec<wgpu::TextureView>) {
+    ) -> (
+        Vec<wgpu::Texture>,
+        Vec<wgpu::TextureView>,
+        Vec<Vec<wgpu::TextureView>>,
+    ) {
         let mut textures = Vec::with_capacity(formats.len());
         let mut texture_views = Vec::with_capacity(formats.len());
+        let mut layer_texture_views = Vec::with_capacity(formats.len());
 
         for &format in formats {
             let texture_label = format!("texture_atlas_texture_{format:?}");
@@ -482,13 +511,31 @@ mod helper {
             let texture_view = texture.create_view(&wgpu::TextureViewDescriptor {
                 label: Some(&texture_view_label),
                 dimension: Some(wgpu::TextureViewDimension::D2Array),
+                aspect: wgpu::TextureAspect::All,
                 ..wgpu::TextureViewDescriptor::default()
             });
+
+            let mut per_layer_views = Vec::with_capacity(page_size.depth_or_array_layers as usize);
+            for layer in 0..page_size.depth_or_array_layers {
+                let layer_view = texture.create_view(&wgpu::TextureViewDescriptor {
+                    label: Some(&format!("texture_atlas_layer_view_{format:?}_{layer}")),
+                    dimension: Some(wgpu::TextureViewDimension::D2),
+                    base_mip_level: 0,
+                    mip_level_count: Some(1),
+                    base_array_layer: layer,
+                    array_layer_count: Some(1),
+                    aspect: wgpu::TextureAspect::All,
+                    ..wgpu::TextureViewDescriptor::default()
+                });
+                per_layer_views.push(layer_view);
+            }
+
             textures.push(texture);
             texture_views.push(texture_view);
+            layer_texture_views.push(per_layer_views);
         }
 
-        (textures, texture_views)
+        (textures, texture_views, layer_texture_views)
     }
 
     // Leave unused args to make refactoring easier.
@@ -923,23 +970,6 @@ impl TextureAtlasOldImpl {
     }
 }
 
-// for internal use only
-impl TextureAtlasOldImpl {
-    fn get_location(&self, id: TextureId) -> Option<TextureLocation> {
-        self.state
-            .texture_id_to_location
-            .get(&id)
-            .map(|entry| *entry.value())
-    }
-
-    fn textures(&self) -> &[wgpu::Texture] {
-        &self.textures
-    }
-
-    fn texture_views(&self) -> &[wgpu::TextureView] {
-        &self.texture_views
-    }
-}
 
 // helper functions
 impl TextureAtlasOldImpl {

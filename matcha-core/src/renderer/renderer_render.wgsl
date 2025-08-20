@@ -1,7 +1,7 @@
 // InstanceData describes a single textured instance uploaded from the host.
 // Semantics:
 // - `viewport_position`: 4x4 matrix that maps the unit quad vertices
-//   (defined as {[0, 0], [0, -1], [1, 0], [1, -1]} in this renderer)
+//   (defined as {[0, 0], [0, 1], [1, 1], [1, 0]} in this renderer)
 //   into the destination coordinate space prior to normalization. The shader
 //   multiplies this with the push-constant `normalize_matrix` to produce
 //   clip-space positions.
@@ -78,15 +78,15 @@ struct VertexOutput {
 
 var<push_constant> normalize_matrix: mat4x4<f32>;
 
-// vertices (y-axis is up):
+// vertices (y-axis is down, matches public UI unit-quad ordering):
 // 0 - 2
 // | / |
 // 1 - 3
 const VERTICES = array<vec4<f32>, 4>(
     vec4<f32>(0.0, 0.0, 0.0, 1.0),
-    vec4<f32>(0.0,-1.0, 0.0, 1.0),
+    vec4<f32>(0.0, 1.0, 0.0, 1.0),
     vec4<f32>(1.0, 0.0, 0.0, 1.0),
-    vec4<f32>(1.0,-1.0, 0.0, 1.0),
+    vec4<f32>(1.0, 1.0, 0.0, 1.0),
 );
 // vertices (y-axis is down):
 // 0 - 3
@@ -118,9 +118,9 @@ fn vertex_main(
     let texture_uv = instance.in_atlas_offset + instance.in_atlas_size * UVS[vertex_index];
 
     // stencil uv
-    // space that stencil position becomes {(0, 0), (0, -1), (1, -1), (1, 0)}
-    let stencil_space_y_up = stencil.viewport_position_inverse * pre;
-    let stencil_uv = (stencil_space_y_up.xy / stencil_space_y_up.w) * vec2<f32>(1.0, -1.0);
+    // space that stencil position becomes {(0, 0), (0, 1), (1, 1), (1, 0)}
+    let stencil_space = stencil.viewport_position_inverse * pre;
+    let stencil_uv = (stencil_space.xy / stencil_space.w);
 
     // output
     var output: VertexOutput;

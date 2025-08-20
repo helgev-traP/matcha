@@ -19,10 +19,11 @@ const COMPUTE_WORKGROUP_SIZE: u32 = 64;
 ///
 /// Semantics:
 /// - `viewport_position`: 4x4 matrix that maps the unit quad vertices
-///   (defined as {[0, 0], [0, -1], [1, 0], [1, -1]} in this renderer)
-///   into the destination coordinate space prior to normalization.
-///   This matrix is consumed by the vertex shader together with the
-///   `normalize_matrix` push-constant to produce final clip-space positions.
+///   (defined using top-left origin and Y-down as {[0, 0], [0, 1], [1, 1], [1, 0]})
+///   into the destination coordinate space prior to normalization. Public renderer APIs
+///   accept coordinates in pixels with the origin at the top-left and Y increasing downward.
+///   The renderer internally converts these coordinates to the form expected by the GPU
+///   pipeline (including any Y inversion) before uploading InstanceData to the GPU.
 /// - `atlas_page`: index of the texture array layer (page) inside the texture atlas.
 /// - `in_atlas_offset`: (x, y) offset of the sub-image inside the atlas page.
 ///   Expected units: NORMALIZED UVS (0.0 .. 1.0) relative to the atlas page by default.
@@ -37,7 +38,7 @@ const COMPUTE_WORKGROUP_SIZE: u32 = 64;
 /// `InstanceData` struct (field order, types, and padding). When changing fields,
 /// update both Rust and WGSL declarations simultaneously.
 struct InstanceData {
-    /// transform vertex: {[0, 0], [0, -1], [1, 0], [1, -1]} to where the texture should be rendered
+    /// transform vertex: {[0, 0], [0, 1], [1, 1], [1, 0]} to where the texture should be rendered
     viewport_position: nalgebra::Matrix4<f32>,
     atlas_page: u32,
     _padding1: u32,
@@ -57,6 +58,9 @@ struct InstanceData {
 ///
 /// Semantics:
 /// - `viewport_position`: transform mapping the unit quad into stencil space.
+///   Public renderer APIs accept coordinates with the origin at the top-left and Y
+///   increasing downward; the renderer converts these to the internal form required
+///   by the GPU pipeline.
 /// - `viewport_position_inverse_exists`: non-zero if `viewport_position` is invertible.
 /// - `viewport_position_inverse`: inverse matrix used by the vertex shader to compute
 ///   stencil-space UV coordinates for masking.
@@ -69,7 +73,7 @@ struct InstanceData {
 /// `StencilData` declaration (including explicit padding fields). Update both
 /// definitions when changing sizes/types.
 struct StencilData {
-    /// transform vertex: {[0, 0], [0, -1], [1, 0], [1, -1]} to where the stencil should be rendered
+    /// transform vertex: {[0, 0], [0, 1], [1, 1], [1, 0]} to where the stencil should be rendered
     viewport_position: nalgebra::Matrix4<f32>,
     /// if the inverse of the viewport position exists.
     /// 0 if the inverse does not exist.
@@ -768,9 +772,11 @@ pub enum TextureValidationError {
 
 #[rustfmt::skip]
 fn make_normalize_matrix(destination_size: [f32; 2]) -> nalgebra::Matrix4<f32> {
+    // Map pixel coordinates [0..width] x [0..height] into clip space [-1..1] x [-1..1],
+    // flipping the Y axis so that Y increases downward in pixel space maps to clip Y decreasing.
     nalgebra::Matrix4::new(
         2.0 / destination_size[0], 0.0, 0.0, -1.0,
-        0.0, 2.0 / destination_size[1], 0.0, 1.0,
+        0.0, -2.0 / destination_size[1], 0.0, 1.0,
         0.0, 0.0, 1.0, 0.0,
         0.0, 0.0, 0.0, 1.0,
     )

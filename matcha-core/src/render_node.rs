@@ -1,3 +1,13 @@
+/// Represents a render tree node that contains drawing information for the renderer.
+///
+/// Note: Coordinates used by the Dom/Widget/Style APIs are in pixels with the origin at the
+/// top-left of the window and the Y axis pointing downwards. The renderer is responsible for
+/// converting these coordinates (origin, Y direction, and scale) into normalized device
+/// coordinates (NDC) required by the GPU/backend.
+///
+/// The RenderNode stores textures, stencil information, and child elements along with
+/// per-node transform matrices. Transforms are applied by the renderer when generating GPU
+/// draw calls.
 #[derive(Clone)]
 pub struct RenderNode {
     pub texture_and_position: Option<(texture_atlas::AtlasRegion, nalgebra::Matrix4<f32>)>,
