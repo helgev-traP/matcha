@@ -58,12 +58,6 @@ pub enum Size {
     Grow(Arc<SizeFn>),
 }
 
-impl Default for Size {
-    fn default() -> Self {
-        Size::parent(1.0)
-    }
-}
-
 impl Size {
     /// Specify size in pixels.
     pub fn px(px: f32) -> Self {
@@ -80,8 +74,8 @@ impl Size {
         Size::Size(Arc::new(move |_, _, ctx| point * ctx.dpi() as f32 / 72.0))
     }
 
-    /// Specify size in magnification of parent size.
-    pub fn parent(mag: f32) -> Self {
+    /// Specify size in magnification of parent width.
+    pub fn parent_w(mag: f32) -> Self {
         Size::Size(Arc::new(move |parent_size, child_size, _| {
             parent_size[0]
                 .map(|size| size * mag)
@@ -89,8 +83,20 @@ impl Size {
         }))
     }
 
-    pub fn child(mag: f32) -> Self {
+    pub fn parent_h(mag: f32) -> Self {
+        Size::Size(Arc::new(move |parent_size, child_size, _| {
+            parent_size[1]
+                .map(|size| size * mag)
+                .unwrap_or_else(|| child_size.get()[1])
+        }))
+    }
+
+    pub fn child_w(mag: f32) -> Self {
         Size::Size(Arc::new(move |_, child_size, _| child_size.get()[0] * mag))
+    }
+
+    pub fn child_h(mag: f32) -> Self {
+        Size::Size(Arc::new(move |_, child_size, _| child_size.get()[1] * mag))
     }
 
     /// Specify size in magnification of font size.
@@ -105,23 +111,19 @@ impl Size {
 
     /// Specify size in magnification of viewport width.
     pub fn vw(vw: f32) -> Self {
-        Size::Size(Arc::new(move |_, _, ctx| {
-            vw * ctx.viewport_size()[0] as f32
-        }))
+        Size::Size(Arc::new(move |_, _, ctx| vw * ctx.viewport_size()[0]))
     }
 
     /// Specify size in magnification of viewport height.
     pub fn vh(vh: f32) -> Self {
-        Size::Size(Arc::new(move |_, _, ctx| {
-            vh * ctx.viewport_size()[1] as f32
-        }))
+        Size::Size(Arc::new(move |_, _, ctx| vh * ctx.viewport_size()[1]))
     }
 
     /// Specify size in magnification of vmax.
     pub fn vmax(vmax: f32) -> Self {
         Size::Size(Arc::new(move |_, _, ctx| {
             let viewport_size = ctx.viewport_size();
-            vmax * viewport_size[0].max(viewport_size[1]) as f32
+            vmax * viewport_size[0].max(viewport_size[1])
         }))
     }
 
@@ -129,7 +131,7 @@ impl Size {
     pub fn vmin(vmin: f32) -> Self {
         Size::Size(Arc::new(move |_, _, ctx| {
             let viewport_size = ctx.viewport_size();
-            vmin * viewport_size[0].min(viewport_size[1]) as f32
+            vmin * viewport_size[0].min(viewport_size[1])
         }))
     }
 }

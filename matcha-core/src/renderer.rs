@@ -558,7 +558,11 @@ impl Renderer {
                 in_atlas_size: [0.0, 0.0],
                 _padding3: [0; 2],
             };
-            queue.write_buffer(&all_stencil_data_buffer, 0, bytemuck::bytes_of(&default_stencil));
+            queue.write_buffer(
+                &all_stencil_data_buffer,
+                0,
+                bytemuck::bytes_of(&default_stencil),
+            );
         }
 
         queue.write_buffer(&self.atomic_counter, 0, bytemuck::cast_slice(&[0u32]));

@@ -32,7 +32,7 @@ impl Image {
         Box::new(Self {
             label: None,
             image_style: style::image::Image::new(image),
-            size: [Size::default(), Size::default()],
+            size: [Size::child_w(1.0), Size::child_h(1.0)],
         })
     }
 

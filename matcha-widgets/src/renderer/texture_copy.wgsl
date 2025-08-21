@@ -44,7 +44,7 @@ fn vs_main(
     let position_y_down = (pixel_positions * 2.0) / pc.target_texture_size - vec2<f32>(1.0, 1.0);
 
     return VertexOutput(
-        vec4<f32>(position_y_down.x, position_y_down.y, 0.0, 10.0),
+        vec4<f32>(position_y_down.x, position_y_down.y, 0.0, 1.0),
         tex_coords
     );
 }
