@@ -112,13 +112,13 @@ impl Image {
     pub fn new(source: impl Into<ImageSource>) -> Self {
         Self {
             image: source.into(),
-            size: Arc::new([Size::child(1.0), Size::child(1.0)]),
+            size: Arc::new([Size::child_w(1.0), Size::child_h(1.0)]),
             offset: Arc::new([Size::px(0.0), Size::px(0.0)]),
         }
     }
 
     pub fn stretch_to_boundary(mut self) -> Self {
-        self.size = Arc::new([Size::parent(1.0), Size::parent(1.0)]);
+        self.size = Arc::new([Size::parent_w(1.0), Size::parent_h(1.0)]);
         self
     }
 
@@ -145,8 +145,8 @@ impl Image {
     /// Set size as percentage of parent (percent values, e.g. 50.0 == 50%).
     pub fn size_percent(mut self, w_percent: f32, h_percent: f32) -> Self {
         self.size = Arc::new([
-            Size::parent(w_percent / 100.0),
-            Size::parent(h_percent / 100.0),
+            Size::parent_w(w_percent / 100.0),
+            Size::parent_h(h_percent / 100.0),
         ]);
         self
     }
@@ -160,8 +160,8 @@ impl Image {
     /// Set offset as percentage of parent (percent values).
     pub fn offset_percent(mut self, x_percent: f32, y_percent: f32) -> Self {
         self.offset = Arc::new([
-            Size::parent(x_percent / 100.0),
-            Size::parent(y_percent / 100.0),
+            Size::parent_w(x_percent / 100.0),
+            Size::parent_h(y_percent / 100.0),
         ]);
         self
     }

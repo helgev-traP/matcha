@@ -11,7 +11,6 @@ use std::io::Cursor;
 // Model
 #[derive(Clone)]
 struct MyModel {
-    image: image::DynamicImage,
     count: i32,
 }
 
@@ -46,8 +45,8 @@ fn view(model: &MyModel) -> Box<dyn Dom<MyMessage>> {
                     "assets/videoframe_21710.png"
                 ))
                 .size([
-                    matcha_widgets::types::size::Size::child(1.0),
-                    matcha_widgets::types::size::Size::child(1.0),
+                    matcha_widgets::types::size::Size::child_w(1.0),
+                    matcha_widgets::types::size::Size::child_h(1.0),
                 ]),
             ))
             .boundary_size([200.0, 100.0]),
@@ -56,16 +55,9 @@ fn view(model: &MyModel) -> Box<dyn Dom<MyMessage>> {
 
 #[allow(clippy::unwrap_used)]
 fn main() {
-    let img_bytes = include_bytes!("assets/videoframe_21710.png");
-    let image = image::ImageReader::new(Cursor::new(img_bytes))
-        .with_guessed_format()
-        .unwrap()
-        .decode()
-        .unwrap();
-
     let component = Component::<MyModel, (), MyEvent, MyMessage>::new(
         Some("Counter"),
-        MyModel { count: 0, image },
+        MyModel { count: 0 },
         view,
     )
     .react_fn(|msg, model_accessor| -> Option<MyEvent> {

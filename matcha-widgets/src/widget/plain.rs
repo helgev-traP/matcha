@@ -248,7 +248,11 @@ impl<T: Send + 'static> Widget<T> for PlainNode<T> {
             if let Some(style_texture) = style_texture_opt.clone() {
                 render_node.texture_and_position = Some((
                     style_texture,
-                    nalgebra::Matrix4::from_scaled_axis(nalgebra::Vector3::new(self.size[0], self.size[1], 1.0)),
+                    nalgebra::Matrix4::new_nonuniform_scaling(&nalgebra::Vector3::new(
+                        self.size[0],
+                        self.size[1],
+                        1.0,
+                    )),
                 ));
             }
         }
