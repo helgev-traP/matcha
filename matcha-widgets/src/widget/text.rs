@@ -76,7 +76,6 @@ impl<'a: 'static, T: Send + 'static> Dom<T> for Text<'a> {
             metrics: self.metrics,
             style,
             size: [0.0, 0.0],
-            update_notifier: None,
         })
     }
 
@@ -92,7 +91,6 @@ pub struct TextNode<'a> {
     metrics: Metrics,
     style: TextCosmic<'a>,
     size: [f32; 2],
-    update_notifier: Option<UpdateNotifier>,
 }
 
 #[async_trait::async_trait]
@@ -162,7 +160,7 @@ impl<'a: 'static, T: Send + 'static> Widget<T> for TextNode<'a> {
         self.style.is_inside(position, self.size, context)
     }
 
-    fn preferred_size(&mut self, _constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
+    fn preferred_size(&self, _constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
         let range = self.style.draw_range(self.size, context);
         [range.width(), range.height()]
     }
@@ -171,22 +169,11 @@ impl<'a: 'static, T: Send + 'static> Widget<T> for TextNode<'a> {
         self.size = final_size;
     }
 
-    fn cover_range(&mut self, _context: &WidgetContext) -> CoverRange<f32> {
-        CoverRange::default()
-    }
-
     fn need_rerendering(&self) -> bool {
         true
     }
 
-    fn render(
-        &mut self,
-        _background: Background,
-        animation_update_flag_notifier: UpdateNotifier,
-        ctx: &WidgetContext,
-    ) -> RenderNode {
-        self.update_notifier = Some(animation_update_flag_notifier);
-
+    fn render(&mut self, _background: Background, ctx: &WidgetContext) -> RenderNode {
         // The actual drawing logic is in TextCosmic's draw method,
         // which is not fully implemented yet.
         // For now, we'll just return an empty node.

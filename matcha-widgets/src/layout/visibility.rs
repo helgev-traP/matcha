@@ -78,7 +78,6 @@ where
                 .content
                 .as_ref()
                 .map(|content| content.build_widget_tree()),
-            update_notifier: None,
         })
     }
 
@@ -96,7 +95,6 @@ where
     label: Option<String>,
     visibility: VisibilityState,
     content: Option<Box<dyn Widget<T>>>,
-    update_notifier: Option<UpdateNotifier>,
 }
 
 #[async_trait::async_trait]
@@ -163,12 +161,12 @@ where
         }
     }
 
-    fn preferred_size(&mut self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
+    fn preferred_size(&self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
         if self.visibility == VisibilityState::Gone {
             return [0.0, 0.0];
         }
         self.content
-            .as_mut()
+            .as_ref()
             .map_or([0.0, 0.0], |c| c.preferred_size(constraints, context))
     }
 
@@ -178,33 +176,16 @@ where
         }
     }
 
-    fn cover_range(&mut self, context: &WidgetContext) -> CoverRange<f32> {
-        if self.visibility == VisibilityState::Visible {
-            self.content
-                .as_mut()
-                .map_or(CoverRange::default(), |c| c.cover_range(context))
-        } else {
-            CoverRange::default()
-        }
-    }
-
     fn need_rerendering(&self) -> bool {
         self.content
             .as_ref()
             .map_or(false, |content| content.need_rerendering())
     }
 
-    fn render(
-        &mut self,
-        background: Background,
-        animation_update_flag_notifier: UpdateNotifier,
-        ctx: &WidgetContext,
-    ) -> RenderNode {
-        self.update_notifier = Some(animation_update_flag_notifier);
-
+    fn render(&mut self, background: Background, ctx: &WidgetContext) -> RenderNode {
         if self.visibility == VisibilityState::Visible {
             if let Some(content) = &mut self.content {
-                return content.render(background, self.update_notifier.clone().unwrap(), ctx);
+                return content.render(background, ctx);
             }
         }
 

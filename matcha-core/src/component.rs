@@ -301,7 +301,7 @@ impl<Model: Sync + Send + 'static, Event: 'static, InnerEvent: 'static> Widget<E
             .and_then(|inner_event| (self.event)(inner_event, self.model_accessor.clone()))
     }
 
-    fn preferred_size(&mut self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
+    fn preferred_size(&self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
         self.widget.preferred_size(constraints, context)
     }
 
@@ -313,21 +313,11 @@ impl<Model: Sync + Send + 'static, Event: 'static, InnerEvent: 'static> Widget<E
         self.widget.is_inside(position, context)
     }
 
-    fn cover_range(&mut self, context: &WidgetContext) -> CoverRange<f32> {
-        self.widget.cover_range(context)
-    }
-
     fn need_rerendering(&self) -> bool {
         self.widget.need_rerendering()
     }
 
-    fn render(
-        &mut self,
-        background: Background,
-        animation_update_flag_notifier: crate::update_flag::UpdateNotifier,
-        context: &WidgetContext,
-    ) -> RenderNode {
-        self.widget
-            .render(background, animation_update_flag_notifier, context)
+    fn render(&mut self, background: Background, context: &WidgetContext) -> RenderNode {
+        self.widget.render(background, context)
     }
 }

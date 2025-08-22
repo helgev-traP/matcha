@@ -200,7 +200,7 @@ impl<T: Send + 'static + Clone> Widget<T> for ButtonNode<T> {
             && position[1] <= self.size[1]
     }
 
-    fn preferred_size(&mut self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
+    fn preferred_size(&self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
         self.content.preferred_size(constraints, context)
     }
 
@@ -209,22 +209,11 @@ impl<T: Send + 'static + Clone> Widget<T> for ButtonNode<T> {
         self.content.arrange(final_size, context);
     }
 
-    fn cover_range(&mut self, context: &WidgetContext) -> CoverRange<f32> {
-        self.content.cover_range(context)
-    }
-
     fn need_rerendering(&self) -> bool {
         self.content.need_rerendering()
     }
 
-    fn render(
-        &mut self,
-        background: Background,
-        animation_update_flag_notifier: UpdateNotifier,
-        ctx: &WidgetContext,
-    ) -> RenderNode {
-        self.update_notifier = Some(animation_update_flag_notifier.clone());
-
+    fn render(&mut self, background: Background, ctx: &WidgetContext) -> RenderNode {
         let bg_color = match self.state {
             ButtonState::Normal => Color::RgbaF32 {
                 r: 0.8,
@@ -248,9 +237,7 @@ impl<T: Send + 'static + Clone> Widget<T> for ButtonNode<T> {
 
         let texture_size = [self.size[0].ceil() as u32, self.size[1].ceil() as u32];
         if texture_size[0] == 0 || texture_size[1] == 0 {
-            return self
-                .content
-                .render(background, animation_update_flag_notifier, ctx);
+            return self.content.render(background, ctx);
         }
 
         let style_region = ctx
@@ -284,9 +271,7 @@ impl<T: Send + 'static + Clone> Widget<T> for ButtonNode<T> {
         render_node.texture_and_position =
             Some((style_region.clone(), nalgebra::Matrix4::identity()));
 
-        let content_node = self
-            .content
-            .render(background, animation_update_flag_notifier, ctx);
+        let content_node = self.content.render(background, ctx);
         render_node.add_child(content_node, nalgebra::Matrix4::identity());
 
         render_node

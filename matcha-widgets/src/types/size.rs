@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use matcha_core::ui::WidgetContext;
+use matcha_core::{Constraints, ui::WidgetContext};
+use nalgebra::constraint;
 
 pub struct ChildSize<'a> {
     get_size: Box<dyn FnMut() -> [f32; 2] + 'a>,
@@ -147,7 +148,7 @@ impl Size {
 
 impl Size {
     /// Specify size with a custom function.
-    pub fn size_f<F>(f: F) -> Self
+    pub fn from_size<F>(f: F) -> Self
     where
         F: Fn([Option<f32>; 2], &mut ChildSize, &WidgetContext) -> f32 + Send + Sync + 'static,
     {
@@ -155,7 +156,7 @@ impl Size {
     }
 
     /// Specify size that grows with a custom function.
-    pub fn grow_f<F>(f: F) -> Self
+    pub fn from_grow<F>(f: F) -> Self
     where
         F: Fn([Option<f32>; 2], &mut ChildSize, &WidgetContext) -> f32 + Send + Sync + 'static,
     {
@@ -164,14 +165,19 @@ impl Size {
 }
 
 impl Size {
-    pub fn calc<F>(&self, parent_size: [Option<f32>; 2], child_size: F, ctx: &WidgetContext) -> f32
-    where
-        F: FnMut() -> [f32; 2],
-    {
-        let mut child_size = ChildSize::new(child_size);
-
+    pub fn size(
+        &self,
+        parent_size: [Option<f32>; 2],
+        child_size: &mut ChildSize,
+        ctx: &WidgetContext,
+    ) -> f32 {
         match self {
-            Size::Size(f) | Size::Grow(f) => f(parent_size, &mut child_size, ctx),
+            Size::Size(f) | Size::Grow(f) => f(parent_size, child_size, ctx),
         }
+    }
+
+    /// returns `[{min_size}, {max_size}]`
+    pub fn constraints(&self, constraints: &Constraints, ctx: &WidgetContext) -> [f32; 2] {
+        todo!()
     }
 }

@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use dashmap::DashMap;
-use image::GenericImageView;
+use image::{EncodableLayout, GenericImageView};
 use matcha_core::{types::range::Range2D, ui::Style, ui::WidgetContext};
 
-use crate::types::size::Size;
+use crate::types::size::{ChildSize, Size};
 
 #[derive(Default)]
 struct ImageCache {
@@ -83,7 +83,6 @@ enum ImageSourceKey {
 struct ImageCacheData {
     width: u32,
     height: u32,
-    color_type: image::ColorType,
     texture: wgpu::Texture,
 }
 
@@ -169,11 +168,11 @@ impl Image {
     /// Align center both axes.
     pub fn align_center(mut self) -> Self {
         // offset = (parent - child) * 0.5
-        let ox = Size::size_f(|parent, child, _ctx| {
+        let ox = Size::from_size(|parent, child, _ctx| {
             let parent_w = parent[0].unwrap_or(child.get()[0]);
             (parent_w - child.get()[0]) * 0.5
         });
-        let oy = Size::size_f(|parent, child, _ctx| {
+        let oy = Size::from_size(|parent, child, _ctx| {
             let parent_h = parent[1].unwrap_or(child.get()[1]);
             (parent_h - child.get()[1]) * 0.5
         });
@@ -187,19 +186,16 @@ impl Image {
         let m2 = margin.clone();
         let m3 = margin.clone();
         let ox = match align {
-            HAlign::Left => {
-                Size::size_f(move |_parent, _child, ctx| m1.calc([None, None], || [0.0, 0.0], ctx))
-            }
-            HAlign::Center => Size::size_f(move |parent, child, ctx| {
-                let parent_w = parent[0].unwrap_or(child.get()[0]);
-                (parent_w - child.get()[0]) * 0.5
-                    + m2.calc(parent, || [child.get()[0], child.get()[1]], ctx)
+            HAlign::Left => Size::from_size(move |_parent, _child, ctx| {
+                m1.size([None, None], &mut ChildSize::default(), ctx)
             }),
-            HAlign::Right => Size::size_f(move |parent, child, ctx| {
+            HAlign::Center => Size::from_size(move |parent, child, ctx| {
                 let parent_w = parent[0].unwrap_or(child.get()[0]);
-                parent_w
-                    - child.get()[0]
-                    - m3.calc(parent, || [child.get()[0], child.get()[1]], ctx)
+                (parent_w - child.get()[0]) * 0.5 + m2.size(parent, child, ctx)
+            }),
+            HAlign::Right => Size::from_size(move |parent, child, ctx| {
+                let parent_w = parent[0].unwrap_or(child.get()[0]);
+                parent_w - child.get()[0] - m3.size(parent, child, ctx)
             }),
         };
         let oy = self.offset[1].clone();
@@ -213,19 +209,16 @@ impl Image {
         let m2 = margin.clone();
         let m3 = margin.clone();
         let oy = match align {
-            VAlign::Top => {
-                Size::size_f(move |_parent, _child, ctx| m1.calc([None, None], || [0.0, 0.0], ctx))
-            }
-            VAlign::Center => Size::size_f(move |parent, child, ctx| {
-                let parent_h = parent[1].unwrap_or(child.get()[1]);
-                (parent_h - child.get()[1]) * 0.5
-                    + m2.calc(parent, || [child.get()[0], child.get()[1]], ctx)
+            VAlign::Top => Size::from_size(move |_parent, _child, ctx| {
+                m1.size([None, None], &mut ChildSize::default(), ctx)
             }),
-            VAlign::Bottom => Size::size_f(move |parent, child, ctx| {
+            VAlign::Center => Size::from_size(move |parent, child, ctx| {
                 let parent_h = parent[1].unwrap_or(child.get()[1]);
-                parent_h
-                    - child.get()[1]
-                    - m3.calc(parent, || [child.get()[0], child.get()[1]], ctx)
+                (parent_h - child.get()[1]) * 0.5 + m2.size(parent, child, ctx)
+            }),
+            VAlign::Bottom => Size::from_size(move |parent, child, ctx| {
+                let parent_h = parent[1].unwrap_or(child.get()[1]);
+                parent_h - child.get()[1] - m3.size(parent, child, ctx)
             }),
         };
         let ox = self.offset[0].clone();
@@ -270,10 +263,12 @@ impl Image {
         base: [f32; 2],
         ctx: &WidgetContext,
     ) -> (f32, f32, f32, f32) {
-        let size_x = self.size[0].calc(boundary, || base, ctx);
-        let size_y = self.size[1].calc(boundary, || base, ctx);
-        let offset_x = self.offset[0].calc(boundary, || base, ctx);
-        let offset_y = self.offset[1].calc(boundary, || base, ctx);
+        let mut child_size = ChildSize::new(|| base);
+
+        let size_x = self.size[0].size(boundary, &mut child_size, ctx);
+        let size_y = self.size[1].size(boundary, &mut child_size, ctx);
+        let offset_x = self.offset[0].size(boundary, &mut child_size, ctx);
+        let offset_y = self.offset[1].size(boundary, &mut child_size, ctx);
         (size_x, size_y, offset_x, offset_y)
     }
 
@@ -331,9 +326,9 @@ impl Style for Image {
         ctx: &WidgetContext,
     ) {
         self.with_image(ctx, |image| {
-            let base = [image.width as f32, image.height as f32];
+            let image_size = [image.width as f32, image.height as f32];
             let boundary = Self::boundary_opt(boundary_size);
-            let (size_x, size_y, offset_x, offset_y) = self.calc_layout(boundary, base, ctx);
+            let (size_x, size_y, offset_x, offset_y) = self.calc_layout(boundary, image_size, ctx);
             let draw_offset = [offset_x + offset[0], offset_y + offset[1]];
 
             let texture_copy = crate::renderer::texture_copy::TextureCopy::default();
@@ -382,15 +377,18 @@ fn load_image_to_texture(
 
 fn prepare_image_and_format(
     dynamic_image: image::DynamicImage,
-) -> (image::DynamicImage, wgpu::TextureFormat) {
+) -> (
+    image::ImageBuffer<image::Rgba<u8>, Vec<u8>>,
+    wgpu::TextureFormat,
+) {
     // Normalize all incoming images to RGBA8 to simplify bytes_per_row handling.
     // This avoids format-dependent byte-per-pixel calculations and prevents copy overruns.
-    let image_rgba8 = image::DynamicImage::ImageRgba8(dynamic_image.to_rgba8());
+    let image_rgba8: image::ImageBuffer<image::Rgba<u8>, Vec<u8>> = dynamic_image.to_rgba8();
     (image_rgba8, wgpu::TextureFormat::Rgba8Unorm)
 }
 
 fn make_cache(
-    image: image::DynamicImage,
+    image: image::ImageBuffer<image::Rgba<u8>, Vec<u8>>,
     format: wgpu::TextureFormat,
     ctx: &WidgetContext,
 ) -> ImageCacheData {
@@ -438,19 +436,16 @@ fn make_cache(
         },
     );
 
-    let color_type = image.color();
-
     ImageCacheData {
         width,
         height,
-        color_type,
         texture,
     }
 }
 
 #[rustfmt::skip]
 // note: this function is currently not being used but may be useful in the future
-fn color_transform(color_type: image::ColorType) -> nalgebra::Matrix4<f32> {
+fn _color_transform(color_type: image::ColorType) -> nalgebra::Matrix4<f32> {
     match color_type {
         // stored as r
         image::ColorType::L8
@@ -485,7 +480,7 @@ fn color_transform(color_type: image::ColorType) -> nalgebra::Matrix4<f32> {
 }
 
 // note: this function is currently not being used but may be useful in the future
-fn color_offset(color_type: image::ColorType) -> [f32; 4] {
+fn _color_offset(color_type: image::ColorType) -> [f32; 4] {
     match color_type {
         // alpha is not stored, so we set it to 1.0
         image::ColorType::L8 | image::ColorType::L16 => [0.0, 0.0, 0.0, 1.0],

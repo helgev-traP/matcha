@@ -101,7 +101,7 @@ impl<T: Send + 'static> Widget<T> for SpaceNode {
         false
     }
 
-    fn preferred_size(&mut self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
+    fn preferred_size(&self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
         (self.size)(constraints, context)
     }
 
@@ -109,20 +109,11 @@ impl<T: Send + 'static> Widget<T> for SpaceNode {
         self.final_size = final_size;
     }
 
-    fn cover_range(&mut self, _context: &WidgetContext) -> CoverRange<f32> {
-        CoverRange::default()
-    }
-
     fn need_rerendering(&self) -> bool {
         false
     }
 
-    fn render(
-        &mut self,
-        _background: Background,
-        _animation_update_flag_notifier: UpdateNotifier,
-        _ctx: &WidgetContext,
-    ) -> RenderNode {
+    fn render(&mut self, _background: Background, _ctx: &WidgetContext) -> RenderNode {
         RenderNode::new()
     }
 }
