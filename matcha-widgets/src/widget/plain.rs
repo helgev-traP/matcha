@@ -1,8 +1,8 @@
 use std::any::Any;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
-use crate::renderer::texture_color::TextureColor;
 use matcha_core::{
     device_event::DeviceEvent,
     render_node::RenderNode,
@@ -13,8 +13,11 @@ use matcha_core::{
     },
     update_flag::UpdateNotifier,
 };
+use nalgebra::constraint;
 use texture_atlas::atlas_simple::atlas::AtlasRegion;
 use utils::single_cache::SingleCache;
+
+use crate::types::size::{ChildSize, Size};
 
 // todo: more documentation
 
@@ -25,8 +28,7 @@ pub struct Plain<T> {
     style: Vec<Box<dyn Style>>,
     content: Option<Box<dyn Dom<T>>>,
 
-    // fix
-    boundary_size: [f32; 2],
+    size: [Size; 2],
 }
 
 impl<T> Plain<T> {
@@ -35,7 +37,7 @@ impl<T> Plain<T> {
             label: label.map(|s| s.to_string()),
             style: Vec::new(),
             content: None,
-            boundary_size: [0.0, 0.0],
+            size: [Size::child_w(1.0), Size::child_h(1.0)],
         })
     }
 
@@ -49,8 +51,8 @@ impl<T> Plain<T> {
         self
     }
 
-    pub fn boundary_size(mut self, size: [f32; 2]) -> Self {
-        self.boundary_size = size;
+    pub fn size(mut self, size: [Size; 2]) -> Self {
+        self.size = size;
         self
     }
 }
@@ -65,9 +67,9 @@ impl<T: Send + 'static> Dom<T> for Plain<T> {
                 .content
                 .as_ref()
                 .map(|content| content.build_widget_tree()),
-            update_notifier: None,
-            size: self.boundary_size,
-            style_cache: SingleCache::new(),
+            size: self.size.clone(),
+            need_rerendering: true,
+            cache: SingleCache::new(),
         })
     }
 
@@ -84,9 +86,16 @@ pub struct PlainNode<T> {
     label: Option<String>,
     style: Vec<Box<dyn Style>>,
     content: Option<Box<dyn Widget<T>>>,
-    update_notifier: Option<UpdateNotifier>,
-    size: [f32; 2],
-    style_cache: SingleCache<u64, Option<AtlasRegion>>,
+    size: [Size; 2],
+
+    // system
+    need_rerendering: bool,
+    cache: SingleCache<[Option<f32>; 2], Cache>,
+}
+
+struct Cache {
+    arranged_size: [f32; 2],
+    region: Option<AtlasRegion>,
 }
 
 // MARK: Widget trait
@@ -129,139 +138,35 @@ impl<T: Send + 'static> Widget<T> for PlainNode<T> {
     }
 
     fn is_inside(&mut self, position: [f32; 2], context: &WidgetContext) -> bool {
-        for style in &self.style {
-            if style.is_inside(position, self.size, context) {
-                return true;
-            }
-        }
-
-        if let Some(content) = &mut self.content {
-            if content.is_inside(position, context) {
-                return true;
-            }
-        }
-
-        false
+        self.cache
+            .get()
+            .map(|cache| {
+                let size = cache.1.arranged_size;
+                0.0 <= position[0]
+                    && position[0] <= size[0]
+                    && 0.0 <= position[1]
+                    && position[1] <= size[1]
+            })
+            .unwrap_or(false)
     }
 
-    fn preferred_size(&mut self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
-        if let Some(content) = &mut self.content {
-            content.preferred_size(constraints, context)
-        } else {
-            [constraints.min_width, constraints.min_height]
-        }
+    fn preferred_size(&self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
+        let child_constraints_width = self.size[0].constraints(constraints, context);
+        let child_constraints_height = self.size[1].constraints(constraints, context);
+        let child_constraints = Constraints::new(child_constraints_width, child_constraints_height);
+
+        todo!()
     }
 
     fn arrange(&mut self, final_size: [f32; 2], context: &WidgetContext) {
-        self.size = final_size;
-        if let Some(content) = &mut self.content {
-            content.arrange(final_size, context);
-        }
-    }
-
-    fn cover_range(&mut self, context: &WidgetContext) -> CoverRange<f32> {
-        // This needs a proper implementation based on styles and content.
-        CoverRange::default()
+        todo!()
     }
 
     fn need_rerendering(&self) -> bool {
-        // A real widget would have state to track this.
-        true // For now, always rerender to draw styles.
+        true
     }
 
-    fn render(
-        &mut self,
-        background: Background,
-        animation_update_flag_notifier: UpdateNotifier,
-        ctx: &WidgetContext,
-    ) -> RenderNode {
-        self.update_notifier = Some(animation_update_flag_notifier.clone());
-
-        let mut render_node = RenderNode::new();
-
-        if !self.style.is_empty() {
-            let mut hasher = DefaultHasher::new();
-            self.size.iter().for_each(|f| f.to_bits().hash(&mut hasher));
-            let hash = hasher.finish();
-
-            let (_, style_texture_opt) = self.style_cache.get_or_insert_with(hash, || {
-                let mut x_min = f32::MAX;
-                let mut x_max = f32::MIN;
-                let mut y_min = f32::MAX;
-                let mut y_max = f32::MIN;
-
-                for style in &self.style {
-                    let range = style.draw_range(self.size, ctx);
-                    x_min = x_min.min(range.left());
-                    x_max = x_max.max(range.right());
-                    y_min = y_min.min(range.top());
-                    y_max = y_max.max(range.bottom());
-                }
-
-                let width = ((x_max - x_min).ceil()).max(0.0) as u32;
-                let height = ((y_max - y_min).ceil()).max(0.0) as u32;
-                if width == 0 || height == 0 {
-                    return None;
-                }
-                let texture_size = [width, height];
-
-                let style_region = match ctx.texture_atlas().allocate_color(
-                    ctx.device(),
-                    ctx.queue(),
-                    texture_size,
-                ) {
-                    Ok(r) => r,
-                    Err(_) => return None,
-                };
-
-                let mut encoder =
-                    ctx.device()
-                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                            label: Some("Plain Style Render Encoder"),
-                        });
-
-                {
-                    let mut render_pass = match style_region.begin_render_pass(&mut encoder) {
-                        Ok(rp) => rp,
-                        Err(_) => {
-                            // Skip drawing if we cannot begin a render pass (e.g., invalid view)
-                            return None;
-                        }
-                    };
-
-                    for style in &self.style {
-                        style.draw(
-                            &mut render_pass,
-                            texture_size,
-                            style_region.formats()[0], // Assuming single format
-                            self.size,
-                            [x_min, y_min],
-                            ctx,
-                        );
-                    }
-                }
-                ctx.queue().submit(Some(encoder.finish()));
-
-                Some(style_region)
-            });
-
-            if let Some(style_texture) = style_texture_opt.clone() {
-                render_node.texture_and_position = Some((
-                    style_texture,
-                    nalgebra::Matrix4::new_nonuniform_scaling(&nalgebra::Vector3::new(
-                        self.size[0],
-                        self.size[1],
-                        1.0,
-                    )),
-                ));
-            }
-        }
-
-        if let Some(content) = &mut self.content {
-            let content_node = content.render(background, animation_update_flag_notifier, ctx);
-            render_node.add_child(content_node, nalgebra::Matrix4::identity());
-        }
-
-        render_node
+    fn render(&mut self, background: Background, ctx: &WidgetContext) -> RenderNode {
+        todo!()
     }
 }

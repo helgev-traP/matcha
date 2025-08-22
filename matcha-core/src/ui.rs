@@ -24,6 +24,18 @@ pub struct Constraints {
     pub max_height: f32,
 }
 
+impl Constraints {
+    /// `[{min}, {max}]`
+    pub fn new(width: [f32; 2], height: [f32; 2]) -> Self {
+        Self {
+            min_width: width[0],
+            max_width: width[1],
+            min_height: height[0],
+            max_height: height[1],
+        }
+    }
+}
+
 /// Provides contextual information available to all widgets during their lifecycle.
 ///
 /// This includes access to the GPU, window properties, shared resources, and timing information.
@@ -243,7 +255,7 @@ pub enum UpdateWidgetError {
 ///     based on the results of the measure pass. This is a top-down process.
 /// 3.  **Render (`render`)**: After the layout is determined, this pass generates the actual drawing commands
 ///     (`RenderNode`) to be sent to the GPU.
-#[async_trait::async_trait]
+[#[async_trait::async_trait]]
 pub trait Widget<T>: Send {
     /// Returns an optional label for debugging purposes.
     fn label(&self) -> Option<&str>;
@@ -269,13 +281,13 @@ pub trait Widget<T>: Send {
     fn is_inside(&mut self, position: [f32; 2], context: &WidgetContext) -> bool;
 
     /// **Measure Pass**: Calculates the widget's preferred size based on the given constraints.
-    fn preferred_size(&mut self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2];
+    fn preferred_size(&self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2];
 
     /// **Arrange Pass**: Arranges the widget and its children within the given final size.
     fn arrange(&mut self, final_size: [f32; 2], context: &WidgetContext);
 
-    /// Returns the drawing range and the area that the widget always covers.
-    fn cover_range(&mut self, context: &WidgetContext) -> CoverRange<f32>;
+    // /// Returns the drawing range and the area that the widget always covers.
+    // fn cover_range(&mut self, context: &WidgetContext) -> CoverRange<f32>;
 
     /// Indicates whether the widget needs to be re-rendered.
     fn need_rerendering(&self) -> bool;
@@ -290,12 +302,7 @@ pub trait Widget<T>: Send {
     /// This mechanism enables an efficient, reactive rendering loop where redraws only happen when
     /// explicitly requested by a widget, for example, due to an animation tick or a state change
     /// during event handling.
-    fn render(
-        &mut self,
-        background: Background,
-        animation_update_flag_notifier: UpdateNotifier,
-        ctx: &WidgetContext,
-    ) -> RenderNode;
+    fn render(&mut self, background: Background, ctx: &WidgetContext) -> RenderNode;
 
     /// Updates the GPU device and queue for rendering purposes.
     /// This method is a placeholder and should be implemented to handle GPU resource updates.

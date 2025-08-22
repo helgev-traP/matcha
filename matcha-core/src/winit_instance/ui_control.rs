@@ -26,7 +26,6 @@ pub struct UiControl<
     component: Component<Model, Message, Event, InnerEvent>,
     model_update_flag: UpdateFlag,
     widget: Option<Box<dyn Widget<Event>>>,
-    animation_update_flag: UpdateFlag,
 
     window_state: WindowState,
     mouse_state: MouseState,
@@ -56,7 +55,6 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
             component,
             model_update_flag: UpdateFlag::new_true(),
             widget: None,
-            animation_update_flag: UpdateFlag::new(),
             window_state: WindowState::default(),
             mouse_state: MouseState::new(
                 double_click_duration,
@@ -103,14 +101,13 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
     /// or when the widget is not yet initialized.
     pub fn needs_render(&self) -> bool {
         self.model_update_flag.is_true()
-            || self.animation_update_flag.is_true()
-            || self.widget.is_none()
+            || self.widget.as_ref().is_none_or(|w| w.need_rerendering())
     }
 
     // if this method is called, it means we already have a current surface texture so we must re-render it to prevent flickering.
     pub async fn render<'a>(
         &mut self,
-        size: [f32; 2],
+        viewport_size: [f32; 2],
         background: Background<'a>,
         ctx: &WidgetContext<'a>,
     ) -> RenderNode {
@@ -131,46 +128,32 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
                 // Initialize widget
                 self.widget = Some(dom.build_widget_tree());
             }
-
-            // trigger rendering
-            self.animation_update_flag = UpdateFlag::new_true();
         }
 
         let widget = self.widget.as_mut().expect("widget initialized above");
 
-        self.animation_update_flag = UpdateFlag::new();
-
-        Self::render_current_widget(
-            &mut **widget,
-            size,
-            background,
-            self.animation_update_flag.notifier(),
-            ctx,
-        )
+        Self::render_current_widget(&mut **widget, viewport_size, background, ctx)
     }
 
     fn render_current_widget(
         widget: &mut dyn Widget<Event>,
-        size: [f32; 2],
+        viewport_size: [f32; 2],
         background: Background,
-        animation_update_flag_notifier: UpdateNotifier,
         ctx: &WidgetContext,
     ) -> RenderNode {
         let constraints = Constraints {
             min_width: 0.0,
-            max_width: size[0],
+            max_width: viewport_size[0],
             min_height: 0.0,
-            max_height: size[1],
+            max_height: viewport_size[1],
         };
         let preferred_size = widget.preferred_size(&constraints, ctx);
-        widget.arrange(
-            [
-                preferred_size[0].min(size[0]),
-                preferred_size[1].min(size[1]),
-            ],
-            ctx,
-        );
-        widget.render(background, animation_update_flag_notifier, ctx)
+        let final_size = [
+            preferred_size[0].clamp(0.0, viewport_size[0]),
+            preferred_size[1].clamp(0.0, viewport_size[1]),
+        ];
+        widget.arrange(final_size, ctx);
+        widget.render(background, ctx)
     }
 
     fn convert_winit_to_window_event(

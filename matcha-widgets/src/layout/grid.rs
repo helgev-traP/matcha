@@ -84,7 +84,6 @@ impl<T: Send + 'static> Dom<T> for Grid<T> {
                     item: item.item.build_widget_tree(),
                 })
                 .collect(),
-            update_notifier: None,
             column_ranges: Vec::new(),
             row_ranges: Vec::new(),
         })
@@ -106,7 +105,6 @@ pub struct GridNode<T: Send + 'static> {
     gap_columns: Size,
     gap_rows: Size,
     items: Vec<GridNodeItem<T>>,
-    update_notifier: Option<UpdateNotifier>,
     column_ranges: Vec<[f32; 2]>,
     row_ranges: Vec<[f32; 2]>,
 }
@@ -156,7 +154,7 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
             .any(|item| item.item.is_inside(position, context))
     }
 
-    fn preferred_size(&mut self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
+    fn preferred_size(&self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
         // A proper implementation would calculate the preferred size based on content.
         // For now, we just use the constraints.
         [constraints.max_width, constraints.max_height]
@@ -184,21 +182,11 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
         }
     }
 
-    fn cover_range(&mut self, _context: &WidgetContext) -> CoverRange<f32> {
-        CoverRange::default()
-    }
-
     fn need_rerendering(&self) -> bool {
         self.items.iter().any(|item| item.item.need_rerendering())
     }
 
-    fn render(
-        &mut self,
-        background: Background,
-        animation_update_flag_notifier: UpdateNotifier,
-        ctx: &WidgetContext,
-    ) -> RenderNode {
-        self.update_notifier = Some(animation_update_flag_notifier);
+    fn render(&mut self, background: Background, ctx: &WidgetContext) -> RenderNode {
         let mut render_node = RenderNode::new();
 
         for item in &mut self.items {
@@ -206,15 +194,12 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
             let row_start = self.row_ranges[item.row[0]][0];
             let position = [col_start, row_start];
 
-            let notifier = self.update_notifier.clone().unwrap();
             let transform = nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(
                 position[0],
                 position[1],
                 0.0,
             ));
-            let child_node = item
-                .item
-                .render(background.transition(position), notifier, ctx);
+            let child_node = item.item.render(background.transition(position), ctx);
             render_node.add_child(child_node, transform);
         }
 

@@ -31,7 +31,6 @@ impl<T: Send + 'static> Dom<T> for Template {
     fn build_widget_tree(&self) -> Box<dyn Widget<T>> {
         Box::new(TemplateNode {
             label: self.label.clone(),
-            update_notifier: None,
         })
     }
 
@@ -45,7 +44,6 @@ impl<T: Send + 'static> Dom<T> for Template {
 
 pub struct TemplateNode {
     label: Option<String>,
-    update_notifier: Option<UpdateNotifier>,
 }
 
 // MARK: Widget trait
@@ -92,7 +90,7 @@ impl<T: Send + 'static> Widget<T> for TemplateNode {
         true
     }
 
-    fn preferred_size(&mut self, _constraints: &Constraints, _context: &WidgetContext) -> [f32; 2] {
+    fn preferred_size(&self, _constraints: &Constraints, _context: &WidgetContext) -> [f32; 2] {
         // This widget has no content, so it takes up no space.
         [0.0, 0.0]
     }
@@ -101,26 +99,13 @@ impl<T: Send + 'static> Widget<T> for TemplateNode {
         // This widget has no children to arrange.
     }
 
-    fn cover_range(&mut self, _context: &WidgetContext) -> CoverRange<f32> {
-        // This widget is transparent and covers no area.
-        CoverRange::default()
-    }
-
     fn need_rerendering(&self) -> bool {
         // A real widget would have state to track this.
         // For a template, we can assume it doesn't need rerendering unless updated.
         false
     }
 
-    fn render(
-        &mut self,
-        _background: Background,
-        animation_update_flag_notifier: UpdateNotifier,
-        _ctx: &WidgetContext,
-    ) -> RenderNode {
-        // Store the notifier so we can request a redraw later.
-        self.update_notifier = Some(animation_update_flag_notifier);
-
+    fn render(&mut self, _background: Background, _ctx: &WidgetContext) -> RenderNode {
         // This widget doesn't draw anything.
         RenderNode::new()
     }

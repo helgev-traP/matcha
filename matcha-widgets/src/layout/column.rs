@@ -51,7 +51,6 @@ impl<T: Send + 'static> Dom<T> for Column<T> {
                 .iter()
                 .map(|item| item.build_widget_tree())
                 .collect(),
-            update_notifier: None,
             item_sizes: Vec::new(),
             size: [0.0, 0.0],
         })
@@ -71,7 +70,6 @@ pub struct ColumnNode<T> {
     justify_content: JustifyContent,
     align_items: AlignItems,
     items: Vec<Box<dyn Widget<T>>>,
-    update_notifier: Option<UpdateNotifier>,
     item_sizes: Vec<[f32; 2]>,
     size: [f32; 2],
 }
@@ -123,7 +121,7 @@ impl<T: Send + 'static> Widget<T> for ColumnNode<T> {
             .any(|item| item.is_inside(position, context))
     }
 
-    fn preferred_size(&mut self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
+    fn preferred_size(&self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
         let mut total_height = 0.0;
         let mut max_width: f32 = 0.0;
         self.item_sizes.clear();
@@ -150,29 +148,18 @@ impl<T: Send + 'static> Widget<T> for ColumnNode<T> {
         }
     }
 
-    fn cover_range(&mut self, _context: &WidgetContext) -> CoverRange<f32> {
-        CoverRange::default() // Simplified
-    }
-
     fn need_rerendering(&self) -> bool {
         self.items.iter().any(|item| item.need_rerendering())
     }
 
-    fn render(
-        &mut self,
-        background: Background,
-        animation_update_flag_notifier: UpdateNotifier,
-        ctx: &WidgetContext,
-    ) -> RenderNode {
-        self.update_notifier = Some(animation_update_flag_notifier);
+    fn render(&mut self, background: Background, ctx: &WidgetContext) -> RenderNode {
         let mut render_node = RenderNode::new();
         let mut y_pos = 0.0;
 
         for (item, &item_size) in self.items.iter_mut().zip(&self.item_sizes) {
-            let notifier = self.update_notifier.clone().unwrap();
             let transform =
                 nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(0.0, y_pos, 0.0));
-            let child_node = item.render(background.transition([0.0, y_pos]), notifier, ctx);
+            let child_node = item.render(background.transition([0.0, y_pos]), ctx);
             render_node.add_child(child_node, transform);
             y_pos += item_size[1];
         }

@@ -79,7 +79,6 @@ where
                 .content
                 .as_ref()
                 .map(|content| content.build_widget_tree()),
-            update_notifier: None,
         })
     }
 
@@ -100,7 +99,6 @@ where
     bottom: f32,
     left: f32,
     content: Option<Box<dyn Widget<T>>>,
-    update_notifier: Option<UpdateNotifier>,
 }
 
 #[async_trait::async_trait]
@@ -146,11 +144,11 @@ where
     fn is_inside(&mut self, position: [f32; 2], context: &WidgetContext) -> bool {
         let inner_pos = [position[0] - self.left, position[1] - self.top];
         self.content
-            .as_mut()
+            .as_ref()
             .map_or(false, |c| c.is_inside(inner_pos, context))
     }
 
-    fn preferred_size(&mut self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
+    fn preferred_size(&self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
         let content_size = self.content.as_mut().map_or([0.0, 0.0], |c| {
             let inner_constraints = Constraints {
                 min_width: (constraints.min_width - self.left - self.right).max(0.0),
@@ -177,33 +175,18 @@ where
         }
     }
 
-    fn cover_range(&mut self, context: &WidgetContext) -> CoverRange<f32> {
-        self.content
-            .as_mut()
-            .map_or(CoverRange::default(), |c| c.cover_range(context))
-    }
-
     fn need_rerendering(&self) -> bool {
         self.content
             .as_ref()
             .map_or(false, |c| c.need_rerendering())
     }
 
-    fn render(
-        &mut self,
-        background: Background,
-        animation_update_flag_notifier: UpdateNotifier,
-        ctx: &WidgetContext,
-    ) -> RenderNode {
-        self.update_notifier = Some(animation_update_flag_notifier);
-
+    fn render(&mut self, background: Background, ctx: &WidgetContext) -> RenderNode {
         if let Some(content) = &mut self.content {
-            let notifier = self.update_notifier.clone().unwrap();
             let transform = nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(
                 self.left, self.top, 0.0,
             ));
-            let child_node =
-                content.render(background.transition([self.left, self.top]), notifier, ctx);
+            let child_node = content.render(background.transition([self.left, self.top]), ctx);
             let mut render_node = RenderNode::new();
             render_node.add_child(child_node, transform);
             render_node
