@@ -8,16 +8,17 @@ pub struct Range2D<T: Float = f32> {
 
 // MARK: Initialization
 
-impl<T: Float> Range2D<T> {
-    pub fn new(x: [T; 2], y: [T; 2]) -> Option<Self> {
-        if x[0] > x[1] || y[0] > y[1] {
-            None
-        } else {
-            Some(Range2D { x, y })
+impl<T: Float> Default for Range2D<T> {
+    fn default() -> Self {
+        Range2D {
+            x: [T::zero(), T::zero()],
+            y: [T::zero(), T::zero()],
         }
     }
+}
 
-    pub const fn new_unchecked(x: [T; 2], y: [T; 2]) -> Self {
+impl<T: Float> Range2D<T> {
+    pub const fn new(x: [T; 2], y: [T; 2]) -> Self {
         Range2D { x, y }
     }
 
@@ -69,7 +70,7 @@ impl<T: Float> Range2D<T> {
     }
 
     pub fn reduction(self, r: T) -> Option<Self> {
-        if r * T::from(2).unwrap() > self.short_side() {
+        if r * T::from(2).expect("2 should be convertible to T") > self.short_side() {
             None
         } else {
             let x = [self.x[0] + r, self.x[1] - r];
@@ -110,8 +111,8 @@ impl<T: Float> Range2D<T> {
 
     pub fn center(&self) -> [T; 2] {
         [
-            (self.x[0] + self.x[1]) / T::from(2).unwrap(),
-            (self.y[0] + self.y[1]) / T::from(2).unwrap(),
+            (self.x[0] + self.x[1]) / T::from(2).expect("2 should be convertible to T"),
+            (self.y[0] + self.y[1]) / T::from(2).expect("2 should be convertible to T"),
         ]
     }
 
@@ -139,11 +140,11 @@ impl<T: Float> Range2D<T> {
         self.y[1]
     }
 
-    pub const fn upper_left(&self) -> [T; 2] {
+    pub const fn min_point(&self) -> [T; 2] {
         [self.x[0], self.y[0]]
     }
 
-    pub const fn lower_right(&self) -> [T; 2] {
+    pub const fn max_point(&self) -> [T; 2] {
         [self.x[1], self.y[1]]
     }
 

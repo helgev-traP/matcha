@@ -27,7 +27,6 @@ pub struct TextContext<const N: u32 = 256> {
 
     // glyph cache
     cache: Option<CacheAtlas<N>>,
-
     // gpu rendering state
     // todo
 }

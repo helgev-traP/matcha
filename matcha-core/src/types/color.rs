@@ -10,7 +10,12 @@ pub enum Color {
 
 impl Default for Color {
     fn default() -> Self {
-        Color::Rgba8USrgb { r: 0, g: 0, b: 0, a: 0 }
+        Color::Rgba8USrgb {
+            r: 0,
+            g: 0,
+            b: 0,
+            a: 0,
+        }
     }
 }
 
@@ -36,6 +41,13 @@ macro_rules! convert_srgb_u8 {
 }
 
 impl Color {
+    pub const TRANSPARENT: Color = Color::RgbaF32 {
+        r: 0.0,
+        g: 0.0,
+        b: 0.0,
+        a: 0.0,
+    };
+
     pub fn is_transparent(&self) -> bool {
         match self {
             Color::Rgba8USrgb { a, .. } => *a == 0,
@@ -56,44 +68,32 @@ impl Color {
 
     pub fn to_rgba_u8(&self) -> [u8; 4] {
         match self {
-            Color::Rgb8USrgb { r, g, b } => {
-                [*r, *g, *b, 255]
-            },
-            Color::Rgba8USrgb { r, g, b, a } => {
-                [*r, *g, *b, *a]
-            },
-            Color::RgbF32 { r, g, b } => {
-                [
-                    convert_srgb_u8!(r),
-                    convert_srgb_u8!(g),
-                    convert_srgb_u8!(b),
-                    255,
-                ]
-            },
-            Color::RgbaF32 { r, g, b, a } => {
-                [
-                    convert_srgb_u8!(r),
-                    convert_srgb_u8!(g),
-                    convert_srgb_u8!(b),
-                    (a * 255.0).round() as u8,
-                ]
-            },
-            Color::RgbF64 { r, g, b } => {
-                [
-                    convert_srgb_u8!(r),
-                    convert_srgb_u8!(g),
-                    convert_srgb_u8!(b),
-                    255,
-                ]
-            },
-            Color::RgbaF64 { r, g, b, a } => {
-                [
-                    convert_srgb_u8!(r),
-                    convert_srgb_u8!(g),
-                    convert_srgb_u8!(b),
-                    (a * 255.0).round() as u8,
-                ]
-            },
+            Color::Rgb8USrgb { r, g, b } => [*r, *g, *b, 255],
+            Color::Rgba8USrgb { r, g, b, a } => [*r, *g, *b, *a],
+            Color::RgbF32 { r, g, b } => [
+                convert_srgb_u8!(r),
+                convert_srgb_u8!(g),
+                convert_srgb_u8!(b),
+                255,
+            ],
+            Color::RgbaF32 { r, g, b, a } => [
+                convert_srgb_u8!(r),
+                convert_srgb_u8!(g),
+                convert_srgb_u8!(b),
+                (a * 255.0).round() as u8,
+            ],
+            Color::RgbF64 { r, g, b } => [
+                convert_srgb_u8!(r),
+                convert_srgb_u8!(g),
+                convert_srgb_u8!(b),
+                255,
+            ],
+            Color::RgbaF64 { r, g, b, a } => [
+                convert_srgb_u8!(r),
+                convert_srgb_u8!(g),
+                convert_srgb_u8!(b),
+                (a * 255.0).round() as u8,
+            ],
         }
     }
 
@@ -140,38 +140,77 @@ impl Color {
     }
 }
 
+impl From<Color> for wgpu::Color {
+    fn from(color: Color) -> Self {
+        let [r, g, b, a] = color.to_rgba_f32();
+        wgpu::Color {
+            r: r as f64,
+            g: g as f64,
+            b: b as f64,
+            a: a as f64,
+        }
+    }
+}
+
 impl From<[u8; 3]> for Color {
     fn from(x: [u8; 3]) -> Self {
-        Color::Rgb8USrgb { r: x[0], g: x[1], b: x[2] }
+        Color::Rgb8USrgb {
+            r: x[0],
+            g: x[1],
+            b: x[2],
+        }
     }
 }
 
 impl From<[u8; 4]> for Color {
     fn from(x: [u8; 4]) -> Self {
-        Color::Rgba8USrgb { r: x[0], g: x[1], b: x[2], a: x[3] }
+        Color::Rgba8USrgb {
+            r: x[0],
+            g: x[1],
+            b: x[2],
+            a: x[3],
+        }
     }
 }
 
 impl From<[f32; 3]> for Color {
     fn from(x: [f32; 3]) -> Self {
-        Color::RgbF32 { r: x[0], g: x[1], b: x[2] }
+        Color::RgbF32 {
+            r: x[0],
+            g: x[1],
+            b: x[2],
+        }
     }
 }
 
 impl From<[f32; 4]> for Color {
     fn from(x: [f32; 4]) -> Self {
-        Color::RgbaF32 { r: x[0], g: x[1], b: x[2], a: x[3] }
+        Color::RgbaF32 {
+            r: x[0],
+            g: x[1],
+            b: x[2],
+            a: x[3],
+        }
     }
 }
 
 impl From<[f64; 3]> for Color {
     fn from(x: [f64; 3]) -> Self {
-        Color::RgbF64 { r: x[0], g: x[1], b: x[2] }
+        Color::RgbF64 {
+            r: x[0],
+            g: x[1],
+            b: x[2],
+        }
     }
 }
 
 impl From<[f64; 4]> for Color {
     fn from(x: [f64; 4]) -> Self {
-        Color::RgbaF64 { r: x[0], g: x[1], b: x[2], a: x[3] }
+        Color::RgbaF64 {
+            r: x[0],
+            g: x[1],
+            b: x[2],
+            a: x[3],
+        }
     }
 }

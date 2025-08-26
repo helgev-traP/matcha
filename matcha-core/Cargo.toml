@@ -1,10 +1,15 @@
 [package]
 name = "matcha-core"
-version =  { workspace = true }
+version = { workspace = true }
 edition = "2024"
 publish = false
 
 [dependencies]
+# self
+utils = { workspace = true }
+texture-atlas = { workspace = true }
+buffer-atlas = { workspace = true }
+
 # async runtime, utility
 tokio = { workspace = true }
 async-trait = { workspace = true }
@@ -26,10 +31,12 @@ nalgebra = { features = ["bytemuck"], workspace = true }
 image = { workspace = true }
 
 # other
-pathfinder_geometry = { workspace = true }
-cosmic-text = { workspace = true }
-rand = { workspace = true }
 bitflags = { workspace = true }
 num = { workspace = true }
-downcast-rs = { workspace = true }
-fxhash = "0.2.1"
+fxhash = { workspace = true }
+moka = { workspace = true }
+dashmap = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

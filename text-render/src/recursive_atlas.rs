@@ -293,6 +293,7 @@ pub struct GlyphTexture<'a, const N: u32> {
 // MARK: tests
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

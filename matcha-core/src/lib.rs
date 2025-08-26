@@ -1,16 +1,36 @@
-// api
+// application entry point. wrapper of winit_instance.
 pub mod app;
-pub mod component;
-pub mod device;
-pub mod events;
-pub mod window;
 
-// core modules
-pub mod context;
-pub mod observer;
-pub mod renderer;
+// event loop, window handling and rendering
+pub mod winit_instance;
+
+// widget system
+pub mod backend;
+pub mod component;
+pub mod render_node;
 pub mod ui;
+pub mod update_flag;
+
+// winit event handling
+pub mod device_event;
+
+// resource management
+pub mod any_resource;
+// gpu preparation
+pub mod gpu;
+// renderer of object tree
+pub mod renderer;
+
+// allocator for area in texture atlas
+pub mod texture_allocator;
 
 // types
 pub mod types;
-pub mod vertex;
+
+// Re-export key components
+pub use app::App;
+pub use component::{Component, ComponentDom};
+pub use device_event::DeviceEvent;
+pub use render_node::RenderNode;
+pub use ui::{Background, Constraints, Dom, Style, Widget, WidgetContext};
+pub use update_flag::UpdateNotifier;
