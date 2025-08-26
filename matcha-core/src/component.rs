@@ -12,7 +12,7 @@ use crate::{
 
 use super::{
     types::range::CoverRange,
-    ui::{Background, Constraints, Dom, DomComPareResult, UpdateWidgetError, Widget},
+    ui::{Background, Constraints, Dom, DomCompareResult, UpdateWidgetError, Widget},
 };
 
 // MARK: - ModelAccessor
@@ -278,18 +278,18 @@ impl<Model: Sync + Send + 'static, Event: 'static, InnerEvent: 'static> Widget<E
         }
     }
 
-    fn compare(&self, dom: &dyn Dom<Event>) -> DomComPareResult {
+    fn compare(&self, dom: &dyn Dom<Event>) -> DomCompareResult {
         // todo: optimize
         if let Some(component_dom) =
             (dom as &dyn Any).downcast_ref::<ComponentDom<Model, Event, InnerEvent>>()
         {
             if self.label == component_dom.label {
-                DomComPareResult::Same
+                DomCompareResult::Same
             } else {
-                DomComPareResult::Different
+                DomCompareResult::Different
             }
         } else {
-            DomComPareResult::Different
+            DomCompareResult::Different
         }
     }
 
@@ -301,7 +301,7 @@ impl<Model: Sync + Send + 'static, Event: 'static, InnerEvent: 'static> Widget<E
             .and_then(|inner_event| (self.event)(inner_event, self.model_accessor.clone()))
     }
 
-    fn preferred_size(&self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
+    fn preferred_size(&mut self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
         self.widget.preferred_size(constraints, context)
     }
 

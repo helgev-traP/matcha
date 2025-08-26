@@ -5,7 +5,7 @@ use matcha_core::{
     render_node::RenderNode,
     types::range::CoverRange,
     ui::{
-        Background, Constraints, Dom, DomComPareResult, UpdateWidgetError, Widget, WidgetContext,
+        Background, Constraints, Dom, DomCompareResult, UpdateWidgetError, Widget, WidgetContext,
     },
     update_flag::UpdateNotifier,
 };
@@ -127,11 +127,11 @@ where
         }
     }
 
-    fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult {
+    fn compare(&self, dom: &dyn Dom<T>) -> DomCompareResult {
         if (dom as &dyn Any).downcast_ref::<Padding<T>>().is_some() {
-            DomComPareResult::Same // Simplified
+            DomCompareResult::Same // Simplified
         } else {
-            DomComPareResult::Different
+            DomCompareResult::Different
         }
     }
 
@@ -144,11 +144,11 @@ where
     fn is_inside(&mut self, position: [f32; 2], context: &WidgetContext) -> bool {
         let inner_pos = [position[0] - self.left, position[1] - self.top];
         self.content
-            .as_ref()
+            .as_mut()
             .map_or(false, |c| c.is_inside(inner_pos, context))
     }
 
-    fn preferred_size(&self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
+    fn preferred_size(&mut self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
         let content_size = self.content.as_mut().map_or([0.0, 0.0], |c| {
             let inner_constraints = Constraints {
                 min_width: (constraints.min_width - self.left - self.right).max(0.0),
@@ -186,7 +186,7 @@ where
             let transform = nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(
                 self.left, self.top, 0.0,
             ));
-            let child_node = content.render(background.transition([self.left, self.top]), ctx);
+            let child_node = content.render(background.translate([self.left, self.top]), ctx);
             let mut render_node = RenderNode::new();
             render_node.add_child(child_node, transform);
             render_node

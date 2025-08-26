@@ -5,7 +5,7 @@ use matcha_core::{
     render_node::RenderNode,
     types::range::CoverRange,
     ui::{
-        Background, Constraints, Dom, DomComPareResult, UpdateWidgetError, Widget, WidgetContext,
+        Background, Constraints, Dom, DomCompareResult, UpdateWidgetError, Widget, WidgetContext,
     },
     update_flag::UpdateNotifier,
 };
@@ -96,11 +96,11 @@ impl<T: Send + 'static> Widget<T> for PositionNode<T> {
         }
     }
 
-    fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult {
+    fn compare(&self, dom: &dyn Dom<T>) -> DomCompareResult {
         if (dom as &dyn Any).downcast_ref::<Position<T>>().is_some() {
-            DomComPareResult::Same // Simplified
+            DomCompareResult::Same // Simplified
         } else {
-            DomComPareResult::Different
+            DomCompareResult::Different
         }
     }
 
@@ -117,9 +117,9 @@ impl<T: Send + 'static> Widget<T> for PositionNode<T> {
             .map_or(false, |c| c.is_inside(position, context))
     }
 
-    fn preferred_size(&self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
+    fn preferred_size(&mut self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
         self.content
-            .as_ref()
+            .as_mut()
             .map_or([0.0, 0.0], |c| c.preferred_size(constraints, context))
     }
 
@@ -142,7 +142,7 @@ impl<T: Send + 'static> Widget<T> for PositionNode<T> {
             // A full implementation would also handle right and bottom.
 
             let transform = nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(x, y, 0.0));
-            let child_node = content.render(background.transition([x, y]), ctx);
+            let child_node = content.render(background.translate([x, y]), ctx);
             let mut render_node = RenderNode::new();
             render_node.add_child(child_node, transform);
             render_node

@@ -255,7 +255,7 @@ pub enum UpdateWidgetError {
 ///     based on the results of the measure pass. This is a top-down process.
 /// 3.  **Render (`render`)**: After the layout is determined, this pass generates the actual drawing commands
 ///     (`RenderNode`) to be sent to the GPU.
-[#[async_trait::async_trait]]
+#[async_trait::async_trait]
 pub trait Widget<T>: Send {
     /// Returns an optional label for debugging purposes.
     fn label(&self) -> Option<&str>;
@@ -270,7 +270,7 @@ pub trait Widget<T>: Send {
     ) -> Result<(), UpdateWidgetError>;
 
     /// Compares the widget with a `Dom` node to determine if they are compatible for an update.
-    fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult;
+    fn compare(&self, dom: &dyn Dom<T>) -> DomCompareResult;
 
     /// Processes a device event (e.g., mouse click, key press).
     ///
@@ -281,7 +281,7 @@ pub trait Widget<T>: Send {
     fn is_inside(&mut self, position: [f32; 2], context: &WidgetContext) -> bool;
 
     /// **Measure Pass**: Calculates the widget's preferred size based on the given constraints.
-    fn preferred_size(&self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2];
+    fn preferred_size(&mut self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2];
 
     /// **Arrange Pass**: Arranges the widget and its children within the given final size.
     fn arrange(&mut self, final_size: [f32; 2], context: &WidgetContext);
@@ -313,7 +313,7 @@ pub trait Widget<T>: Send {
 }
 
 /// The result of comparing a `Widget` with a `Dom` node.
-pub enum DomComPareResult {
+pub enum DomCompareResult {
     /// The widget and DOM are of the same type and can be updated.
     Same,
     /// The widget and DOM are of the same type, but some properties have changed.
@@ -346,7 +346,7 @@ impl<'a> Background<'a> {
     }
 
     /// Translates the background by a given position, returning a new `Background`.
-    pub fn transition(mut self, position: [f32; 2]) -> Self {
+    pub fn translate(mut self, position: [f32; 2]) -> Self {
         self.position = [
             self.position[0] + position[0],
             self.position[1] + position[1],

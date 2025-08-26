@@ -8,7 +8,7 @@ use matcha_core::{
     render_node::RenderNode,
     types::{color::Color, range::CoverRange},
     ui::{
-        Background, Constraints, Dom, DomComPareResult, Style, UpdateWidgetError, Widget,
+        Background, Constraints, Dom, DomCompareResult, Style, UpdateWidgetError, Widget,
         WidgetContext,
     },
     update_flag::UpdateNotifier,
@@ -106,11 +106,11 @@ impl<T: Send + 'static + Clone> Widget<T> for ButtonNode<T> {
         }
     }
 
-    fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult {
+    fn compare(&self, dom: &dyn Dom<T>) -> DomCompareResult {
         if let Some(dom) = (dom as &dyn Any).downcast_ref::<Button<T>>() {
             self.content.compare(&*dom.content)
         } else {
-            DomComPareResult::Different
+            DomCompareResult::Different
         }
     }
 
@@ -200,7 +200,7 @@ impl<T: Send + 'static + Clone> Widget<T> for ButtonNode<T> {
             && position[1] <= self.size[1]
     }
 
-    fn preferred_size(&self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
+    fn preferred_size(&mut self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
         self.content.preferred_size(constraints, context)
     }
 

@@ -5,7 +5,7 @@ use matcha_core::{
     render_node::RenderNode,
     types::range::{CoverRange, Range2D},
     ui::{
-        Background, Constraints, Dom, DomComPareResult, UpdateWidgetError, Widget, WidgetContext,
+        Background, Constraints, Dom, DomCompareResult, UpdateWidgetError, Widget, WidgetContext,
     },
     update_flag::UpdateNotifier,
 };
@@ -134,11 +134,11 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
         }
     }
 
-    fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult {
+    fn compare(&self, dom: &dyn Dom<T>) -> DomCompareResult {
         if (dom as &dyn Any).downcast_ref::<Grid<T>>().is_some() {
-            DomComPareResult::Same // Simplified
+            DomCompareResult::Same // Simplified
         } else {
-            DomComPareResult::Different
+            DomCompareResult::Different
         }
     }
 
@@ -154,7 +154,7 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
             .any(|item| item.item.is_inside(position, context))
     }
 
-    fn preferred_size(&self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
+    fn preferred_size(&mut self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
         // A proper implementation would calculate the preferred size based on content.
         // For now, we just use the constraints.
         [constraints.max_width, constraints.max_height]
@@ -199,7 +199,7 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
                 position[1],
                 0.0,
             ));
-            let child_node = item.item.render(background.transition(position), ctx);
+            let child_node = item.item.render(background.translate(position), ctx);
             render_node.add_child(child_node, transform);
         }
 

@@ -38,19 +38,7 @@ fn update(message: &MyMessage, model_accessor: ModelAccessor<MyModel>) {
 }
 
 fn view(model: &MyModel) -> Box<dyn Dom<MyMessage>> {
-    Box::new(
-        matcha_widgets::Plain::new(None)
-            .style(Box::new(
-                matcha_widgets::style::image::Image::new(include_bytes!(
-                    "assets/videoframe_21710.png"
-                ))
-                .size([
-                    matcha_widgets::types::size::Size::child_w(1.0),
-                    matcha_widgets::types::size::Size::child_h(1.0),
-                ]),
-            ))
-            .boundary_size([200.0, 100.0]),
-    ) as Box<dyn Dom<MyMessage>>
+    todo!()
 }
 
 #[allow(clippy::unwrap_used)]
