@@ -12,10 +12,10 @@ use crate::{
         mouse_state::{MousePrimaryButton, MouseState},
         window_state::WindowState,
     },
-    render_node::RenderNode,
     ui::{Background, Constraints, Widget, WidgetContext},
     update_flag::UpdateFlag,
 };
+use renderer::render_node::RenderNode;
 
 pub struct UiControl<
     Model: Send + Sync + 'static,

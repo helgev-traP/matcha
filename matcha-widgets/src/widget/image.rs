@@ -6,13 +6,13 @@ use image::{DynamicImage, GenericImageView};
 use matcha_core::Style;
 use matcha_core::{
     device_event::DeviceEvent,
-    render_node::RenderNode,
     types::range::{CoverRange, Range2D},
     ui::{
         Background, Constraints, Dom, DomCompareResult, UpdateWidgetError, Widget, WidgetContext,
     },
     update_flag::UpdateNotifier,
 };
+use renderer::render_node::RenderNode;
 use texture_atlas::atlas_simple::atlas::AtlasRegion;
 use utils::cache::Cache;
 

@@ -4,11 +4,11 @@ use crate::{
     any_resource::AnyResource,
     device_event::DeviceEvent,
     gpu::DeviceQueue,
-    render_node::RenderNode,
     texture_allocator,
     types::range::{CoverRange, Range2D},
     update_flag::UpdateNotifier,
 };
+use renderer::render_node::RenderNode;
 
 /// A struct that represents the constraints for a widget's size.
 /// This is passed from parent to child to define the available space.

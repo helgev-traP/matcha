@@ -1,13 +1,15 @@
 use std::sync::Arc;
 
-use crate::renderer::vertex_color::{RenderData, TargetData, VertexColor};
-use crate::vertex::ColorVertex;
 use matcha_core::{
     types::{color::Color, range::Range2D},
     ui::Style,
     ui::WidgetContext,
 };
 use parking_lot::Mutex;
+use renderer::{
+    vertex::colored_vertex::ColorVertex,
+    widgets_renderer::vertex_color::{RenderData, TargetData, VertexColor},
+};
 
 type PolygonFn = dyn for<'a> Fn([f32; 2], &'a WidgetContext) -> Mesh + Send + Sync + 'static;
 type AdaptFn =
@@ -286,7 +288,7 @@ impl Style for Polygon {
                 vertices: &vertices,
                 indices: &indices,
             },
-            ctx,
+            ctx.device(),
         );
     }
 }

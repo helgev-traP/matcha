@@ -5,10 +5,8 @@ use std::{
 
 use tokio::sync::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-use crate::{
-    device_event::DeviceEvent, render_node::RenderNode, ui::WidgetContext,
-    update_flag::UpdateNotifier,
-};
+use crate::{device_event::DeviceEvent, ui::WidgetContext, update_flag::UpdateNotifier};
+use renderer::render_node::RenderNode;
 
 use super::{
     types::range::CoverRange,

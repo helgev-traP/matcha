@@ -4,6 +4,15 @@ edition = "2024"
 version.workspace = true
 
 [dependencies]
+wgpu.workspace = true
+nalgebra.workspace = true
+bytemuck.workspace = true
+thiserror.workspace = true
+texture-atlas = { workspace = true }
+moka.workspace = true
+fxhash.workspace = true
+utils = { workspace = true }
+vello = { workspace = true }
 
 [lints]
 workspace = true

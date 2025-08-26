@@ -18,6 +18,7 @@ version = "0.0.5"
 matcha = { path = "matcha" }
 matcha-core = { path = "matcha-core" }
 matcha-widgets = { path = "matcha-widgets" }
+renderer = { path = "renderer" }
 text-render = { path = "text-render" }
 utils = { path = "utils" }
 texture-atlas = { path = "texture-atlas" }

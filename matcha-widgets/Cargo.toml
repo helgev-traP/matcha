@@ -6,6 +6,7 @@ publish = false
 
 [dependencies]
 # matcha
+renderer = { workspace = true }
 matcha-core = { workspace = true }
 utils = { workspace = true }
 texture-atlas = { workspace = true }
@@ -35,7 +36,6 @@ num = { workspace = true }
 cosmic-text = { workspace = true }
 fxhash = { workspace = true }
 dashmap = { workspace = true }
-moka = { workspace = true }
 
 [lints]
 workspace = true

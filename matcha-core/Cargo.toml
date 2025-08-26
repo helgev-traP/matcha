@@ -6,6 +6,7 @@ publish = false
 
 [dependencies]
 # self
+renderer = { workspace = true }
 utils = { workspace = true }
 texture-atlas = { workspace = true }
 buffer-atlas = { workspace = true }
@@ -34,7 +35,6 @@ image = { workspace = true }
 bitflags = { workspace = true }
 num = { workspace = true }
 fxhash = { workspace = true }
-moka = { workspace = true }
 dashmap = { workspace = true }
 thiserror = { workspace = true }
 

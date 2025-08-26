@@ -2,9 +2,11 @@ use thiserror::Error;
 
 use crate::{
     gpu::{DeviceQueue, Gpu, GpuError},
-    render_node::RenderNode,
-    renderer::{Renderer, TextureValidationError},
     texture_allocator::TextureAllocator,
+};
+use renderer::{
+    core_renderer::{Renderer, TextureValidationError},
+    render_node::RenderNode,
 };
 
 pub struct RenderControl {

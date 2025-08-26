@@ -1,8 +1,10 @@
-use crate::renderer::vertex_color::{RenderData, TargetData, VertexColor};
-use crate::vertex::ColorVertex;
 use matcha_core::{
     types::{color::Color, range::Range2D},
     ui::{Style, WidgetContext},
+};
+use renderer::{
+    vertex::colored_vertex::ColorVertex,
+    widgets_renderer::vertex_color::{RenderData, TargetData, VertexColor},
 };
 
 // todo: more documentation
@@ -84,7 +86,7 @@ impl Style for SolidBox {
                 vertices: &vertices,
                 indices: &indices,
             },
-            ctx,
+            ctx.device(),
         );
     }
 }

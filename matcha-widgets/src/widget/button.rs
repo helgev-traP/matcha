@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 use matcha_core::{
     device_event::{DeviceEvent, DeviceEventData, ElementState, MouseInput, MouseLogicalButton},
-    render_node::RenderNode,
     types::{color::Color, range::CoverRange},
     ui::{
         Background, Constraints, Dom, DomCompareResult, Style, UpdateWidgetError, Widget,
@@ -13,6 +12,7 @@ use matcha_core::{
     },
     update_flag::UpdateNotifier,
 };
+use renderer::render_node::RenderNode;
 
 use crate::style::solid_box::SolidBox;
 

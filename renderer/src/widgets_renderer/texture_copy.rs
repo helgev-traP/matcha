@@ -1,4 +1,3 @@
-use matcha_core::ui::WidgetContext;
 use nalgebra::Matrix4;
 use wgpu::PipelineCompilationOptions;
 
@@ -54,9 +53,7 @@ struct TextureCopyImpl {
 }
 
 impl TextureCopyImpl {
-    fn setup(ctx: &WidgetContext) -> Self {
-        let device = ctx.device();
-
+    fn setup(device: &wgpu::Device) -> Self {
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("texture_copy_bind_group_layout"),
@@ -142,7 +139,7 @@ impl TextureCopy {
             color_transformation,
             color_offset,
         }: RenderData<'_>,
-        ctx: &WidgetContext,
+        device: &wgpu::Device,
     ) {
         let TextureCopyImpl {
             texture_bind_group_layout,
@@ -151,16 +148,16 @@ impl TextureCopy {
             pipeline,
         } = &*self
             .inner
-            .get_or_insert_with(|| TextureCopyImpl::setup(ctx));
+            .get_or_insert_with(|| TextureCopyImpl::setup(device));
 
         let render_pipeline = pipeline.get_with(target_format, || {
-            make_pipeline(ctx, target_format, pipeline_layout)
+            make_pipeline(device, target_format, pipeline_layout)
         });
 
         render_pass.set_pipeline(&render_pipeline);
         render_pass.set_bind_group(
             0,
-            &ctx.device().create_bind_group(&wgpu::BindGroupDescriptor {
+            &device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("TextureCopyBindGroup"),
                 layout: texture_bind_group_layout,
                 entries: &[
@@ -193,12 +190,10 @@ impl TextureCopy {
 }
 
 fn make_pipeline(
-    ctx: &WidgetContext,
+    device: &wgpu::Device,
     target_format: wgpu::TextureFormat,
     pipeline_layout: &wgpu::PipelineLayout,
 ) -> wgpu::RenderPipeline {
-    let device = ctx.device();
-
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("texture_copy_shader"),
         source: wgpu::ShaderSource::Wgsl(include_str!("texture_copy.wgsl").into()),

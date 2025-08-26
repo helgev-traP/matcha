@@ -3,8 +3,7 @@ push constants:
     [[f32; 4]; 4] // composed affine matrix
 */
 
-use crate::vertex::ColorVertex;
-use matcha_core::ui::WidgetContext;
+use crate::vertex::colored_vertex::ColorVertex;
 use wgpu::{PipelineCompilationOptions, util::DeviceExt};
 
 pub struct VertexColor {
@@ -19,9 +18,7 @@ struct VertexColorImpl {
 }
 
 impl VertexColorImpl {
-    fn setup(ctx: &WidgetContext) -> Self {
-        let device = ctx.device();
-
+    fn setup(device: &wgpu::Device) -> Self {
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("vertex_color_pipeline_layout"),
             bind_group_layouts: &[],
@@ -73,23 +70,21 @@ impl VertexColor {
             vertices,
             indices,
         }: RenderData,
-        ctx: &WidgetContext,
+        device: &wgpu::Device,
     ) {
         let VertexColorImpl {
             pipeline_layout,
             pipeline,
         } = &*self
             .inner
-            .get_or_insert_with(|| VertexColorImpl::setup(ctx));
+            .get_or_insert_with(|| VertexColorImpl::setup(device));
 
         let render_pipeline = pipeline.get_with(target_format, || {
-            make_pipeline(ctx, target_format, pipeline_layout)
+            make_pipeline(device, target_format, pipeline_layout)
         });
 
         let view_port_affine_transform =
             affine_transform([target_size[0] as f32, target_size[1] as f32], position);
-
-        let device = ctx.device();
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("vertex_color_vertex_buffer"),
@@ -131,12 +126,10 @@ fn affine_transform(viewport_size: [f32; 2], position: [f32; 2]) -> nalgebra::Ma
 }
 
 fn make_pipeline(
-    ctx: &WidgetContext,
+    device: &wgpu::Device,
     target_format: wgpu::TextureFormat,
     pipeline_layout: &wgpu::PipelineLayout,
 ) -> wgpu::RenderPipeline {
-    let device = ctx.device();
-
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("vertex_color_shader"),
         source: wgpu::ShaderSource::Wgsl(include_str!("vertex_color.wgsl").into()),

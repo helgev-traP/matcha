@@ -1,11 +1,10 @@
 use wgpu::util::DeviceExt;
 
-use crate::vertex::UvVertex;
+use crate::vertex::uv_vertex::UvVertex;
 /* NOTE: This renderer assumes textures use top-origin UV coordinates (v = 0 at the top).
 UvVertex.tex_coords passed to this pipeline must have v = 0 at the top of the image.
 If your texture data uses bottom-origin coordinates, invert the v component before
 rendering (e.g. use 1.0 - v). */
-use matcha_core::ui::WidgetContext;
 
 // API similar to line_strip.rs:
 // - TextureColor is Default and lazily initializes inner impl on first render
@@ -26,9 +25,7 @@ struct TextureColorImpl {
 }
 
 impl TextureColorImpl {
-    fn setup(ctx: &WidgetContext) -> Self {
-        let device = ctx.device();
-
+    fn setup(device: &wgpu::Device) -> Self {
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("TextureColor: Texture Bind Group Layout"),
@@ -118,22 +115,20 @@ impl TextureColor {
             indices,
             texture_view,
         }: RenderData,
-        ctx: &WidgetContext,
+        device: &wgpu::Device,
     ) {
         let inner = self
             .inner
-            .get_or_insert_with(|| TextureColorImpl::setup(ctx));
+            .get_or_insert_with(|| TextureColorImpl::setup(device));
 
         // get or create pipeline for this target format
         let render_pipeline = inner.pipeline.get_with(target_format, || {
-            make_pipeline(ctx, target_format, &inner.pipeline_layout)
+            make_pipeline(device, target_format, &inner.pipeline_layout)
         });
 
         // compute viewport affine transform
         let view_port_affine_transform =
             affine_transform([target_size[0] as f32, target_size[1] as f32], position);
-
-        let device = ctx.device();
 
         // push constant (affine matrix) - must be set after pipeline is set
         // create vertex buffer
@@ -181,12 +176,10 @@ impl TextureColor {
 }
 
 fn make_pipeline(
-    ctx: &WidgetContext,
+    device: &wgpu::Device,
     target_format: wgpu::TextureFormat,
     pipeline_layout: &wgpu::PipelineLayout,
 ) -> wgpu::RenderPipeline {
-    let device = ctx.device();
-
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("texture_color_shader"),
         source: wgpu::ShaderSource::Wgsl(include_str!("texture_color.wgsl").into()),

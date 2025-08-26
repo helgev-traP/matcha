@@ -5,7 +5,6 @@ use std::hash::{Hash, Hasher};
 use cosmic_text::{Attrs, Color, Metrics};
 use matcha_core::{
     device_event::DeviceEvent,
-    render_node::RenderNode,
     types::range::CoverRange,
     ui::{
         Background, Constraints, Dom, DomCompareResult, Style, UpdateWidgetError, Widget,
@@ -13,6 +12,7 @@ use matcha_core::{
     },
     update_flag::UpdateNotifier,
 };
+use renderer::render_node::RenderNode;
 
 use crate::style::text_cosmic::{TextCosmic, TextElement};
 

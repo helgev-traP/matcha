@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 use matcha_core::{
     device_event::DeviceEvent,
-    render_node::RenderNode,
     types::range::{CoverRange, Range2D},
     ui::{
         Background, Constraints, Dom, DomCompareResult, Style, UpdateWidgetError, Widget,
@@ -14,6 +13,7 @@ use matcha_core::{
     update_flag::UpdateNotifier,
 };
 use nalgebra::constraint;
+use renderer::render_node::RenderNode;
 use texture_atlas::atlas_simple::atlas::AtlasRegion;
 use utils::cache::Cache;
 

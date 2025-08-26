@@ -3,6 +3,7 @@ use std::sync::Arc;
 use dashmap::DashMap;
 use image::{EncodableLayout, GenericImageView};
 use matcha_core::{types::range::Range2D, ui::Style, ui::WidgetContext};
+use renderer::widgets_renderer::texture_copy::{RenderData, TargetData, TextureCopy};
 
 use crate::types::size::{ChildSize, Size};
 
@@ -331,14 +332,14 @@ impl Style for Image {
             let (size_x, size_y, offset_x, offset_y) = self.calc_layout(boundary, image_size, ctx);
             let draw_offset = [offset_x + offset[0], offset_y + offset[1]];
 
-            let texture_copy = crate::renderer::texture_copy::TextureCopy::default();
+            let texture_copy = TextureCopy::default();
             texture_copy.render(
                 render_pass,
-                crate::renderer::texture_copy::TargetData {
+                TargetData {
                     target_size,
                     target_format,
                 },
-                crate::renderer::texture_copy::RenderData {
+                RenderData {
                     source_texture_view: &image
                         .texture
                         .create_view(&wgpu::TextureViewDescriptor::default()),
@@ -347,7 +348,7 @@ impl Style for Image {
                     color_transformation: None,
                     color_offset: None,
                 },
-                ctx,
+                ctx.device(),
             );
         });
     }
