@@ -1,20 +1,24 @@
-pub struct SingleCache<K: PartialEq, V> {
+pub struct Cache<K: PartialEq, V> {
     data: Option<(K, V)>,
 }
 
-impl<K: PartialEq, V> Default for SingleCache<K, V> {
+impl<K: PartialEq, V> Default for Cache<K, V> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<K: PartialEq, V> SingleCache<K, V> {
+impl<K: PartialEq, V> Cache<K, V> {
     pub fn new() -> Self {
-        SingleCache { data: None }
+        Cache { data: None }
     }
 
     pub fn set(&mut self, key: K, value: V) {
         self.data = Some((key, value));
+    }
+
+    pub fn clear(&mut self) {
+        self.data = None;
     }
 
     pub fn get(&self) -> Option<(&K, &V)> {
@@ -42,6 +46,18 @@ impl<K: PartialEq, V> SingleCache<K, V> {
     {
         if !self.get().is_some_and(|(k, _)| *k == key) {
             self.set(key, f());
+        }
+
+        self.get_mut()
+            .expect("infallible: cache is guaranteed to be populated")
+    }
+
+    pub async fn get_or_insert_with_async<F>(&mut self, key: K, f: F) -> (&K, &mut V)
+    where
+        F: Future<Output = V>,
+    {
+        if !self.get().is_some_and(|(k, _)| *k == key) {
+            self.set(key, f.await);
         }
 
         self.get_mut()

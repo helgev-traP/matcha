@@ -5,7 +5,7 @@ use matcha_core::{
     render_node::RenderNode,
     types::range::CoverRange,
     ui::{
-        Background, Constraints, Dom, DomComPareResult, UpdateWidgetError, Widget, WidgetContext,
+        Background, Constraints, Dom, DomCompareResult, UpdateWidgetError, Widget, WidgetContext,
     },
     update_flag::UpdateNotifier,
 };
@@ -67,13 +67,13 @@ impl<T: Send + 'static> Widget<T> for TemplateNode {
         }
     }
 
-    fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult {
+    fn compare(&self, dom: &dyn Dom<T>) -> DomCompareResult {
         if (dom as &dyn Any).downcast_ref::<Template>().is_some() {
             // In a real widget, you would compare properties here.
             // If properties are different, return DomComPareResult::Changed(hash).
-            DomComPareResult::Same
+            DomCompareResult::Same
         } else {
-            DomComPareResult::Different
+            DomCompareResult::Different
         }
     }
 
@@ -90,7 +90,7 @@ impl<T: Send + 'static> Widget<T> for TemplateNode {
         true
     }
 
-    fn preferred_size(&self, _constraints: &Constraints, _context: &WidgetContext) -> [f32; 2] {
+    fn preferred_size(&mut self, _constraints: &Constraints, _context: &WidgetContext) -> [f32; 2] {
         // This widget has no content, so it takes up no space.
         [0.0, 0.0]
     }

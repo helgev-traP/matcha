@@ -9,12 +9,12 @@ use matcha_core::{
     render_node::RenderNode,
     types::range::{CoverRange, Range2D},
     ui::{
-        Background, Constraints, Dom, DomComPareResult, UpdateWidgetError, Widget, WidgetContext,
+        Background, Constraints, Dom, DomCompareResult, UpdateWidgetError, Widget, WidgetContext,
     },
     update_flag::UpdateNotifier,
 };
 use texture_atlas::atlas_simple::atlas::AtlasRegion;
-use utils::single_cache::SingleCache;
+use utils::cache::Cache;
 
 use crate::style;
 use crate::types::size::Size;

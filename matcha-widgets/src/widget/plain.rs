@@ -8,14 +8,14 @@ use matcha_core::{
     render_node::RenderNode,
     types::range::{CoverRange, Range2D},
     ui::{
-        Background, Constraints, Dom, DomComPareResult, Style, UpdateWidgetError, Widget,
+        Background, Constraints, Dom, DomCompareResult, Style, UpdateWidgetError, Widget,
         WidgetContext,
     },
     update_flag::UpdateNotifier,
 };
 use nalgebra::constraint;
 use texture_atlas::atlas_simple::atlas::AtlasRegion;
-use utils::single_cache::SingleCache;
+use utils::cache::Cache;
 
 use crate::types::size::{ChildSize, Size};
 
@@ -69,7 +69,7 @@ impl<T: Send + 'static> Dom<T> for Plain<T> {
                 .map(|content| content.build_widget_tree()),
             size: self.size.clone(),
             need_rerendering: true,
-            cache: SingleCache::new(),
+            cache: Cache::new(),
         })
     }
 
@@ -90,10 +90,10 @@ pub struct PlainNode<T> {
 
     // system
     need_rerendering: bool,
-    cache: SingleCache<[Option<f32>; 2], Cache>,
+    cache: Cache<[Option<f32>; 2], PlainNodeCache>,
 }
 
-struct Cache {
+struct PlainNodeCache {
     arranged_size: [f32; 2],
     region: Option<AtlasRegion>,
 }
@@ -122,11 +122,11 @@ impl<T: Send + 'static> Widget<T> for PlainNode<T> {
         }
     }
 
-    fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult {
+    fn compare(&self, dom: &dyn Dom<T>) -> DomCompareResult {
         if (dom as &dyn Any).downcast_ref::<Plain<T>>().is_some() {
-            DomComPareResult::Same // Simplified for now
+            DomCompareResult::Same // Simplified for now
         } else {
-            DomComPareResult::Different
+            DomCompareResult::Different
         }
     }
 
@@ -150,7 +150,7 @@ impl<T: Send + 'static> Widget<T> for PlainNode<T> {
             .unwrap_or(false)
     }
 
-    fn preferred_size(&self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
+    fn preferred_size(&mut self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
         let child_constraints_width = self.size[0].constraints(constraints, context);
         let child_constraints_height = self.size[1].constraints(constraints, context);
         let child_constraints = Constraints::new(child_constraints_width, child_constraints_height);

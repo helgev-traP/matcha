@@ -17,7 +17,7 @@ pub struct Polygon {
     polygon: Arc<PolygonFn>,
     adaptive_affine: Arc<AdaptFn>,
     cache_the_mesh: bool,
-    caches: Mutex<utils::single_cache::SingleCache<[f32; 2], Caches>>,
+    caches: Mutex<utils::cache::Cache<[f32; 2], Caches>>,
 }
 
 #[derive(Clone)]
@@ -56,7 +56,7 @@ impl Clone for Polygon {
             polygon: self.polygon.clone(),
             adaptive_affine: self.adaptive_affine.clone(),
             cache_the_mesh: self.cache_the_mesh,
-            caches: Mutex::new(utils::single_cache::SingleCache::default()),
+            caches: Mutex::new(utils::cache::Cache::default()),
         }
     }
 }
@@ -70,7 +70,7 @@ impl Polygon {
             polygon: Arc::new(polygon),
             adaptive_affine: Arc::new(|_, _| nalgebra::Matrix4::identity()),
             cache_the_mesh: true,
-            caches: Mutex::new(utils::single_cache::SingleCache::default()),
+            caches: Mutex::new(utils::cache::Cache::default()),
         })
     }
 

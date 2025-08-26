@@ -8,7 +8,7 @@ use matcha_core::{
     render_node::RenderNode,
     types::range::CoverRange,
     ui::{
-        Background, Constraints, Dom, DomComPareResult, Style, UpdateWidgetError, Widget,
+        Background, Constraints, Dom, DomCompareResult, Style, UpdateWidgetError, Widget,
         WidgetContext,
     },
     update_flag::UpdateNotifier,
@@ -135,20 +135,20 @@ impl<'a: 'static, T: Send + 'static> Widget<T> for TextNode<'a> {
         }
     }
 
-    fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult {
+    fn compare(&self, dom: &dyn Dom<T>) -> DomCompareResult {
         if let Some(dom) = (dom as &dyn Any).downcast_ref::<Text<'a>>() {
             if self.content == dom.content && self.attrs == dom.attrs && self.metrics == dom.metrics
             {
-                DomComPareResult::Same
+                DomCompareResult::Same
             } else {
                 let mut hasher = DefaultHasher::new();
                 dom.content.hash(&mut hasher);
                 dom.attrs.hash(&mut hasher);
                 // dom.metrics.hash(&mut hasher); // Metrics does not implement Hash
-                DomComPareResult::Changed(hasher.finish() as usize)
+                DomCompareResult::Changed(hasher.finish() as usize)
             }
         } else {
-            DomComPareResult::Different
+            DomCompareResult::Different
         }
     }
 
@@ -160,7 +160,7 @@ impl<'a: 'static, T: Send + 'static> Widget<T> for TextNode<'a> {
         self.style.is_inside(position, self.size, context)
     }
 
-    fn preferred_size(&self, _constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
+    fn preferred_size(&mut self, _constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
         let range = self.style.draw_range(self.size, context);
         [range.width(), range.height()]
     }

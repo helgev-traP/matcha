@@ -6,7 +6,7 @@ use matcha_core::{
     render_node::RenderNode,
     types::range::CoverRange,
     ui::{
-        Background, Constraints, Dom, DomComPareResult, UpdateWidgetError, Widget, WidgetContext,
+        Background, Constraints, Dom, DomCompareResult, UpdateWidgetError, Widget, WidgetContext,
     },
     update_flag::UpdateNotifier,
 };
@@ -84,11 +84,11 @@ impl<T: Send + 'static> Widget<T> for SpaceNode {
         }
     }
 
-    fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult {
+    fn compare(&self, dom: &dyn Dom<T>) -> DomCompareResult {
         if (dom as &dyn Any).downcast_ref::<Space>().is_some() {
-            DomComPareResult::Same // Simplified
+            DomCompareResult::Same // Simplified
         } else {
-            DomComPareResult::Different
+            DomCompareResult::Different
         }
     }
 
@@ -101,7 +101,7 @@ impl<T: Send + 'static> Widget<T> for SpaceNode {
         false
     }
 
-    fn preferred_size(&self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
+    fn preferred_size(&mut self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
         (self.size)(constraints, context)
     }
 

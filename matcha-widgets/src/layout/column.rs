@@ -5,7 +5,7 @@ use matcha_core::{
     render_node::RenderNode,
     types::range::CoverRange,
     ui::{
-        Background, Constraints, Dom, DomComPareResult, UpdateWidgetError, Widget, WidgetContext,
+        Background, Constraints, Dom, DomCompareResult, UpdateWidgetError, Widget, WidgetContext,
     },
     update_flag::UpdateNotifier,
 };
@@ -101,11 +101,11 @@ impl<T: Send + 'static> Widget<T> for ColumnNode<T> {
         }
     }
 
-    fn compare(&self, dom: &dyn Dom<T>) -> DomComPareResult {
+    fn compare(&self, dom: &dyn Dom<T>) -> DomCompareResult {
         if (dom as &dyn Any).downcast_ref::<Column<T>>().is_some() {
-            DomComPareResult::Same // Simplified
+            DomCompareResult::Same // Simplified
         } else {
-            DomComPareResult::Different
+            DomCompareResult::Different
         }
     }
 
@@ -121,7 +121,7 @@ impl<T: Send + 'static> Widget<T> for ColumnNode<T> {
             .any(|item| item.is_inside(position, context))
     }
 
-    fn preferred_size(&self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
+    fn preferred_size(&mut self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
         let mut total_height = 0.0;
         let mut max_width: f32 = 0.0;
         self.item_sizes.clear();
@@ -159,7 +159,7 @@ impl<T: Send + 'static> Widget<T> for ColumnNode<T> {
         for (item, &item_size) in self.items.iter_mut().zip(&self.item_sizes) {
             let transform =
                 nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(0.0, y_pos, 0.0));
-            let child_node = item.render(background.transition([0.0, y_pos]), ctx);
+            let child_node = item.render(background.translate([0.0, y_pos]), ctx);
             render_node.add_child(child_node, transform);
             y_pos += item_size[1];
         }
