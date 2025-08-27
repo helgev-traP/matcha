@@ -106,11 +106,11 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
 
     // if this method is called, it means we already have a current surface texture so we must re-render it to prevent flickering.
     pub async fn render<'a>(
-        &mut self,
+        &'a mut self,
         viewport_size: [f32; 2],
         background: Background<'a>,
         ctx: &WidgetContext<'a>,
-    ) -> RenderNode {
+    ) -> RenderNode<'a> {
         if self.model_update_flag.is_true() || self.widget.is_none() {
             // Dom update is required
             let dom = self.component.view().await;
@@ -135,12 +135,12 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
         Self::render_current_widget(&mut **widget, viewport_size, background, ctx)
     }
 
-    fn render_current_widget(
-        widget: &mut dyn Widget<Event>,
+    fn render_current_widget<'a>(
+        widget: &'a mut dyn Widget<Event>,
         viewport_size: [f32; 2],
         background: Background,
         ctx: &WidgetContext,
-    ) -> RenderNode {
+    ) -> RenderNode<'a> {
         let constraints = Constraints {
             min_width: 0.0,
             max_width: viewport_size[0],

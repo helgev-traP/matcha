@@ -6,6 +6,7 @@ push constants:
 use crate::vertex::colored_vertex::ColorVertex;
 use wgpu::{PipelineCompilationOptions, util::DeviceExt};
 
+#[derive(Default)]
 pub struct LineStripColor {
     inner: utils::RwOption<LineStripColorImpl>,
 }

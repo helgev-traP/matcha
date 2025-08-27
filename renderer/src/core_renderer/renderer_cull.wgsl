@@ -86,7 +86,7 @@ const CLIP_VERTICES = array<vec4<f32>, 4>(
 @compute @workgroup_size(64)
 fn culling_main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let instance_index = global_id.x;
-if (instance_index >= pc.instance_count) {
+    if (instance_index >= pc.instance_count) {
         return;
     }
     let instance = all_instances[instance_index];
@@ -103,12 +103,12 @@ if (instance_index >= pc.instance_count) {
 
     var texture_position: array<vec4<f32>, 4>;
     for (var i = 0u; i < 4u; i++) {
-texture_position[i] = pc.normalize_matrix * instance.viewport_position * QUAD_VERTICES[i];
+        texture_position[i] = pc.normalize_matrix * instance.viewport_position * QUAD_VERTICES[i];
     }
 
     var stencil_position: array<vec4<f32>, 4>;
     for (var i = 0u; i < 4u; i++) {
-stencil_position[i] = pc.normalize_matrix * stencil.viewport_position * QUAD_VERTICES[i];
+        stencil_position[i] = pc.normalize_matrix * stencil.viewport_position * QUAD_VERTICES[i];
     }
 
     let texture_is_in_viewport = is_overlapping(texture_position, CLIP_VERTICES);

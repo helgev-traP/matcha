@@ -4,6 +4,10 @@ use crate::render_node::RenderNode;
 use texture_atlas::TextureError;
 use thiserror::Error;
 
+const WGSL_CULL: &str = include_str!("core_renderer/renderer_cull.wgsl");
+const WGSL_COMMAND: &str = include_str!("core_renderer/renderer_command.wgsl");
+const WGSL_RENDER: &str = include_str!("core_renderer/renderer_render.wgsl");
+
 const PIPELINE_CACHE_SIZE: u64 = 3;
 const COMPUTE_WORKGROUP_SIZE: u32 = 64;
 
@@ -304,7 +308,7 @@ impl Renderer {
     ) -> (wgpu::PipelineLayout, wgpu::ComputePipeline) {
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Culling Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("renderer/renderer_cull.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(WGSL_CULL.into()),
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -334,7 +338,7 @@ impl Renderer {
     ) -> (wgpu::PipelineLayout, wgpu::ComputePipeline) {
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Command Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("renderer/renderer_command.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(WGSL_COMMAND.into()),
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -362,7 +366,7 @@ impl Renderer {
     ) -> (wgpu::PipelineLayout, wgpu::ShaderModule) {
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Render Shader"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("renderer/renderer_render.wgsl").into()),
+            source: wgpu::ShaderSource::Wgsl(WGSL_RENDER.into()),
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -429,7 +433,7 @@ impl Renderer {
         destination_view: &wgpu::TextureView,
         destination_size: [f32; 2],
         // objects
-        objects: RenderNode,
+        objects: &RenderNode,
         load_color: wgpu::Color,
         // texture atlas
         texture_atlas: &wgpu::Texture,
@@ -650,7 +654,7 @@ impl Renderer {
 }
 
 fn create_instance_and_stencil_data(
-    objects: RenderNode,
+    objects: &RenderNode,
     texture_format: wgpu::TextureFormat,
     stencil_format: wgpu::TextureFormat,
 ) -> Result<(Vec<InstanceData>, Vec<StencilData>), TextureValidationError> {

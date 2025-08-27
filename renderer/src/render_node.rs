@@ -8,21 +8,20 @@
 /// The RenderNode stores textures, stencil information, and child elements along with
 /// per-node transform matrices. Transforms are applied by the renderer when generating GPU
 /// draw calls.
-#[derive(Clone)]
-pub struct RenderNode {
+pub struct RenderNode<'a> {
     pub texture_and_position: Option<(texture_atlas::AtlasRegion, nalgebra::Matrix4<f32>)>,
     pub stencil_and_position: Option<(texture_atlas::AtlasRegion, nalgebra::Matrix4<f32>)>,
 
-    child_elements: Vec<(RenderNode, nalgebra::Matrix4<f32>)>,
+    child_elements: Vec<(&'a RenderNode<'a>, nalgebra::Matrix4<f32>)>,
 }
 
-impl Default for RenderNode {
+impl Default for RenderNode<'_> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl RenderNode {
+impl<'a> RenderNode<'a> {
     pub fn new() -> Self {
         Self {
             texture_and_position: None,
@@ -49,11 +48,11 @@ impl RenderNode {
         self
     }
 
-    pub fn add_child(&mut self, child: RenderNode, transform: nalgebra::Matrix4<f32>) {
+    pub fn add_child(&mut self, child: &'a RenderNode<'a>, transform: nalgebra::Matrix4<f32>) {
         self.child_elements.push((child, transform));
     }
 
-    pub fn child_elements(&self) -> &[(RenderNode, nalgebra::Matrix4<f32>)] {
+    pub fn child_elements(&self) -> &[(&'a RenderNode<'a>, nalgebra::Matrix4<f32>)] {
         &self.child_elements
     }
 }

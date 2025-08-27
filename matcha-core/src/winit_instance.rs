@@ -151,7 +151,7 @@ impl<
 
                 self.render_control
                     .render(
-                        object,
+                        &object,
                         &target_view,
                         size,
                         self.window

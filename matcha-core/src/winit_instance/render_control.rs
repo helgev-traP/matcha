@@ -58,7 +58,7 @@ impl RenderControl {
 
     pub fn render(
         &self,
-        object: RenderNode,
+        object: &RenderNode,
         target_view: &wgpu::TextureView,
         viewport_size: [f32; 2],
         surface_format: wgpu::TextureFormat,
