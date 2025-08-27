@@ -4,7 +4,7 @@ use dashmap::DashMap;
 use parking_lot::Mutex;
 use thiserror::Error;
 
-use crate::atlas_simple::{AtlasRegion, TextureAtlas, TextureAtlasError};
+use super::{AtlasRegion, TextureAtlas, TextureAtlasError};
 
 pub struct MemoryAllocateStrategy {
     pub initial_pages: u32,

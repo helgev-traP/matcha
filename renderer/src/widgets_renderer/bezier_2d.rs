@@ -1,3 +1,4 @@
+use gpu_utils::texture_atlas;
 use moka::ops::compute;
 use std::sync::Arc;
 use wgpu::util::DeviceExt;

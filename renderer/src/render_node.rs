@@ -1,3 +1,5 @@
+use gpu_utils::texture_atlas;
+
 /// Represents a render tree node that contains drawing information for the renderer.
 ///
 /// Note: Coordinates used by the Dom/Widget/Style APIs are in pixels with the origin at the
@@ -8,20 +10,20 @@
 /// The RenderNode stores textures, stencil information, and child elements along with
 /// per-node transform matrices. Transforms are applied by the renderer when generating GPU
 /// draw calls.
-pub struct RenderNode<'a> {
+pub struct RenderNode {
     pub texture_and_position: Option<(texture_atlas::AtlasRegion, nalgebra::Matrix4<f32>)>,
     pub stencil_and_position: Option<(texture_atlas::AtlasRegion, nalgebra::Matrix4<f32>)>,
 
-    child_elements: Vec<(&'a RenderNode<'a>, nalgebra::Matrix4<f32>)>,
+    child_elements: Vec<(RenderNode, nalgebra::Matrix4<f32>)>,
 }
 
-impl Default for RenderNode<'_> {
+impl Default for RenderNode {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<'a> RenderNode<'a> {
+impl RenderNode {
     pub fn new() -> Self {
         Self {
             texture_and_position: None,
@@ -48,11 +50,11 @@ impl<'a> RenderNode<'a> {
         self
     }
 
-    pub fn add_child(&mut self, child: &'a RenderNode<'a>, transform: nalgebra::Matrix4<f32>) {
+    pub fn add_child(&mut self, child: RenderNode, transform: nalgebra::Matrix4<f32>) {
         self.child_elements.push((child, transform));
     }
 
-    pub fn child_elements(&self) -> &[(&'a RenderNode<'a>, nalgebra::Matrix4<f32>)] {
+    pub fn child_elements(&self) -> &[(RenderNode, nalgebra::Matrix4<f32>)] {
         &self.child_elements
     }
 }

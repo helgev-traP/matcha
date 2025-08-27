@@ -8,7 +8,7 @@ wgpu.workspace = true
 nalgebra.workspace = true
 bytemuck.workspace = true
 thiserror.workspace = true
-texture-atlas = { workspace = true }
+gpu-utils = { workspace = true }
 moka.workspace = true
 fxhash.workspace = true
 utils = { workspace = true }

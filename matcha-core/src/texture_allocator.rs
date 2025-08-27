@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use gpu_utils::texture_atlas;
 use parking_lot::Mutex;
 
 use super::gpu::Gpu;

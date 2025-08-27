@@ -9,7 +9,7 @@ publish = false
 renderer = { workspace = true }
 matcha-core = { workspace = true }
 utils = { workspace = true }
-texture-atlas = { workspace = true }
+gpu-utils = { workspace = true }
 
 # runtime
 tokio = { workspace = true }

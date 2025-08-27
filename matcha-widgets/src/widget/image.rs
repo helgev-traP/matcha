@@ -2,6 +2,7 @@ use std::any::Any;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
+use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
 use image::{DynamicImage, GenericImageView};
 use matcha_core::Style;
 use matcha_core::{
@@ -13,7 +14,6 @@ use matcha_core::{
     update_flag::UpdateNotifier,
 };
 use renderer::render_node::RenderNode;
-use texture_atlas::atlas_simple::atlas::AtlasRegion;
 use utils::cache::Cache;
 
 use crate::style;

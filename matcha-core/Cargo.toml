@@ -8,8 +8,7 @@ publish = false
 # self
 renderer = { workspace = true }
 utils = { workspace = true }
-texture-atlas = { workspace = true }
-buffer-atlas = { workspace = true }
+gpu-utils = { workspace = true }
 
 # async runtime, utility
 tokio = { workspace = true }

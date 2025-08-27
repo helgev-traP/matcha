@@ -3,6 +3,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
+use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
 use matcha_core::{
     device_event::DeviceEvent,
     types::range::{CoverRange, Range2D},
@@ -14,7 +15,6 @@ use matcha_core::{
 };
 use nalgebra::constraint;
 use renderer::render_node::RenderNode;
-use texture_atlas::atlas_simple::atlas::AtlasRegion;
 use utils::cache::Cache;
 
 use crate::types::size::{ChildSize, Size};

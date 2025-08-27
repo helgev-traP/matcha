@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crate::render_node::RenderNode;
+use gpu_utils::texture_atlas;
 use texture_atlas::TextureError;
 use thiserror::Error;
 
