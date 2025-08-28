@@ -1,9 +1,9 @@
 use std::fmt::Debug;
 
 use crate::{
+    Component,
     any_resource::AnyResource,
     backend::Backend,
-    component::Component,
     ui::{Background, WidgetContext},
 };
 
@@ -263,7 +263,6 @@ impl<
         };
 
         let event = self.ui_control.window_event(
-            ctx.viewport_size(),
             event,
             || {
                 (

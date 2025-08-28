@@ -1,35 +1,56 @@
 use std::any::Any;
 
 use parking_lot::Mutex;
+use renderer::render_node::RenderNode;
 use utils::{back_prop_dirty::BackPropDirty, cache::Cache};
 
 use crate::{
-    Background, Constraints, DeviceEvent, RenderNode, UpdateNotifier, WidgetContext,
+    Background, Constraints, DeviceEvent, UpdateNotifier, WidgetContext,
     ui::{Arrangement, metrics::LayoutSizeKey},
 };
 
+/// Lightweight handle passed into widget update / event handlers allowing them
+/// to request layout or visual invalidation without touching internal caches.
+///
+/// Semantics:
+/// - `rearrange_next_frame()`: marks both layout(measure/arrange) + redraw dirty.
+///   Use when child structure, ordering, or any layout-affecting setting changes.
+/// - `redraw_next_frame()`: marks only visual redraw (layout cache remains). Use for pure
+///   style / animation / time-based visual changes that do not affect geometry.
+/// - Requests are frame-scoped: flags are consumed internally during `measure/arrange`
+///   (layout) or after a successful `render` (redraw).
+/// - Do NOT store this handle beyond the synchronous call; it borrows internal flags.
+///
+/// Future:
+/// - Could evolve into an enum-based invalidation or generation counter if finer
+///   granularity / statistics are needed.
+/// - Async widgets: if future async tasks need to trigger invalidation, they will
+///   use a cloneable channel-based handle instead of this borrowed form.
 pub struct RebuildRequest<'a> {
     need_rearrange: &'a BackPropDirty,
-    need_rerender: &'a BackPropDirty,
+    need_redraw: &'a BackPropDirty,
 }
 
-impl RebuildRequest<'_> {
-    pub fn rearrange_next_frame(&self) {
-        self.need_rearrange.mark_dirty();
-        self.need_rerender.mark_dirty();
+impl<'a> RebuildRequest<'a> {
+    fn new(need_rearrange: &'a BackPropDirty, need_redraw: &'a BackPropDirty) -> Self {
+        Self {
+            need_rearrange,
+            need_redraw,
+        }
     }
 
-    pub fn rerender_next_frame(&self) {
-        self.need_rerender.mark_dirty();
+    pub fn rearrange_next_frame(&self) {
+        self.need_rearrange.mark_dirty();
+        self.need_redraw.mark_dirty();
+    }
+
+    pub fn redraw_next_frame(&self) {
+        self.need_redraw.mark_dirty();
     }
 }
 
 #[async_trait::async_trait]
-pub trait Dom<E, ChildSetting = ()>: Sync + Any {
-    fn id(&self) -> u128;
-
-    fn children(&self) -> Vec<(&dyn Dom<E, ChildSetting>, ChildSetting)>;
-
+pub trait Dom<E>: Sync + Any {
     /// Builds the corresponding stateful `Widget` tree from this `Dom` node.
     fn build_widget_tree(&self) -> Box<dyn AnyWidgetFrame<E>>;
 
@@ -44,8 +65,14 @@ pub trait Dom<E, ChildSetting = ()>: Sync + Any {
     async fn set_update_notifier(&self, notifier: &UpdateNotifier);
 }
 
-pub trait Widget<D: Dom<E, ChildSetting>, E: 'static, ChildSetting: 'static = ()> {
-    fn update_widget(&mut self, dom: &D, cache_invalidator: RebuildRequest);
+pub trait Widget<D: Dom<E>, E: 'static = (), ChildSetting: PartialEq + 'static = ()> {
+    /// Returns the children of this `Dom` node.
+    /// vector values are tuples of (child, setting, id).
+    fn update_widget(
+        &mut self,
+        dom: &D,
+        cache_invalidator: RebuildRequest,
+    ) -> Vec<(&dyn Dom<E>, ChildSetting, u128)>;
 
     fn device_event(
         &mut self,
@@ -64,7 +91,7 @@ pub trait Widget<D: Dom<E, ChildSetting>, E: 'static, ChildSetting: 'static = ()
         ctx: &WidgetContext,
     ) -> bool;
 
-    fn measure<'a>(
+    fn measure(
         &self,
         constraints: &Constraints,
         children: &[(&dyn AnyWidget<E>, &ChildSetting)],
@@ -104,20 +131,28 @@ pub trait AnyWidget<E: 'static> {
 
 /// Make it impossible to call arrange from outside the widget frame.
 /// Ensure render() will be called after arrange() in this module.
+///
+/// Publish this trait to `super` to allow components can implement it.
 pub(super) trait AnyWidgetFramePrivate {
     fn arrange(&self, final_size: [f32; 2], ctx: &WidgetContext);
 }
 
 /// Methods that Widget implementor should not use.
+// AnyWidgetFramePrivate is intended for use only within this module.
+// Making this trait private prevents external code from implementing
+// AnyWidgetFrame for arbitrary types.
+#[allow(private_bounds)]
 #[async_trait::async_trait]
-pub(crate) trait AnyWidgetFrame<E: 'static>:
+pub trait AnyWidgetFrame<E: 'static>:
     AnyWidget<E> + AnyWidgetFramePrivate + std::any::Any + Send
 {
     fn label(&self) -> Option<&str>;
 
-    fn need_rerender(&self) -> bool;
+    fn need_redraw(&self) -> bool;
 
-    async fn update_widget_tree(&mut self, dom: &dyn Any) -> Result<(), UpdateWidgetError>;
+    async fn update_widget_tree(&mut self, dom: &dyn Dom<E>) -> Result<(), UpdateWidgetError>;
+
+    fn update_dirty_flags(&mut self, rearrange_flags: BackPropDirty, redraw_flags: BackPropDirty);
 
     fn update_gpu_device(&mut self, device: &wgpu::Device, queue: &wgpu::Queue);
 }
@@ -129,9 +164,9 @@ pub enum UpdateWidgetError {
     TypeMismatch,
 }
 
-pub(crate) struct WidgetFrame<D, W, E, ChildSetting = ()>
+pub struct WidgetFrame<D, W, E, ChildSetting = ()>
 where
-    D: Dom<E, ChildSetting> + Send + Sync + 'static,
+    D: Dom<E> + Send + Sync + 'static,
     W: Widget<D, E, ChildSetting> + Send + Sync + 'static,
     E: 'static,
     ChildSetting: Send + Sync + PartialEq + Clone + 'static,
@@ -146,7 +181,7 @@ where
 
     // dirty flags
     need_rearrange: BackPropDirty,
-    need_rerender: BackPropDirty,
+    need_redraw: BackPropDirty,
 
     /// cache
     cache: Mutex<WidgetFrameCache>,
@@ -161,15 +196,11 @@ struct WidgetFrameCache {
     measure: Cache<Constraints, [f32; 2]>,
     /// cache the output of layout method.
     layout: Cache<LayoutSizeKey, Vec<Arrangement>>,
-    /// cache the output of render method.
-    /// `render_cache` existing ensures that this widget already rendered at least once.
-    /// this means we can use the cached `Arrangement` to process device_event.
-    render: Option<RenderNode>,
 }
 
 impl<D, W, T, ChildSetting> AnyWidget<T> for WidgetFrame<D, W, T, ChildSetting>
 where
-    D: Dom<T, ChildSetting> + Send + Sync + 'static,
+    D: Dom<T> + Send + Sync + 'static,
     W: Widget<D, T, ChildSetting> + Send + Sync + 'static,
     T: 'static,
     ChildSetting: Send + Sync + PartialEq + Clone + 'static,
@@ -177,18 +208,28 @@ where
     fn device_event(&mut self, event: &DeviceEvent, ctx: &WidgetContext) -> Option<T> {
         let cache = self.cache.lock();
 
-        let Some(_render_node) = cache.render.as_ref() else {
-            // not rendered yet, cannot process event.
-            return None;
-        };
         let Some((&actual_bounds, arrangement)) = cache.layout.get() else {
-            // this should not happen
-            debug_assert!(false, "render_cache exists but layout_cache does not");
+            // not rendered yet, cannot process event.
             return None;
         };
 
         let actual_bounds: [f32; 2] = actual_bounds.into();
 
+        // PERF NOTE (hot path):
+        // We allocate a Vec each event to pair children with their Arrangement.
+        // For deep or high-frequency event streams (mouse move, drag), this can add pressure.
+        // Future optimization options (measured via profiler before changing):
+        //   1. smallvec::SmallVec<[(&mut dyn AnyWidget<T>, &mut ChildSetting, &Arrangement); 8]>
+        //      to stack-allocate typical small child counts.
+        //   2. Precompute a stable temporary scratch buffer reused per frame (unsafe careful).
+        //   3. Pass iterator of zipped triplets into widget_impl.device_event to let caller
+        //      iterate without intermediate collection.
+        //   4. Maintain arrangement indices and let widget_impl pull lazily.
+        // Start with SmallVec if profiling shows >5% frame time here.
+        // PERF NOTE (hit-test path):
+        // Similar allocation pattern as in device_event. See that block for optimization
+        // strategies (SmallVec / iterator API / scratch buffer reuse).
+        // Not optimized yet to keep code clarity until profiling justifies change.
         let children_with_arrangement: Vec<(
             &mut dyn AnyWidget<T>,
             &mut ChildSetting,
@@ -200,35 +241,33 @@ where
             .map(|((child, setting), arr)| (&mut **child as &mut dyn AnyWidget<T>, setting, arr))
             .collect();
 
-        let event = self.widget_impl.device_event(
+        self.widget_impl.device_event(
             actual_bounds,
             event,
             &children_with_arrangement,
             RebuildRequest {
                 need_rearrange: &self.need_rearrange,
-                need_rerender: &self.need_rerender,
+                need_redraw: &self.need_redraw,
             },
             ctx,
-        );
-
-        event
+        )
     }
 
     fn is_inside(&self, position: [f32; 2], ctx: &WidgetContext) -> bool {
         let cache = self.cache.lock();
 
-        let Some(render_node) = cache.render.as_ref() else {
-            // not rendered yet, cannot process event.
-            return false;
-        };
         let Some((&actual_bounds, arrangement)) = cache.layout.get() else {
-            // this should not happen
-            debug_assert!(false, "render_cache exists but layout_cache does not");
+            // not rendered yet, cannot process event.
             return false;
         };
 
         let actual_bounds: [f32; 2] = actual_bounds.into();
 
+        // TODO: Potential performance tuning.
+        // In high-frequency events like mouse movements, the overhead of allocating this Vec on the heap
+        // for each event could become a bottleneck.
+        // Future optimizations might involve using an iterator-based API or a library like `smallvec`
+        // to avoid heap allocations.
         let children = self
             .children
             .iter()
@@ -279,39 +318,44 @@ where
         // arrange must be called before locking the cache to avoid deadlocks.
         self.arrange(final_size, ctx);
 
-        let mut cache = self.cache.lock();
+        let cache = self.cache.lock();
         let (_, arrangement) = cache.layout.get().expect("infallible: arrange just called");
 
-        // check render cache
-        if self.need_rerender.take_dirty() {
-            cache.render = None;
-        }
+        let children = self
+            .children
+            .iter()
+            .map(|(child, setting)| (&**child as &dyn AnyWidget<T>, setting))
+            .collect::<Vec<_>>();
 
-        let render_node = cache.render.get_or_insert_with(|| {
-            let children = self
-                .children
+        let node = self.widget_impl.render(
+            background,
+            &children
                 .iter()
-                .map(|(child, setting)| (&**child as &dyn AnyWidget<T>, setting))
-                .collect::<Vec<_>>();
+                .zip(arrangement)
+                .map(|((c, s), a)| (*c, *s, a))
+                .collect::<Vec<_>>(),
+            ctx,
+        );
 
-            self.widget_impl.render(
-                background,
-                &children
-                    .iter()
-                    .zip(arrangement)
-                    .map(|((c, s), a)| (*c, *s, a))
-                    .collect::<Vec<_>>(),
-                ctx,
-            )
-        });
+        // BUGFIX / SPEC:
+        // Redraw flag consumption happens AFTER a successful render pass.
+        // Contract:
+        //   - Multiple redraw requests within the same frame coalesce to a single render.
+        //   - Layout (rearrange) dirtiness is consumed earlier by measure()/arrange() paths.
+        //   - If render aborts (panic/early return in future), flag may remain set -> next frame still draws.
+        // Future optimization: switch to a generation counter (u32) if we need to record
+        // how many redraws were requested in a frame (statistics / throttling).
+        // NOTE: This intentionally _does not_ clear need_rearrange: that path is already
+        // cleared when caches are invalidated at layout time.
+        let _ = self.need_redraw.take_dirty();
 
-        render_node.clone()
+        node
     }
 }
 
 impl<D, W, T, ChildSetting> AnyWidgetFramePrivate for WidgetFrame<D, W, T, ChildSetting>
 where
-    D: Dom<T, ChildSetting> + Send + Sync + 'static,
+    D: Dom<T> + Send + Sync + 'static,
     W: Widget<D, T, ChildSetting> + Send + Sync + 'static,
     T: 'static,
     ChildSetting: Send + Sync + PartialEq + Clone + 'static,
@@ -320,10 +364,9 @@ where
         let mut cache = self.cache.lock();
 
         if self.need_rearrange.take_dirty() {
-            // arrangement changed, need to re-render
+            // arrangement changed, need to redraw
             cache.measure.clear();
             cache.layout.clear();
-            cache.render = None;
         }
         cache
             .layout
@@ -336,7 +379,7 @@ where
                     .collect::<Vec<_>>();
                 let arrangement = self.widget_impl.arrange(final_size, &children, ctx);
                 // update child arrangements
-                for ((child, _), arrangement) in self.children.iter_mut().zip(arrangement.iter()) {
+                for ((child, _), arrangement) in self.children.iter().zip(arrangement.iter()) {
                     child.arrange(arrangement.size, ctx);
                 }
                 arrangement
@@ -347,7 +390,7 @@ where
 #[async_trait::async_trait]
 impl<D, W, T, ChildSetting> AnyWidgetFrame<T> for WidgetFrame<D, W, T, ChildSetting>
 where
-    D: Dom<T, ChildSetting> + Send + Sync + 'static,
+    D: Dom<T> + Send + Sync + 'static,
     W: Widget<D, T, ChildSetting> + Send + Sync + 'static,
     T: 'static,
     ChildSetting: Send + Sync + PartialEq + Clone + 'static,
@@ -356,89 +399,115 @@ where
         self.label.as_deref()
     }
 
-    fn need_rerender(&self) -> bool {
-        self.need_rerender.is_dirty()
+    fn need_redraw(&self) -> bool {
+        self.need_redraw.is_dirty()
     }
 
-    async fn update_widget_tree(&mut self, dom: &dyn Any) -> Result<(), UpdateWidgetError> {
-        // check type
-        let Some(dom) = (dom as &dyn Any).downcast_ref::<D>() else {
-            return Err(UpdateWidgetError::TypeMismatch);
-        };
+    async fn update_widget_tree(&mut self, dom: &dyn Dom<T>) -> Result<(), UpdateWidgetError> {
+        // downcast dom
+        let dom = (dom as &dyn Any)
+            .downcast_ref::<D>()
+            .ok_or(UpdateWidgetError::TypeMismatch)?;
 
-        // update widget
-        self.widget_impl.update_widget(
+        let children = self.widget_impl.update_widget(
             dom,
-            RebuildRequest {
-                need_rearrange: &self.need_rearrange,
-                need_rerender: &self.need_rerender,
-            },
+            RebuildRequest::new(&self.need_rearrange, &self.need_redraw),
         );
 
-        let new_children_dom = dom.children();
-        let mut arrangement_changed = false;
+        // update children
 
-        // Create a map of old children for efficient lookup
-        let mut old_children_map: std::collections::HashMap<
-            u128,
-            (Box<dyn AnyWidgetFrame<T>>, ChildSetting),
-        > = self
-            .children_id
-            .iter()
-            .cloned()
-            .zip(std::mem::take(&mut self.children))
-            .collect();
+        let mut need_rearrange = false;
 
-        let mut new_children_vec: Vec<(Box<dyn AnyWidgetFrame<T>>, ChildSetting)> =
-            Vec::with_capacity(new_children_dom.len());
-        let mut new_children_id_vec: Vec<u128> = Vec::with_capacity(new_children_dom.len());
+        // collect old children and its ids
 
-        for (i, (child_dom, new_setting)) in new_children_dom.iter().enumerate() {
-            let child_id = child_dom.id();
-            new_children_id_vec.push(child_id);
+        let old_children = std::mem::take(&mut self.children);
+        let old_children_id = std::mem::take(&mut self.children_id);
 
-            if let Some((mut child, old_setting)) = old_children_map.remove(&child_id) {
-                // Reuse existing child
+        let mut old_children_map = old_children
+            .into_iter()
+            .zip(old_children_id.iter())
+            .map(|((child, setting), id)| (*id, (child, setting)))
+            .collect::<fxhash::FxHashMap<_, _>>();
 
-                // Check if order changed
-                if self.children_id.get(i) != Some(&child_id) {
-                    arrangement_changed = true;
+        // update
+
+        // Potential future use:
+        // Collect new child id sequence for diff algorithms that may want
+        // an O(n) LCS / move-detection optimization. Currently unused.
+        // Prefixed with underscore to silence warnings.
+        let _new_children_id = children.iter().map(|(_, _, id)| *id).collect::<Vec<_>>();
+
+        for (child_dom, setting, id) in children {
+            let mut old_pair = old_children_map.remove(&id);
+
+            // check child identity
+            if let Some((old_child, _)) = &mut old_pair {
+                if old_child.update_widget_tree(child_dom).await.is_err() {
+                    old_pair = None;
                 }
+            }
 
-                // Check if setting changed
-                if &old_setting != new_setting {
-                    arrangement_changed = true;
+            // check setting identity
+            if let Some((_, old_setting)) = &old_pair {
+                if *old_setting != setting {
+                    // Setting changed.
+                    // CURRENT STRATEGY: treat ANY setting difference as layout-affecting,
+                    // thus trigger full rearrange + redraw.
+                    //
+                    // FUTURE OPTIMIZATION (design note):
+                    // Introduce a SettingImpact classification (layout / redraw-only / none)
+                    // so purely visual changes (e.g. colors) set only redraw, avoiding
+                    // measure/arrange cache invalidation.
+                    // See design memo: "Setting の再配置要否判定 API 抽象".
+                    // Keep simple conservative behavior until profiling justifies refinement.
+                    need_rearrange = true;
                 }
+            }
 
-                child.update_widget_tree(*child_dom).await?;
-                new_children_vec.push((child, new_setting.clone()));
+            // push to self.children
+            if let Some((old_child, _)) = old_pair {
+                self.children.push((old_child, setting));
+                self.children_id.push(id);
             } else {
-                // Create new child
-                arrangement_changed = true;
-                let mut child = child_dom.build_widget_tree();
-                child.update_widget_tree(*child_dom).await?;
-                new_children_vec.push((child, new_setting.clone()));
+                let new_child = child_dom.build_widget_tree();
+                self.children.push((new_child, setting));
+                self.children_id.push(id);
+                need_rearrange = true;
             }
         }
 
-        // If there are remaining children in the map, they were removed.
         if !old_children_map.is_empty() {
-            arrangement_changed = true;
+            // children removed
+            need_rearrange = true;
         }
 
-        // If the number of children changed.
-        if self.children_id.len() != new_children_id_vec.len() {
-            arrangement_changed = true;
+        if self.children_id != old_children_id {
+            // children reordered
+            need_rearrange = true;
         }
 
-        if arrangement_changed {
+        if need_rearrange {
             self.need_rearrange.mark_dirty();
+            self.need_redraw.mark_dirty();
         }
-
-        self.children = new_children_vec;
-        self.children_id = new_children_id_vec;
 
         Ok(())
+    }
+
+    fn update_dirty_flags(&mut self, rearrange_flags: BackPropDirty, redraw_flags: BackPropDirty) {
+        self.need_rearrange = rearrange_flags;
+        self.need_redraw = redraw_flags;
+
+        for (child, _) in &mut self.children {
+            // NOTE:
+            // Originally used `self.need_rearrange.make_child()` but build reported method not found.
+            // Fallback to explicit constructor to preserve parent linking semantics.
+            // If `make_child` becomes available (it exists in utils crate), you may revert for brevity.
+            child.update_dirty_flags(
+                BackPropDirty::with_parent(&self.need_rearrange),
+                BackPropDirty::with_parent(&self.need_redraw),
+            );
+        }
     }
 
     fn update_gpu_device(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
@@ -451,40 +520,25 @@ where
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use crate::{Constraints, DeviceEvent, RenderNode, UpdateNotifier};
+    use crate::{Constraints, DeviceEvent, UpdateNotifier};
     use utils::back_prop_dirty::BackPropDirty;
 
-    #[derive(Debug, Clone, PartialEq)]
+    #[derive(Debug, Clone, PartialEq, Default)]
     struct MockSetting {
         value: i32,
     }
 
-    impl Default for MockSetting {
-        fn default() -> Self {
-            Self { value: 0 }
-        }
-    }
-
+    #[derive(Clone)]
     struct MockDom {
         id: u128,
         children: Vec<(MockDom, MockSetting)>,
     }
 
     #[async_trait::async_trait]
-    impl Dom<String, MockSetting> for MockDom {
-        fn id(&self) -> u128 {
-            self.id
-        }
-
-        fn children(&self) -> Vec<(&dyn Dom<String, MockSetting>, MockSetting)> {
-            self.children
-                .iter()
-                .map(|(dom, setting)| (dom as &dyn Dom<String, MockSetting>, setting.clone()))
-                .collect()
-        }
-
+    impl Dom<String> for MockDom {
         fn build_widget_tree(&self) -> Box<dyn AnyWidgetFrame<String>> {
             Box::new(WidgetFrame {
                 label: None,
@@ -493,13 +547,12 @@ mod tests {
                     .iter()
                     .map(|(child, setting)| (child.build_widget_tree(), setting.clone()))
                     .collect(),
-                children_id: self.children.iter().map(|(c, _)| c.id()).collect(),
+                children_id: self.children.iter().map(|(c, _)| c.id).collect(),
                 need_rearrange: BackPropDirty::new(),
-                need_rerender: BackPropDirty::new(),
+                need_redraw: BackPropDirty::new(),
                 cache: Mutex::new(WidgetFrameCache {
                     measure: Cache::new(),
                     layout: Cache::new(),
-                    render: None,
                 }),
                 widget_impl: MockWidget,
                 _dom_type: std::marker::PhantomData,
@@ -512,7 +565,33 @@ mod tests {
     struct MockWidget;
 
     impl Widget<MockDom, String, MockSetting> for MockWidget {
-        fn update_widget(&mut self, _dom: &MockDom, _cache_invalidator: RebuildRequest) {}
+        fn update_widget(
+            &mut self,
+            dom: &MockDom,
+            _cache_invalidator: RebuildRequest,
+        ) -> Vec<(&dyn Dom<String>, MockSetting, u128)> {
+            // This is not a good example, but it works for testing.
+            // A real widget would probably have a more complex logic to handle children.
+            let children_with_ids: Vec<_> = dom
+                .children
+                .iter()
+                .map(|(child, setting)| (child.clone(), setting.clone(), child.id))
+                .collect();
+
+            // This is a memory leak, but it's the easiest way to get a &'static dyn Dom<String>
+            // for testing purposes. In a real application, you would have a proper arena
+            // or some other way to manage the lifetime of the Dom nodes.
+            let leaked_children: Vec<_> = children_with_ids
+                .into_iter()
+                .map(|(child, setting, id)| {
+                    let boxed_child: Box<dyn Dom<String>> = Box::new(child);
+                    let static_child: &'static dyn Dom<String> = Box::leak(boxed_child);
+                    (static_child, setting, id)
+                })
+                .collect();
+
+            leaked_children
+        }
 
         fn device_event(
             &mut self,
@@ -617,10 +696,7 @@ mod tests {
             ],
         };
 
-        widget_frame
-            .update_widget_tree(&updated_dom as &dyn Any)
-            .await
-            .unwrap();
+        widget_frame.update_widget_tree(&updated_dom).await.unwrap();
 
         let widget_frame_concrete = (&mut *widget_frame as &mut dyn Any)
             .downcast_mut::<MockWidgetFrame>()
@@ -667,10 +743,7 @@ mod tests {
             ],
         };
 
-        widget_frame
-            .update_widget_tree(&updated_dom as &dyn Any)
-            .await
-            .unwrap();
+        widget_frame.update_widget_tree(&updated_dom).await.unwrap();
 
         let widget_frame_concrete = (&mut *widget_frame as &mut dyn Any)
             .downcast_mut::<MockWidgetFrame>()
@@ -716,10 +789,7 @@ mod tests {
             )],
         };
 
-        widget_frame
-            .update_widget_tree(&updated_dom as &dyn Any)
-            .await
-            .unwrap();
+        widget_frame.update_widget_tree(&updated_dom).await.unwrap();
 
         let widget_frame_concrete = (&mut *widget_frame as &mut dyn Any)
             .downcast_mut::<MockWidgetFrame>()
@@ -774,10 +844,7 @@ mod tests {
             ],
         };
 
-        widget_frame
-            .update_widget_tree(&updated_dom as &dyn Any)
-            .await
-            .unwrap();
+        widget_frame.update_widget_tree(&updated_dom).await.unwrap();
 
         let widget_frame_concrete = (&mut *widget_frame as &mut dyn Any)
             .downcast_mut::<MockWidgetFrame>()
@@ -818,10 +885,7 @@ mod tests {
             )],
         };
 
-        widget_frame
-            .update_widget_tree(&updated_dom as &dyn Any)
-            .await
-            .unwrap();
+        widget_frame.update_widget_tree(&updated_dom).await.unwrap();
 
         let widget_frame_concrete = (&mut *widget_frame as &mut dyn Any)
             .downcast_mut::<MockWidgetFrame>()

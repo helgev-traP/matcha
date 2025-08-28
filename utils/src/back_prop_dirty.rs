@@ -61,6 +61,10 @@ impl BackPropDirty {
         }
     }
 
+    pub fn make_child(&self) -> BackPropDirty {
+        BackPropDirty::with_parent(self)
+    }
+
     /// Mark this node dirty and propagate to ancestors (short-circuits if already dirty).
     pub fn mark_dirty(&self) {
         self.inner.back_propagate_dirty();

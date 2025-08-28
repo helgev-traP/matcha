@@ -6,7 +6,6 @@ pub mod winit_instance;
 
 // widget system
 pub mod backend;
-pub mod component;
 pub mod ui;
 pub mod update_flag;
 
@@ -26,7 +25,9 @@ pub mod types;
 
 // Re-export key components
 pub use app::App;
-pub use component::{Component, ComponentDom};
 pub use device_event::DeviceEvent;
-pub use ui::{Background, Constraints, Dom, Style, Widget, WidgetContext};
+pub use ui::{
+    Background, Component, ComponentDom, ComponentWidget, Constraints, Dom, Style, Widget,
+    WidgetContext,
+};
 pub use update_flag::UpdateNotifier;

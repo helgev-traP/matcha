@@ -3,8 +3,8 @@ use std::time::Duration;
 use winit::dpi::PhysicalSize;
 
 use crate::{
+    Component,
     backend::Backend,
-    component::Component,
     device_event::mouse_state::MousePrimaryButton,
     types::color::Color,
     winit_instance::{

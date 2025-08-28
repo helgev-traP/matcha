@@ -4,15 +4,14 @@ use thiserror::Error;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 
 use crate::{
-    UpdateNotifier,
-    component::Component,
+    Component, UpdateNotifier,
     device_event::{
         DeviceEvent, DeviceEventData,
         key_state::KeyboardState,
         mouse_state::{MousePrimaryButton, MouseState},
         window_state::WindowState,
     },
-    ui::{Background, Constraints, Widget, WidgetContext},
+    ui::{AnyWidget, AnyWidgetFrame, Background, Constraints, Widget, WidgetContext},
     update_flag::UpdateFlag,
 };
 use renderer::render_node::RenderNode;
@@ -25,7 +24,7 @@ pub struct UiControl<
 > {
     component: Component<Model, Message, Event, InnerEvent>,
     model_update_flag: UpdateFlag,
-    widget: Option<Box<dyn Widget<Event>>>,
+    widget: Option<Box<dyn AnyWidgetFrame<Event>>>,
 
     window_state: WindowState,
     mouse_state: MouseState,
@@ -100,8 +99,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
     /// Render is required when the model update flag or animation update flag is true,
     /// or when the widget is not yet initialized.
     pub fn needs_render(&self) -> bool {
-        self.model_update_flag.is_true()
-            || self.widget.as_ref().is_none_or(|w| w.need_rerendering())
+        self.model_update_flag.is_true() || self.widget.as_ref().is_none_or(|w| w.need_redraw())
     }
 
     // if this method is called, it means we already have a current surface texture so we must re-render it to prevent flickering.
@@ -120,7 +118,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
                 .await;
 
             if let Some(widget) = self.widget.as_mut() {
-                if widget.update_widget_tree(false, &*dom).await.is_err() {
+                if widget.update_widget_tree(&*dom).await.is_err() {
                     self.widget = None;
                 }
             }
@@ -136,24 +134,18 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
     }
 
     fn render_current_widget(
-        widget: &mut dyn Widget<Event>,
+        widget: &mut dyn AnyWidgetFrame<Event>,
         viewport_size: [f32; 2],
         background: Background,
         ctx: &WidgetContext,
     ) -> RenderNode {
-        let constraints = Constraints {
-            min_width: 0.0,
-            max_width: viewport_size[0],
-            min_height: 0.0,
-            max_height: viewport_size[1],
-        };
-        let preferred_size = widget.preferred_size(&constraints, ctx);
+        let constraints = Constraints::new([0.0, viewport_size[0]], [0.0, viewport_size[1]]);
+        let preferred_size = widget.measure(&constraints, ctx);
         let final_size = [
             preferred_size[0].clamp(0.0, viewport_size[0]),
             preferred_size[1].clamp(0.0, viewport_size[1]),
         ];
-        widget.arrange(final_size, ctx);
-        widget.render(background, ctx)
+        widget.render(final_size, background, ctx)
     }
 
     fn convert_winit_to_window_event(
@@ -257,7 +249,6 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
 
     pub fn window_event(
         &mut self,
-        viewport_size: [f32; 2],
         window_event: winit::event::WindowEvent,
         get_window_size: impl Fn() -> (PhysicalSize<u32>, PhysicalSize<u32>),
         get_window_position: impl Fn() -> (PhysicalPosition<i32>, PhysicalPosition<i32>),
@@ -267,20 +258,6 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
             self.convert_winit_to_window_event(window_event, get_window_size, get_window_position);
 
         if let (Some(widget), Some(event)) = (&mut self.widget, event) {
-            let constraints = Constraints {
-                min_width: 0.0,
-                max_width: viewport_size[0],
-                min_height: 0.0,
-                max_height: viewport_size[1],
-            };
-            let preferred_size = widget.preferred_size(&constraints, ctx);
-            widget.arrange(
-                [
-                    preferred_size[0].min(viewport_size[0]),
-                    preferred_size[1].min(viewport_size[1]),
-                ],
-                ctx,
-            );
             widget.device_event(&event, ctx)
         } else {
             None
