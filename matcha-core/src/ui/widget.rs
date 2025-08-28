@@ -26,20 +26,13 @@ use crate::{
 ///   granularity / statistics are needed.
 /// - Async widgets: if future async tasks need to trigger invalidation, they will
 ///   use a cloneable channel-based handle instead of this borrowed form.
-pub struct RebuildRequest<'a> {
+pub struct InvalidationHandle<'a> {
     need_rearrange: &'a BackPropDirty,
     need_redraw: &'a BackPropDirty,
 }
 
-impl<'a> RebuildRequest<'a> {
-    fn new(need_rearrange: &'a BackPropDirty, need_redraw: &'a BackPropDirty) -> Self {
-        Self {
-            need_rearrange,
-            need_redraw,
-        }
-    }
-
-    pub fn rearrange_next_frame(&self) {
+impl<'a> InvalidationHandle<'a> {
+    pub fn relayout_next_frame(&self) {
         self.need_rearrange.mark_dirty();
         self.need_redraw.mark_dirty();
     }
@@ -50,7 +43,7 @@ impl<'a> RebuildRequest<'a> {
 }
 
 #[async_trait::async_trait]
-pub trait Dom<E>: Sync + Any {
+pub trait Dom<E>: Send + Sync + Any {
     /// Builds the corresponding stateful `Widget` tree from this `Dom` node.
     fn build_widget_tree(&self) -> Box<dyn AnyWidgetFrame<E>>;
 
@@ -65,21 +58,21 @@ pub trait Dom<E>: Sync + Any {
     async fn set_update_notifier(&self, notifier: &UpdateNotifier);
 }
 
-pub trait Widget<D: Dom<E>, E: 'static = (), ChildSetting: PartialEq + 'static = ()> {
+pub trait Widget<D: Dom<E>, E: 'static = (), ChildSetting: PartialEq + 'static = ()>: Send + Sync {
     /// Returns the children of this `Dom` node.
     /// vector values are tuples of (child, setting, id).
-    fn update_widget(
+    fn update_widget<'a>(
         &mut self,
-        dom: &D,
-        cache_invalidator: RebuildRequest,
-    ) -> Vec<(&dyn Dom<E>, ChildSetting, u128)>;
+        dom: &'a D,
+        cache_invalidator: Option<InvalidationHandle>,
+    ) -> Vec<(&'a dyn Dom<E>, ChildSetting, u128)>;
 
     fn device_event(
         &mut self,
         bounds: [f32; 2],
         event: &DeviceEvent,
         children: &[(&mut dyn AnyWidget<E>, &mut ChildSetting, &Arrangement)],
-        cache_invalidator: RebuildRequest,
+        cache_invalidator: InvalidationHandle,
         ctx: &WidgetContext,
     ) -> Option<E>;
 
@@ -152,6 +145,7 @@ pub trait AnyWidgetFrame<E: 'static>:
 
     async fn update_widget_tree(&mut self, dom: &dyn Dom<E>) -> Result<(), UpdateWidgetError>;
 
+    /// This method must be called before `Widget::device_event`, `Widget::is_inside`, `Widget::measure`, and `Widget::arrange`.
     fn update_dirty_flags(&mut self, rearrange_flags: BackPropDirty, redraw_flags: BackPropDirty);
 
     fn update_gpu_device(&mut self, device: &wgpu::Device, queue: &wgpu::Queue);
@@ -180,8 +174,9 @@ where
     children_id: Vec<u128>, // hash
 
     // dirty flags
-    need_rearrange: BackPropDirty,
-    need_redraw: BackPropDirty,
+    // need_rearrange: BackPropDirty,
+    // need_redraw: BackPropDirty,
+    dirty_flags: Option<DirtyFlags>,
 
     /// cache
     cache: Mutex<WidgetFrameCache>,
@@ -191,11 +186,44 @@ where
     _dom_type: std::marker::PhantomData<D>,
 }
 
+struct DirtyFlags {
+    need_rearrange: BackPropDirty,
+    need_redraw: BackPropDirty,
+}
+
 struct WidgetFrameCache {
     /// cache the output of measure method.
     measure: Cache<Constraints, [f32; 2]>,
     /// cache the output of layout method.
     layout: Cache<LayoutSizeKey, Vec<Arrangement>>,
+}
+
+impl<D, W, E, ChildSetting> WidgetFrame<D, W, E, ChildSetting>
+where
+    D: Dom<E> + Send + Sync + 'static,
+    W: Widget<D, E, ChildSetting> + Send + Sync + 'static,
+    E: 'static,
+    ChildSetting: Send + Sync + PartialEq + Clone + 'static,
+{
+    pub fn new(
+        label: Option<String>,
+        children: Vec<(Box<dyn AnyWidgetFrame<E>>, ChildSetting)>,
+        children_id: Vec<u128>,
+        widget_impl: W,
+    ) -> Self {
+        Self {
+            label,
+            children,
+            children_id,
+            dirty_flags: None,
+            cache: Mutex::new(WidgetFrameCache {
+                measure: Cache::new(),
+                layout: Cache::new(),
+            }),
+            widget_impl,
+            _dom_type: std::marker::PhantomData,
+        }
+    }
 }
 
 impl<D, W, T, ChildSetting> AnyWidget<T> for WidgetFrame<D, W, T, ChildSetting>
@@ -206,6 +234,10 @@ where
     ChildSetting: Send + Sync + PartialEq + Clone + 'static,
 {
     fn device_event(&mut self, event: &DeviceEvent, ctx: &WidgetContext) -> Option<T> {
+        let Some(dirty_flags) = &self.dirty_flags else {
+            return None;
+        };
+
         let cache = self.cache.lock();
 
         let Some((&actual_bounds, arrangement)) = cache.layout.get() else {
@@ -245,9 +277,9 @@ where
             actual_bounds,
             event,
             &children_with_arrangement,
-            RebuildRequest {
-                need_rearrange: &self.need_rearrange,
-                need_redraw: &self.need_redraw,
+            InvalidationHandle {
+                need_rearrange: &dirty_flags.need_rearrange,
+                need_redraw: &dirty_flags.need_redraw,
             },
             ctx,
         )
@@ -287,10 +319,14 @@ where
     }
 
     fn measure(&self, constraints: &Constraints, ctx: &WidgetContext) -> [f32; 2] {
+        let Some(dirty_flags) = &self.dirty_flags else {
+            return [0.0, 0.0];
+        };
+
         let mut cache = self.cache.lock();
 
         // clear measure cache if rearrange is needed
-        if self.need_rearrange.take_dirty() {
+        if dirty_flags.need_rearrange.take_dirty() {
             cache.measure.clear();
             // we cannot partially ensure both arrange() and measure() to be called so we need to clear both caches.
             cache.layout.clear();
@@ -315,6 +351,10 @@ where
         background: Background,
         ctx: &WidgetContext,
     ) -> RenderNode {
+        let Some(dirty_flags) = &self.dirty_flags else {
+            return RenderNode::default();
+        };
+
         // arrange must be called before locking the cache to avoid deadlocks.
         self.arrange(final_size, ctx);
 
@@ -347,7 +387,8 @@ where
         // how many redraws were requested in a frame (statistics / throttling).
         // NOTE: This intentionally _does not_ clear need_rearrange: that path is already
         // cleared when caches are invalidated at layout time.
-        let _ = self.need_redraw.take_dirty();
+        let _ = dirty_flags.need_rearrange.take_dirty();
+        let _ = dirty_flags.need_redraw.take_dirty();
 
         node
     }
@@ -361,9 +402,13 @@ where
     ChildSetting: Send + Sync + PartialEq + Clone + 'static,
 {
     fn arrange(&self, final_size: [f32; 2], ctx: &WidgetContext) {
+        let Some(dirty_flags) = &self.dirty_flags else {
+            return;
+        };
+
         let mut cache = self.cache.lock();
 
-        if self.need_rearrange.take_dirty() {
+        if dirty_flags.need_rearrange.take_dirty() {
             // arrangement changed, need to redraw
             cache.measure.clear();
             cache.layout.clear();
@@ -400,7 +445,11 @@ where
     }
 
     fn need_redraw(&self) -> bool {
-        self.need_redraw.is_dirty()
+        match &self.dirty_flags {
+            // Not attached to the widget tree yet, assume it needs a draw.
+            None => true,
+            Some(flags) => flags.need_redraw.is_dirty(),
+        }
     }
 
     async fn update_widget_tree(&mut self, dom: &dyn Dom<T>) -> Result<(), UpdateWidgetError> {
@@ -409,12 +458,18 @@ where
             .downcast_ref::<D>()
             .ok_or(UpdateWidgetError::TypeMismatch)?;
 
+        // update current hierarchy widget
         let children = self.widget_impl.update_widget(
             dom,
-            RebuildRequest::new(&self.need_rearrange, &self.need_redraw),
+            self.dirty_flags
+                .as_ref()
+                .map(|flags| InvalidationHandle {
+                    need_rearrange: &flags.need_rearrange,
+                    need_redraw: &flags.need_redraw,
+                }),
         );
 
-        // update children
+        // update children widget
 
         let mut need_rearrange = false;
 
@@ -487,16 +542,20 @@ where
         }
 
         if need_rearrange {
-            self.need_rearrange.mark_dirty();
-            self.need_redraw.mark_dirty();
+            if let Some(dirty_flags) = &self.dirty_flags {
+                dirty_flags.need_rearrange.mark_dirty();
+                dirty_flags.need_redraw.mark_dirty();
+            }
         }
 
         Ok(())
     }
 
     fn update_dirty_flags(&mut self, rearrange_flags: BackPropDirty, redraw_flags: BackPropDirty) {
-        self.need_rearrange = rearrange_flags;
-        self.need_redraw = redraw_flags;
+        let dirty_flags = self.dirty_flags.insert(DirtyFlags {
+            need_rearrange: rearrange_flags,
+            need_redraw: redraw_flags,
+        });
 
         for (child, _) in &mut self.children {
             // NOTE:
@@ -504,8 +563,8 @@ where
             // Fallback to explicit constructor to preserve parent linking semantics.
             // If `make_child` becomes available (it exists in utils crate), you may revert for brevity.
             child.update_dirty_flags(
-                BackPropDirty::with_parent(&self.need_rearrange),
-                BackPropDirty::with_parent(&self.need_redraw),
+                dirty_flags.need_rearrange.make_child(),
+                dirty_flags.need_redraw.make_child(),
             );
         }
     }
@@ -540,23 +599,15 @@ mod tests {
     #[async_trait::async_trait]
     impl Dom<String> for MockDom {
         fn build_widget_tree(&self) -> Box<dyn AnyWidgetFrame<String>> {
-            Box::new(WidgetFrame {
-                label: None,
-                children: self
-                    .children
+            Box::new(WidgetFrame::new(
+                None,
+                self.children
                     .iter()
                     .map(|(child, setting)| (child.build_widget_tree(), setting.clone()))
                     .collect(),
-                children_id: self.children.iter().map(|(c, _)| c.id).collect(),
-                need_rearrange: BackPropDirty::new(),
-                need_redraw: BackPropDirty::new(),
-                cache: Mutex::new(WidgetFrameCache {
-                    measure: Cache::new(),
-                    layout: Cache::new(),
-                }),
-                widget_impl: MockWidget,
-                _dom_type: std::marker::PhantomData,
-            })
+                self.children.iter().map(|(c, _)| c.id).collect(),
+                MockWidget,
+            ))
         }
 
         async fn set_update_notifier(&self, _notifier: &UpdateNotifier) {}
@@ -565,32 +616,15 @@ mod tests {
     struct MockWidget;
 
     impl Widget<MockDom, String, MockSetting> for MockWidget {
-        fn update_widget(
+        fn update_widget<'a>(
             &mut self,
-            dom: &MockDom,
-            _cache_invalidator: RebuildRequest,
-        ) -> Vec<(&dyn Dom<String>, MockSetting, u128)> {
-            // This is not a good example, but it works for testing.
-            // A real widget would probably have a more complex logic to handle children.
-            let children_with_ids: Vec<_> = dom
-                .children
+            dom: &'a MockDom,
+            _cache_invalidator: Option<InvalidationHandle>,
+        ) -> Vec<(&'a dyn Dom<String>, MockSetting, u128)> {
+            dom.children
                 .iter()
-                .map(|(child, setting)| (child.clone(), setting.clone(), child.id))
-                .collect();
-
-            // This is a memory leak, but it's the easiest way to get a &'static dyn Dom<String>
-            // for testing purposes. In a real application, you would have a proper arena
-            // or some other way to manage the lifetime of the Dom nodes.
-            let leaked_children: Vec<_> = children_with_ids
-                .into_iter()
-                .map(|(child, setting, id)| {
-                    let boxed_child: Box<dyn Dom<String>> = Box::new(child);
-                    let static_child: &'static dyn Dom<String> = Box::leak(boxed_child);
-                    (static_child, setting, id)
-                })
-                .collect();
-
-            leaked_children
+                .map(|(child, setting)| (child as &dyn Dom<String>, setting.clone(), child.id))
+                .collect()
         }
 
         fn device_event(
@@ -598,7 +632,7 @@ mod tests {
             _bounds: [f32; 2],
             _event: &DeviceEvent,
             _children: &[(&mut dyn AnyWidget<String>, &mut MockSetting, &Arrangement)],
-            _cache_invalidator: RebuildRequest,
+            _cache_invalidator: InvalidationHandle,
             _ctx: &WidgetContext,
         ) -> Option<String> {
             None
@@ -667,13 +701,21 @@ mod tests {
         };
 
         let mut widget_frame: Box<dyn AnyWidgetFrame<String>> = initial_dom.build_widget_tree();
+        widget_frame.update_dirty_flags(BackPropDirty::new(), BackPropDirty::new());
 
         let widget_frame_concrete = (&mut *widget_frame as &mut dyn Any)
             .downcast_mut::<MockWidgetFrame>()
             .unwrap();
         assert_eq!(widget_frame_concrete.children.len(), 2);
         assert_eq!(widget_frame_concrete.children_id, vec![1, 2]);
-        assert!(!widget_frame_concrete.need_rearrange.is_dirty());
+        assert!(
+            !widget_frame_concrete
+                .dirty_flags
+                .as_ref()
+                .unwrap()
+                .need_rearrange
+                .is_dirty()
+        );
 
         // Update with the same DOM
         let updated_dom = MockDom {
@@ -704,7 +746,14 @@ mod tests {
         assert_eq!(widget_frame_concrete.children.len(), 2);
         assert_eq!(widget_frame_concrete.children_id, vec![1, 2]);
         // No change, so rearrange should not be needed.
-        assert!(!widget_frame_concrete.need_rearrange.is_dirty());
+        assert!(
+            !widget_frame_concrete
+                .dirty_flags
+                .as_ref()
+                .unwrap()
+                .need_rearrange
+                .is_dirty()
+        );
     }
 
     #[tokio::test]
@@ -721,6 +770,7 @@ mod tests {
         };
 
         let mut widget_frame: Box<dyn AnyWidgetFrame<String>> = initial_dom.build_widget_tree();
+        widget_frame.update_dirty_flags(BackPropDirty::new(), BackPropDirty::new());
 
         // Update with a new child added
         let updated_dom = MockDom {
@@ -750,7 +800,14 @@ mod tests {
             .unwrap();
         assert_eq!(widget_frame_concrete.children.len(), 2);
         assert_eq!(widget_frame_concrete.children_id, vec![1, 2]);
-        assert!(widget_frame_concrete.need_rearrange.is_dirty());
+        assert!(
+            widget_frame_concrete
+                .dirty_flags
+                .as_ref()
+                .unwrap()
+                .need_rearrange
+                .is_dirty()
+        );
     }
 
     #[tokio::test]
@@ -776,6 +833,7 @@ mod tests {
         };
 
         let mut widget_frame: Box<dyn AnyWidgetFrame<String>> = initial_dom.build_widget_tree();
+        widget_frame.update_dirty_flags(BackPropDirty::new(), BackPropDirty::new());
 
         // Update with a child removed
         let updated_dom = MockDom {
@@ -796,7 +854,14 @@ mod tests {
             .unwrap();
         assert_eq!(widget_frame_concrete.children.len(), 1);
         assert_eq!(widget_frame_concrete.children_id, vec![1]);
-        assert!(widget_frame_concrete.need_rearrange.is_dirty());
+        assert!(
+            widget_frame_concrete
+                .dirty_flags
+                .as_ref()
+                .unwrap()
+                .need_rearrange
+                .is_dirty()
+        );
     }
 
     #[tokio::test]
@@ -822,6 +887,7 @@ mod tests {
         };
 
         let mut widget_frame: Box<dyn AnyWidgetFrame<String>> = initial_dom.build_widget_tree();
+        widget_frame.update_dirty_flags(BackPropDirty::new(), BackPropDirty::new());
 
         // Update with children reordered
         let updated_dom = MockDom {
@@ -851,7 +917,14 @@ mod tests {
             .unwrap();
         assert_eq!(widget_frame_concrete.children.len(), 2);
         assert_eq!(widget_frame_concrete.children_id, vec![2, 1]);
-        assert!(widget_frame_concrete.need_rearrange.is_dirty());
+        assert!(
+            widget_frame_concrete
+                .dirty_flags
+                .as_ref()
+                .unwrap()
+                .need_rearrange
+                .is_dirty()
+        );
     }
 
     #[tokio::test]
@@ -868,10 +941,18 @@ mod tests {
         };
 
         let mut widget_frame: Box<dyn AnyWidgetFrame<String>> = initial_dom.build_widget_tree();
+        widget_frame.update_dirty_flags(BackPropDirty::new(), BackPropDirty::new());
         let widget_frame_concrete = (&mut *widget_frame as &mut dyn Any)
             .downcast_mut::<MockWidgetFrame>()
             .unwrap();
-        assert!(!widget_frame_concrete.need_rearrange.is_dirty());
+        assert!(
+            !widget_frame_concrete
+                .dirty_flags
+                .as_ref()
+                .unwrap()
+                .need_rearrange
+                .is_dirty()
+        );
 
         // Update with setting changed
         let updated_dom = MockDom {
@@ -894,6 +975,236 @@ mod tests {
         assert_eq!(widget_frame_concrete.children_id, vec![1]);
         let (_, setting) = &widget_frame_concrete.children[0];
         assert_eq!(setting.value, 99);
-        assert!(widget_frame_concrete.need_rearrange.is_dirty());
+        assert!(
+            widget_frame_concrete
+                .dirty_flags
+                .as_ref()
+                .unwrap()
+                .need_rearrange
+                .is_dirty()
+        );
+    }
+
+    // --- Added Tests ---
+
+    use crate::{
+        any_resource::AnyResource, gpu::DeviceQueue, texture_allocator::TextureAllocator,
+        ui::widget_context::WidgetContext,
+    };
+    use std::{
+        mem::MaybeUninit,
+        sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        },
+        time::Duration,
+    };
+
+    // Helper to create a dummy WidgetContext for tests that don't depend on real GPU resources.
+    fn create_mock_widget_context<'a>(
+        dq: &'a DeviceQueue,
+        ta: &'a TextureAllocator,
+        ar: &'a AnyResource,
+    ) -> WidgetContext<'a> {
+        WidgetContext::new(
+            dq.clone(),
+            wgpu::TextureFormat::Rgba8UnormSrgb,
+            [800.0, 600.0],
+            1.0,
+            ta,
+            ar,
+            16.0,
+            Duration::from_secs(0),
+        )
+    }
+
+    #[derive(Default)]
+    struct CallCount {
+        measure: AtomicUsize,
+    }
+
+    struct MockWidgetWithCallCount {
+        call_count: Arc<CallCount>,
+    }
+
+    impl Widget<MockDom, String, MockSetting> for MockWidgetWithCallCount {
+        fn update_widget<'a>(
+            &mut self,
+            dom: &'a MockDom,
+            _cache_invalidator: Option<InvalidationHandle>,
+        ) -> Vec<(&'a dyn Dom<String>, MockSetting, u128)> {
+            dom.children
+                .iter()
+                .map(|(child, setting)| (child as &dyn Dom<String>, setting.clone(), child.id))
+                .collect()
+        }
+
+        fn device_event(
+            &mut self,
+            _bounds: [f32; 2],
+            _event: &DeviceEvent,
+            _children: &[(&mut dyn AnyWidget<String>, &mut MockSetting, &Arrangement)],
+            _cache_invalidator: InvalidationHandle,
+            _ctx: &WidgetContext,
+        ) -> Option<String> {
+            None
+        }
+
+        fn is_inside(
+            &self,
+            _bounds: [f32; 2],
+            _position: [f32; 2],
+            _children: &[(&dyn AnyWidget<String>, &MockSetting, &Arrangement)],
+            _ctx: &WidgetContext,
+        ) -> bool {
+            true
+        }
+
+        fn measure(
+            &self,
+            _constraints: &Constraints,
+            _children: &[(&dyn AnyWidget<String>, &MockSetting)],
+            _ctx: &WidgetContext,
+        ) -> [f32; 2] {
+            self.call_count.measure.fetch_add(1, Ordering::SeqCst);
+            [100.0, 100.0]
+        }
+
+        fn arrange(
+            &self,
+            _size: [f32; 2],
+            _children: &[(&dyn AnyWidget<String>, &MockSetting)],
+            _ctx: &WidgetContext,
+        ) -> Vec<Arrangement> {
+            vec![]
+        }
+
+        fn render(
+            &self,
+            _background: Background,
+            _children: &[(&dyn AnyWidget<String>, &MockSetting, &Arrangement)],
+            _ctx: &WidgetContext,
+        ) -> RenderNode {
+            RenderNode::default()
+        }
+    }
+
+    #[test]
+    fn test_measure_cache_behavior() {
+        // NOTE: This test cannot be async because the mock context setup is not Send.
+        // We create dummy resources on the stack using MaybeUninit for safety.
+        let device = MaybeUninit::<wgpu::Device>::uninit();
+        let queue = MaybeUninit::<wgpu::Queue>::uninit();
+        let device_queue = DeviceQueue {
+            device: unsafe { device.assume_init_ref() },
+            queue: unsafe { queue.assume_init_ref() },
+        };
+        let texture_allocator = MaybeUninit::<TextureAllocator>::uninit();
+        let any_resource = AnyResource::new();
+        let ctx = create_mock_widget_context(
+            &device_queue,
+            unsafe { texture_allocator.assume_init_ref() },
+            &any_resource,
+        );
+
+        let call_count = Arc::new(CallCount::default());
+        let widget_impl = MockWidgetWithCallCount {
+            call_count: Arc::clone(&call_count),
+        };
+        let dom = MockDom {
+            id: 0,
+            children: vec![],
+        };
+        let mut widget_frame = WidgetFrame::new(None, vec![], vec![], widget_impl);
+        widget_frame.update_dirty_flags(BackPropDirty::new(), BackPropDirty::new());
+
+        let constraints = Constraints::new([0.0, 200.0], [0.0, 200.0]);
+
+        // 1. First call, should execute measure
+        widget_frame.measure(&constraints, &ctx);
+        assert_eq!(call_count.measure.load(Ordering::SeqCst), 1);
+
+        // 2. Second call with same constraints, should hit cache
+        widget_frame.measure(&constraints, &ctx);
+        assert_eq!(call_count.measure.load(Ordering::SeqCst), 1);
+
+        // 3. Mark for rearrange, should invalidate cache and re-measure
+        widget_frame
+            .dirty_flags
+            .as_ref()
+            .unwrap()
+            .need_rearrange
+            .mark_dirty();
+        widget_frame.measure(&constraints, &ctx);
+        assert_eq!(call_count.measure.load(Ordering::SeqCst), 2);
+
+        // 4. Call again, should be cached now
+        widget_frame.measure(&constraints, &ctx);
+        assert_eq!(call_count.measure.load(Ordering::SeqCst), 2);
+    }
+
+    struct WidgetRequestingRearrange;
+    impl Widget<MockDom, String, MockSetting> for WidgetRequestingRearrange {
+        fn update_widget<'a>(
+            &mut self,
+            dom: &'a MockDom,
+            cache_invalidator: Option<InvalidationHandle>,
+        ) -> Vec<(&'a dyn Dom<String>, MockSetting, u128)> {
+            if let Some(invalidator) = cache_invalidator {
+                invalidator.relayout_next_frame();
+            }
+            dom.children
+                .iter()
+                .map(|(child, setting)| (child as &dyn Dom<String>, setting.clone(), child.id))
+                .collect()
+        }
+        fn device_event( &mut self, _: [f32; 2], _: &DeviceEvent, _: &[(&mut dyn AnyWidget<String>, &mut MockSetting, &Arrangement)], _: InvalidationHandle, _: &WidgetContext, ) -> Option<String> { None }
+        fn is_inside( &self, _: [f32; 2], _: [f32; 2], _: &[(&dyn AnyWidget<String>, &MockSetting, &Arrangement)], _: &WidgetContext, ) -> bool { true }
+        fn measure( &self, _: &Constraints, _: &[(&dyn AnyWidget<String>, &MockSetting)], _: &WidgetContext, ) -> [f32; 2] { [0.0, 0.0] }
+        fn arrange( &self, _: [f32; 2], _: &[(&dyn AnyWidget<String>, &MockSetting)], _: &WidgetContext, ) -> Vec<Arrangement> { vec![] }
+        fn render( &self, _: Background, _: &[(&dyn AnyWidget<String>, &MockSetting, &Arrangement)], _: &WidgetContext, ) -> RenderNode { RenderNode::default() }
+    }
+
+    #[tokio::test]
+    async fn test_rearrange_request_from_widget() {
+        let dom = MockDom {
+            id: 0,
+            children: vec![],
+        };
+        let mut widget_frame: Box<dyn AnyWidgetFrame<String>> = Box::new(WidgetFrame::new(
+            None,
+            vec![],
+            vec![],
+            WidgetRequestingRearrange,
+        ));
+        widget_frame.update_dirty_flags(BackPropDirty::new(), BackPropDirty::new());
+
+        let frame_impl_before = (&*widget_frame as &dyn Any)
+            .downcast_ref::<WidgetFrame<MockDom, WidgetRequestingRearrange, String, MockSetting>>()
+            .unwrap();
+        assert!(
+            !frame_impl_before
+                .dirty_flags
+                .as_ref()
+                .unwrap()
+                .need_rearrange
+                .is_dirty()
+        );
+
+        // update_widget is called, which should trigger rearrange_next_frame()
+        widget_frame.update_widget_tree(&dom).await.unwrap();
+
+        let frame_impl_after = (&*widget_frame as &dyn Any)
+            .downcast_ref::<WidgetFrame<MockDom, WidgetRequestingRearrange, String, MockSetting>>()
+            .unwrap();
+        assert!(
+            frame_impl_after
+                .dirty_flags
+                .as_ref()
+                .unwrap()
+                .need_rearrange
+                .is_dirty()
+        );
+        assert!(widget_frame.need_redraw());
     }
 }

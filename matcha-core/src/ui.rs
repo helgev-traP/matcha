@@ -9,7 +9,7 @@ pub use metrics::{Arrangement, Constraints, LayoutSizeKey};
 
 pub mod widget;
 pub use widget::{AnyWidget, Dom, UpdateWidgetError, Widget};
-pub(crate) use widget::{AnyWidgetFrame, WidgetFrame};
+pub use widget::{AnyWidgetFrame, WidgetFrame};
 
 pub mod widget_context;
 pub use widget_context::WidgetContext;
