@@ -200,7 +200,7 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
                 0.0,
             ));
             let child_node = item.item.render(background.translate(position), ctx);
-            render_node.add_child(child_node, transform);
+            render_node.push_child(child_node, transform);
         }
 
         render_node

@@ -272,7 +272,7 @@ impl<T: Send + 'static + Clone> Widget<T> for ButtonNode<T> {
             Some((style_region.clone(), nalgebra::Matrix4::identity()));
 
         let content_node = self.content.render(background, ctx);
-        render_node.add_child(content_node, nalgebra::Matrix4::identity());
+        render_node.push_child(content_node, nalgebra::Matrix4::identity());
 
         render_node
     }

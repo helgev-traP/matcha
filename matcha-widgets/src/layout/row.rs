@@ -158,7 +158,7 @@ impl<T: Send + 'static> Widget<T> for RowNode<T> {
             let transform =
                 nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(x_pos, 0.0, 0.0));
             let child_node = item.render(background.translate([x_pos, 0.0]), ctx);
-            render_node.add_child(child_node, transform);
+            render_node.push_child(child_node, transform);
             x_pos += item_size[0];
         }
 

@@ -58,7 +58,9 @@ pub trait Dom<E>: Send + Sync + Any {
     async fn set_update_notifier(&self, notifier: &UpdateNotifier);
 }
 
-pub trait Widget<D: Dom<E>, E: 'static = (), ChildSetting: PartialEq + 'static = ()>: Send + Sync {
+pub trait Widget<D: Dom<E>, E: 'static = (), ChildSetting: PartialEq + 'static = ()>:
+    Send + Sync
+{
     /// Returns the children of this `Dom` node.
     /// vector values are tuples of (child, setting, id).
     fn update_widget<'a>(
@@ -71,7 +73,7 @@ pub trait Widget<D: Dom<E>, E: 'static = (), ChildSetting: PartialEq + 'static =
         &mut self,
         bounds: [f32; 2],
         event: &DeviceEvent,
-        children: &[(&mut dyn AnyWidget<E>, &mut ChildSetting, &Arrangement)],
+        children: &mut [(&mut dyn AnyWidget<E>, &mut ChildSetting, &Arrangement)],
         cache_invalidator: InvalidationHandle,
         ctx: &WidgetContext,
     ) -> Option<E>;
@@ -262,7 +264,7 @@ where
         // Similar allocation pattern as in device_event. See that block for optimization
         // strategies (SmallVec / iterator API / scratch buffer reuse).
         // Not optimized yet to keep code clarity until profiling justifies change.
-        let children_with_arrangement: Vec<(
+        let mut children_with_arrangement: Vec<(
             &mut dyn AnyWidget<T>,
             &mut ChildSetting,
             &Arrangement,
@@ -276,7 +278,7 @@ where
         self.widget_impl.device_event(
             actual_bounds,
             event,
-            &children_with_arrangement,
+            &mut children_with_arrangement,
             InvalidationHandle {
                 need_rearrange: &dirty_flags.need_rearrange,
                 need_redraw: &dirty_flags.need_redraw,
@@ -461,12 +463,10 @@ where
         // update current hierarchy widget
         let children = self.widget_impl.update_widget(
             dom,
-            self.dirty_flags
-                .as_ref()
-                .map(|flags| InvalidationHandle {
-                    need_rearrange: &flags.need_rearrange,
-                    need_redraw: &flags.need_redraw,
-                }),
+            self.dirty_flags.as_ref().map(|flags| InvalidationHandle {
+                need_rearrange: &flags.need_rearrange,
+                need_redraw: &flags.need_redraw,
+            }),
         );
 
         // update children widget
@@ -631,7 +631,7 @@ mod tests {
             &mut self,
             _bounds: [f32; 2],
             _event: &DeviceEvent,
-            _children: &[(&mut dyn AnyWidget<String>, &mut MockSetting, &Arrangement)],
+            _children: &mut [(&mut dyn AnyWidget<String>, &mut MockSetting, &Arrangement)],
             _cache_invalidator: InvalidationHandle,
             _ctx: &WidgetContext,
         ) -> Option<String> {
@@ -994,8 +994,8 @@ mod tests {
     use std::{
         mem::MaybeUninit,
         sync::{
-            atomic::{AtomicUsize, Ordering},
             Arc,
+            atomic::{AtomicUsize, Ordering},
         },
         time::Duration,
     };
@@ -1043,7 +1043,7 @@ mod tests {
             &mut self,
             _bounds: [f32; 2],
             _event: &DeviceEvent,
-            _children: &[(&mut dyn AnyWidget<String>, &mut MockSetting, &Arrangement)],
+            _children: &mut [(&mut dyn AnyWidget<String>, &mut MockSetting, &Arrangement)],
             _cache_invalidator: InvalidationHandle,
             _ctx: &WidgetContext,
         ) -> Option<String> {
@@ -1158,11 +1158,49 @@ mod tests {
                 .map(|(child, setting)| (child as &dyn Dom<String>, setting.clone(), child.id))
                 .collect()
         }
-        fn device_event( &mut self, _: [f32; 2], _: &DeviceEvent, _: &[(&mut dyn AnyWidget<String>, &mut MockSetting, &Arrangement)], _: InvalidationHandle, _: &WidgetContext, ) -> Option<String> { None }
-        fn is_inside( &self, _: [f32; 2], _: [f32; 2], _: &[(&dyn AnyWidget<String>, &MockSetting, &Arrangement)], _: &WidgetContext, ) -> bool { true }
-        fn measure( &self, _: &Constraints, _: &[(&dyn AnyWidget<String>, &MockSetting)], _: &WidgetContext, ) -> [f32; 2] { [0.0, 0.0] }
-        fn arrange( &self, _: [f32; 2], _: &[(&dyn AnyWidget<String>, &MockSetting)], _: &WidgetContext, ) -> Vec<Arrangement> { vec![] }
-        fn render( &self, _: Background, _: &[(&dyn AnyWidget<String>, &MockSetting, &Arrangement)], _: &WidgetContext, ) -> RenderNode { RenderNode::default() }
+        fn device_event(
+            &mut self,
+            _: [f32; 2],
+            _: &DeviceEvent,
+            _: &mut [(&mut dyn AnyWidget<String>, &mut MockSetting, &Arrangement)],
+            _: InvalidationHandle,
+            _: &WidgetContext,
+        ) -> Option<String> {
+            None
+        }
+        fn is_inside(
+            &self,
+            _: [f32; 2],
+            _: [f32; 2],
+            _: &[(&dyn AnyWidget<String>, &MockSetting, &Arrangement)],
+            _: &WidgetContext,
+        ) -> bool {
+            true
+        }
+        fn measure(
+            &self,
+            _: &Constraints,
+            _: &[(&dyn AnyWidget<String>, &MockSetting)],
+            _: &WidgetContext,
+        ) -> [f32; 2] {
+            [0.0, 0.0]
+        }
+        fn arrange(
+            &self,
+            _: [f32; 2],
+            _: &[(&dyn AnyWidget<String>, &MockSetting)],
+            _: &WidgetContext,
+        ) -> Vec<Arrangement> {
+            vec![]
+        }
+        fn render(
+            &self,
+            _: Background,
+            _: &[(&dyn AnyWidget<String>, &MockSetting, &Arrangement)],
+            _: &WidgetContext,
+        ) -> RenderNode {
+            RenderNode::default()
+        }
     }
 
     #[tokio::test]

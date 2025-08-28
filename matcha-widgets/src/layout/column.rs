@@ -160,7 +160,7 @@ impl<T: Send + 'static> Widget<T> for ColumnNode<T> {
             let transform =
                 nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(0.0, y_pos, 0.0));
             let child_node = item.render(background.translate([0.0, y_pos]), ctx);
-            render_node.add_child(child_node, transform);
+            render_node.push_child(child_node, transform);
             y_pos += item_size[1];
         }
 

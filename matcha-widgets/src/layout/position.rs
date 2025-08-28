@@ -144,7 +144,7 @@ impl<T: Send + 'static> Widget<T> for PositionNode<T> {
             let transform = nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(x, y, 0.0));
             let child_node = content.render(background.translate([x, y]), ctx);
             let mut render_node = RenderNode::new();
-            render_node.add_child(child_node, transform);
+            render_node.push_child(child_node, transform);
             render_node
         } else {
             RenderNode::new()

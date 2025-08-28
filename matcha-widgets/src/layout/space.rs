@@ -1,52 +1,60 @@
 use std::any::Any;
-use std::sync::Arc;
 
+use nalgebra::Matrix4;
+
+use matcha_core::ui::widget::InvalidationHandle;
 use matcha_core::{
     device_event::DeviceEvent,
-    types::range::CoverRange,
     ui::{
-        Background, Constraints, Dom, DomCompareResult, UpdateWidgetError, Widget, WidgetContext,
+        AnyWidget, AnyWidgetFrame, Arrangement, Background, Constraints, Dom, Widget,
+        WidgetContext, WidgetFrame,
     },
     update_flag::UpdateNotifier,
 };
 use renderer::render_node::RenderNode;
 
-// todo: more documentation
+use crate::types::size::{ChildSize, Size};
 
-// MARK: DOM
-
-type SizeFn = dyn for<'a> Fn(&Constraints, &'a WidgetContext) -> [f32; 2] + Send + Sync + 'static;
-
+/// DOM node: Space
 pub struct Space {
     label: Option<String>,
-    size: Arc<SizeFn>,
+    width: Size,
+    height: Size,
 }
 
 impl Space {
     pub fn new(label: Option<&str>) -> Box<Self> {
         Box::new(Self {
             label: label.map(|s| s.to_string()),
-            size: Arc::new(|constraints, _| [constraints.min_width, constraints.min_height]),
+            width: Size::px(0.0),
+            height: Size::px(0.0),
         })
     }
 
-    pub fn size<F>(mut self, size: F) -> Self
-    where
-        F: Fn(&Constraints, &WidgetContext) -> [f32; 2] + Send + Sync + 'static,
-    {
-        self.size = Arc::new(size);
+    pub fn width(mut self, width: Size) -> Self {
+        self.width = width;
+        self
+    }
+
+    pub fn height(mut self, height: Size) -> Self {
+        self.height = height;
         self
     }
 }
 
 #[async_trait::async_trait]
 impl<T: Send + 'static> Dom<T> for Space {
-    fn build_widget_tree(&self) -> Box<dyn Widget<T>> {
-        Box::new(SpaceNode {
-            label: self.label.clone(),
-            size: Arc::clone(&self.size),
-            final_size: [0.0, 0.0],
-        })
+    fn build_widget_tree(&self) -> Box<dyn AnyWidgetFrame<T>> {
+        Box::new(WidgetFrame::new(
+            self.label.clone(),
+            vec![],
+            vec![],
+            SpaceNode {
+                label: self.label.clone(),
+                width: self.width.clone(),
+                height: self.height.clone(),
+            },
+        ))
     }
 
     async fn set_update_notifier(&self, _notifier: &UpdateNotifier) {
@@ -54,66 +62,100 @@ impl<T: Send + 'static> Dom<T> for Space {
     }
 }
 
-// MARK: Widget
-
+/// Widget implementation for Space
 pub struct SpaceNode {
     label: Option<String>,
-    size: Arc<SizeFn>,
-    final_size: [f32; 2],
+    width: Size,
+    height: Size,
 }
 
-// MARK: Widget trait
-
-#[async_trait::async_trait]
-impl<T: Send + 'static> Widget<T> for SpaceNode {
-    fn label(&self) -> Option<&str> {
-        self.label.as_deref()
+impl SpaceNode {
+    fn identity_affine() -> Matrix4<f32> {
+        Matrix4::identity()
     }
+}
 
-    async fn update_widget_tree(
+impl<T: Send + 'static> Widget<Space, T, ()> for SpaceNode {
+    fn update_widget<'a>(
         &mut self,
-        _: bool,
-        dom: &dyn Dom<T>,
-    ) -> Result<(), UpdateWidgetError> {
-        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Space>() {
-            self.label = dom.label.clone();
-            self.size = Arc::clone(&dom.size);
-            Ok(())
-        } else {
-            Err(UpdateWidgetError::TypeMismatch)
-        }
+        dom: &'a Space,
+        _cache_invalidator: Option<InvalidationHandle>,
+    ) -> Vec<(&'a dyn Dom<T>, (), u128)> {
+        self.label = dom.label.clone();
+        self.width = dom.width.clone();
+        self.height = dom.height.clone();
+        // no children
+        vec![]
     }
 
-    fn compare(&self, dom: &dyn Dom<T>) -> DomCompareResult {
-        if (dom as &dyn Any).downcast_ref::<Space>().is_some() {
-            DomCompareResult::Same // Simplified
-        } else {
-            DomCompareResult::Different
-        }
-    }
-
-    fn device_event(&mut self, _event: &DeviceEvent, _context: &WidgetContext) -> Option<T> {
+    fn device_event(
+        &mut self,
+        _bounds: [f32; 2],
+        _event: &DeviceEvent,
+        _children: &mut [(&mut dyn AnyWidget<T>, &mut (), &Arrangement)],
+        _cache_invalidator: InvalidationHandle,
+        _ctx: &WidgetContext,
+    ) -> Option<T> {
         None
     }
 
-    fn is_inside(&mut self, _position: [f32; 2], _context: &WidgetContext) -> bool {
-        // A space is just an empty area, so it's never "inside".
-        false
+    fn is_inside(
+        &self,
+        bounds: [f32; 2],
+        position: [f32; 2],
+        _children: &[(&dyn AnyWidget<T>, &(), &Arrangement)],
+        _ctx: &WidgetContext,
+    ) -> bool {
+        position[0] >= 0.0
+            && position[0] < bounds[0]
+            && position[1] >= 0.0
+            && position[1] < bounds[1]
     }
 
-    fn preferred_size(&mut self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
-        (self.size)(constraints, context)
+    fn measure(
+        &self,
+        constraints: &Constraints,
+        _children: &[(&dyn AnyWidget<T>, &())],
+        ctx: &WidgetContext,
+    ) -> [f32; 2] {
+        let parent_w = if constraints.max_width().is_finite() {
+            Some(constraints.max_width())
+        } else {
+            None
+        };
+        let parent_h = if constraints.max_height().is_finite() {
+            Some(constraints.max_height())
+        } else {
+            None
+        };
+        let parent_size = [parent_w, parent_h];
+
+        let mut child_size = ChildSize::with_size([0.0, 0.0]);
+
+        let w = self.width.size(parent_size, &mut child_size, ctx);
+        let h = self.height.size(parent_size, &mut child_size, ctx);
+
+        let w = w.clamp(constraints.min_width(), constraints.max_width());
+        let h = h.clamp(constraints.min_height(), constraints.max_height());
+
+        [w, h]
     }
 
-    fn arrange(&mut self, final_size: [f32; 2], _context: &WidgetContext) {
-        self.final_size = final_size;
+    fn arrange(
+        &self,
+        size: [f32; 2],
+        _children: &[(&dyn AnyWidget<T>, &())],
+        _ctx: &WidgetContext,
+    ) -> Vec<Arrangement> {
+        vec![Arrangement::new(size, Self::identity_affine())]
     }
 
-    fn need_rerendering(&self) -> bool {
-        false
-    }
-
-    fn render(&mut self, _background: Background, _ctx: &WidgetContext) -> RenderNode {
-        RenderNode::new()
+    fn render(
+        &self,
+        _background: Background,
+        _children: &[(&dyn AnyWidget<T>, &(), &Arrangement)],
+        _ctx: &WidgetContext,
+    ) -> RenderNode {
+        RenderNode::default()
     }
 }

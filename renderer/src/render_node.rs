@@ -50,8 +50,13 @@ impl RenderNode {
         self
     }
 
-    pub fn add_child(&mut self, child: RenderNode, transform: nalgebra::Matrix4<f32>) {
+    pub fn push_child(&mut self, child: RenderNode, transform: nalgebra::Matrix4<f32>) {
         self.child_elements.push((child, transform));
+    }
+
+    pub fn add_child(mut self, child: RenderNode, transform: nalgebra::Matrix4<f32>) -> Self {
+        self.child_elements.push((child, transform));
+        self
     }
 
     pub fn child_elements(&self) -> &[(RenderNode, nalgebra::Matrix4<f32>)] {

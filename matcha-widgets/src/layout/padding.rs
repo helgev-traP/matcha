@@ -188,7 +188,7 @@ where
             ));
             let child_node = content.render(background.translate([self.left, self.top]), ctx);
             let mut render_node = RenderNode::new();
-            render_node.add_child(child_node, transform);
+            render_node.push_child(child_node, transform);
             render_node
         } else {
             RenderNode::new()
