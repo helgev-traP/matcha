@@ -93,6 +93,7 @@ pub trait Widget<D: Dom<E>, E: 'static = (), ChildSetting: PartialEq + 'static =
         ctx: &WidgetContext,
     ) -> [f32; 2];
 
+    /// The length of returned Vector must match the number of children.
     fn arrange(
         &self,
         size: [f32; 2],

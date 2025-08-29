@@ -181,3 +181,13 @@ impl Size {
         todo!()
     }
 }
+
+impl PartialEq for Size {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Size::Size(a), Size::Size(b)) => Arc::ptr_eq(a, b),
+            (Size::Grow(a), Size::Grow(b)) => Arc::ptr_eq(a, b),
+            _ => false,
+        }
+    }
+}

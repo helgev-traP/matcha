@@ -1,10 +1,12 @@
-use std::any::Any;
+use matcha_core::device_event;
+use nalgebra::Matrix4;
 
+use matcha_core::ui::widget::InvalidationHandle;
 use matcha_core::{
     device_event::DeviceEvent,
-    types::range::CoverRange,
     ui::{
-        Background, Constraints, Dom, DomCompareResult, UpdateWidgetError, Widget, WidgetContext,
+        AnyWidget, AnyWidgetFrame, Arrangement, Background, Constraints, Dom, Widget,
+        WidgetContext, WidgetFrame,
     },
     update_flag::UpdateNotifier,
 };
@@ -68,18 +70,26 @@ impl<T> Dom<T> for Padding<T>
 where
     T: Send + 'static,
 {
-    fn build_widget_tree(&self) -> Box<dyn Widget<T>> {
-        Box::new(PaddingNode {
-            label: self.label.clone(),
-            top: self.top,
-            right: self.right,
-            bottom: self.bottom,
-            left: self.left,
-            content: self
-                .content
-                .as_ref()
-                .map(|content| content.build_widget_tree()),
-        })
+    fn build_widget_tree(&self) -> Box<dyn AnyWidgetFrame<T>> {
+        let mut children_and_settings = Vec::new();
+        let mut child_ids = Vec::new();
+
+        if let Some(content_widget) = self.content.as_ref().map(|c| c.build_widget_tree()) {
+            children_and_settings.push((content_widget, ()));
+            child_ids.push(0);
+        }
+
+        Box::new(WidgetFrame::new(
+            self.label.clone(),
+            children_and_settings,
+            child_ids,
+            PaddingNode {
+                top: self.top,
+                right: self.right,
+                bottom: self.bottom,
+                left: self.left,
+            },
+        ))
     }
 
     async fn set_update_notifier(&self, notifier: &UpdateNotifier) {
@@ -89,75 +99,90 @@ where
     }
 }
 
-pub struct PaddingNode<T>
-where
-    T: Send + 'static,
-{
-    label: Option<String>,
+pub struct PaddingNode {
     top: f32,
     right: f32,
     bottom: f32,
     left: f32,
-    content: Option<Box<dyn Widget<T>>>,
 }
 
-#[async_trait::async_trait]
-impl<T> Widget<T> for PaddingNode<T>
+impl<T> Widget<Padding<T>, T, ()> for PaddingNode
 where
     T: Send + 'static,
 {
-    fn label(&self) -> Option<&str> {
-        self.label.as_deref()
-    }
-
-    async fn update_widget_tree(
+    fn update_widget<'a>(
         &mut self,
-        _component_updated: bool,
-        dom: &dyn Dom<T>,
-    ) -> Result<(), UpdateWidgetError> {
-        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Padding<T>>() {
-            self.top = dom.top;
-            self.right = dom.right;
-            self.bottom = dom.bottom;
-            self.left = dom.left;
-            // Simplified content update
-            Ok(())
-        } else {
-            Err(UpdateWidgetError::TypeMismatch)
+        dom: &'a Padding<T>,
+        cache_invalidator: Option<InvalidationHandle>,
+    ) -> Vec<(&'a dyn Dom<T>, (), u128)> {
+        if self.right != dom.right
+            || self.top != dom.top
+            || self.bottom != dom.bottom
+            || self.left != dom.left
+        {
+            cache_invalidator.map(|h| h.relayout_next_frame());
         }
+        self.top = dom.top;
+        self.right = dom.right;
+        self.bottom = dom.bottom;
+        self.left = dom.left;
+
+        dom.content
+            .as_ref()
+            .map(|c| (c.as_ref(), (), 0))
+            .into_iter()
+            .collect()
     }
 
-    fn compare(&self, dom: &dyn Dom<T>) -> DomCompareResult {
-        if (dom as &dyn Any).downcast_ref::<Padding<T>>().is_some() {
-            DomCompareResult::Same // Simplified
-        } else {
-            DomCompareResult::Different
+    fn device_event(
+        &mut self,
+        _bounds: [f32; 2],
+        event: &DeviceEvent,
+        children: &mut [(&mut dyn AnyWidget<T>, &mut (), &Arrangement)],
+        _cache_invalidator: InvalidationHandle,
+        ctx: &WidgetContext,
+    ) -> Option<T> {
+        if let Some((child, _, _arrangement)) = children.first_mut() {
+            todo!();
+            return child.device_event(event, ctx);
         }
+        None
     }
 
-    fn device_event(&mut self, event: &DeviceEvent, context: &WidgetContext) -> Option<T> {
-        self.content
-            .as_mut()
-            .and_then(|c| c.device_event(event, context))
+    fn is_inside(
+        &self,
+        _bounds: [f32; 2],
+        position: [f32; 2],
+        children: &[(&dyn AnyWidget<T>, &(), &Arrangement)],
+        ctx: &WidgetContext,
+    ) -> bool {
+        if let Some((child, _, _arrangement)) = children.first() {
+            return child.is_inside(position, ctx);
+        }
+        false
     }
 
-    fn is_inside(&mut self, position: [f32; 2], context: &WidgetContext) -> bool {
-        let inner_pos = [position[0] - self.left, position[1] - self.top];
-        self.content
-            .as_mut()
-            .map_or(false, |c| c.is_inside(inner_pos, context))
-    }
-
-    fn preferred_size(&mut self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
-        let content_size = self.content.as_mut().map_or([0.0, 0.0], |c| {
-            let inner_constraints = Constraints {
-                min_width: (constraints.min_width - self.left - self.right).max(0.0),
-                max_width: (constraints.max_width - self.left - self.right).max(0.0),
-                min_height: (constraints.min_height - self.top - self.bottom).max(0.0),
-                max_height: (constraints.max_height - self.top - self.bottom).max(0.0),
-            };
-            c.preferred_size(&inner_constraints, context)
-        });
+    fn measure(
+        &self,
+        constraints: &Constraints,
+        children: &[(&dyn AnyWidget<T>, &())],
+        ctx: &WidgetContext,
+    ) -> [f32; 2] {
+        let content_size = if let Some((child, _)) = children.first() {
+            let inner_constraints = Constraints::new(
+                [
+                    (constraints.min_width() - self.left - self.right).max(0.0),
+                    (constraints.min_height() - self.top - self.bottom).max(0.0),
+                ],
+                [
+                    (constraints.max_width() - self.left - self.right).max(0.0),
+                    (constraints.max_height() - self.top - self.bottom).max(0.0),
+                ],
+            );
+            child.measure(&inner_constraints, ctx)
+        } else {
+            [0.0, 0.0]
+        };
 
         [
             content_size[0] + self.left + self.right,
@@ -165,33 +190,40 @@ where
         ]
     }
 
-    fn arrange(&mut self, final_size: [f32; 2], context: &WidgetContext) {
-        if let Some(content) = &mut self.content {
-            let content_size = [
-                (final_size[0] - self.left - self.right).max(0.0),
-                (final_size[1] - self.top - self.bottom).max(0.0),
-            ];
-            content.arrange(content_size, context);
+    fn arrange(
+        &self,
+        size: [f32; 2],
+        children: &[(&dyn AnyWidget<T>, &())],
+        _ctx: &WidgetContext,
+    ) -> Vec<Arrangement> {
+        if children.is_empty() {
+            return vec![];
         }
+
+        let content_size = [
+            (size[0] - self.left - self.right).max(0.0),
+            (size[1] - self.top - self.bottom).max(0.0),
+        ];
+
+        let transform = Matrix4::new_translation(&nalgebra::Vector3::new(self.left, self.top, 0.0));
+
+        vec![Arrangement::new(content_size, transform)]
     }
 
-    fn need_rerendering(&self) -> bool {
-        self.content
-            .as_ref()
-            .map_or(false, |c| c.need_rerendering())
-    }
+    fn render(
+        &self,
+        background: Background,
+        children: &[(&dyn AnyWidget<T>, &(), &Arrangement)],
+        ctx: &WidgetContext,
+    ) -> RenderNode {
+        if let Some((child, _, arrangement)) = children.first() {
+            let final_size = arrangement.size;
+            let affine = arrangement.affine;
 
-    fn render(&mut self, background: Background, ctx: &WidgetContext) -> RenderNode {
-        if let Some(content) = &mut self.content {
-            let transform = nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(
-                self.left, self.top, 0.0,
-            ));
-            let child_node = content.render(background.translate([self.left, self.top]), ctx);
-            let mut render_node = RenderNode::new();
-            render_node.push_child(child_node, transform);
-            render_node
-        } else {
-            RenderNode::new()
+            let child_node = child.render(final_size, background, ctx);
+
+            return RenderNode::new().add_child(child_node, affine);
         }
+        RenderNode::default()
     }
 }

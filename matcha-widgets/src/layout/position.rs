@@ -1,10 +1,11 @@
-use std::any::Any;
+use nalgebra::Matrix4;
 
+use matcha_core::ui::widget::InvalidationHandle;
 use matcha_core::{
     device_event::DeviceEvent,
-    types::range::CoverRange,
     ui::{
-        Background, Constraints, Dom, DomCompareResult, UpdateWidgetError, Widget, WidgetContext,
+        AnyWidget, AnyWidgetFrame, Arrangement, Background, Constraints, Dom, Widget,
+        WidgetContext, WidgetFrame,
     },
     update_flag::UpdateNotifier,
 };
@@ -33,6 +34,26 @@ impl<T: Send + 'static> Position<T> {
         }
     }
 
+    pub fn left(mut self, left: f32) -> Self {
+        self.left = Some(left);
+        self
+    }
+
+    pub fn top(mut self, top: f32) -> Self {
+        self.top = Some(top);
+        self
+    }
+
+    pub fn right(mut self, right: f32) -> Self {
+        self.right = Some(right);
+        self
+    }
+
+    pub fn bottom(mut self, bottom: f32) -> Self {
+        self.bottom = Some(bottom);
+        self
+    }
+
     pub fn content(mut self, content: Box<dyn Dom<T>>) -> Self {
         self.content = Some(content);
         self
@@ -41,18 +62,18 @@ impl<T: Send + 'static> Position<T> {
 
 #[async_trait::async_trait]
 impl<T: Send + 'static> Dom<T> for Position<T> {
-    fn build_widget_tree(&self) -> Box<dyn Widget<T>> {
-        Box::new(PositionNode {
-            label: self.label.clone(),
-            left: self.left,
-            top: self.top,
-            right: self.right,
-            bottom: self.bottom,
-            content: self
-                .content
-                .as_ref()
-                .map(|content| content.build_widget_tree()),
-        })
+    fn build_widget_tree(&self) -> Box<dyn AnyWidgetFrame<T>> {
+        Box::new(WidgetFrame::new(
+            self.label.clone(),
+            vec![],
+            vec![],
+            PositionNode {
+                left: self.left,
+                top: self.top,
+                right: self.right,
+                bottom: self.bottom,
+            },
+        ))
     }
 
     async fn set_update_notifier(&self, notifier: &UpdateNotifier) {
@@ -64,90 +85,124 @@ impl<T: Send + 'static> Dom<T> for Position<T> {
 
 // MARK: Widget
 
-pub struct PositionNode<T: Send + 'static> {
-    label: Option<String>,
+pub struct PositionNode {
     left: Option<f32>,
     top: Option<f32>,
     right: Option<f32>,
     bottom: Option<f32>,
-    content: Option<Box<dyn Widget<T>>>,
 }
 
-#[async_trait::async_trait]
-impl<T: Send + 'static> Widget<T> for PositionNode<T> {
-    fn label(&self) -> Option<&str> {
-        self.label.as_deref()
-    }
-
-    async fn update_widget_tree(
+impl<T: Send + 'static> Widget<Position<T>, T, ()> for PositionNode {
+    fn update_widget<'a>(
         &mut self,
-        _component_updated: bool,
-        dom: &dyn Dom<T>,
-    ) -> Result<(), UpdateWidgetError> {
-        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Position<T>>() {
-            self.left = dom.left;
-            self.top = dom.top;
-            self.right = dom.right;
-            self.bottom = dom.bottom;
-            // Simplified content update
-            Ok(())
-        } else {
-            Err(UpdateWidgetError::TypeMismatch)
-        }
-    }
-
-    fn compare(&self, dom: &dyn Dom<T>) -> DomCompareResult {
-        if (dom as &dyn Any).downcast_ref::<Position<T>>().is_some() {
-            DomCompareResult::Same // Simplified
-        } else {
-            DomCompareResult::Different
-        }
-    }
-
-    fn device_event(&mut self, event: &DeviceEvent, context: &WidgetContext) -> Option<T> {
-        self.content
-            .as_mut()
-            .and_then(|c| c.device_event(event, context))
-    }
-
-    fn is_inside(&mut self, position: [f32; 2], context: &WidgetContext) -> bool {
-        // This needs to be adjusted based on the final position from arrange pass
-        self.content
-            .as_mut()
-            .map_or(false, |c| c.is_inside(position, context))
-    }
-
-    fn preferred_size(&mut self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
-        self.content
-            .as_mut()
-            .map_or([0.0, 0.0], |c| c.preferred_size(constraints, context))
-    }
-
-    fn arrange(&mut self, final_size: [f32; 2], context: &WidgetContext) {
-        if let Some(content) = &mut self.content {
-            content.arrange(final_size, context);
-        }
-    }
-
-    fn need_rerendering(&self) -> bool {
-        self.content
+        dom: &'a Position<T>,
+        _cache_invalidator: Option<InvalidationHandle>,
+    ) -> Vec<(&'a dyn Dom<T>, (), u128)> {
+        self.left = dom.left;
+        self.top = dom.top;
+        self.right = dom.right;
+        self.bottom = dom.bottom;
+        dom.content
             .as_ref()
-            .map_or(false, |c| c.need_rerendering())
+            .map(|c| (c.as_ref(), (), 0))
+            .into_iter()
+            .collect()
     }
 
-    fn render(&mut self, background: Background, ctx: &WidgetContext) -> RenderNode {
-        if let Some(content) = &mut self.content {
-            let x = self.left.unwrap_or(0.0);
-            let y = self.top.unwrap_or(0.0);
-            // A full implementation would also handle right and bottom.
-
-            let transform = nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(x, y, 0.0));
-            let child_node = content.render(background.translate([x, y]), ctx);
-            let mut render_node = RenderNode::new();
-            render_node.push_child(child_node, transform);
-            render_node
-        } else {
-            RenderNode::new()
+    fn device_event(
+        &mut self,
+        _bounds: [f32; 2],
+        event: &DeviceEvent,
+        children: &mut [(&mut dyn AnyWidget<T>, &mut (), &Arrangement)],
+        _cache_invalidator: InvalidationHandle,
+        ctx: &WidgetContext,
+    ) -> Option<T> {
+        if let Some((child, _, _arrangement)) = children.first_mut() {
+            return child.device_event(event, ctx);
         }
+        None
+    }
+
+    fn is_inside(
+        &self,
+        _bounds: [f32; 2],
+        position: [f32; 2],
+        children: &[(&dyn AnyWidget<T>, &(), &Arrangement)],
+        ctx: &WidgetContext,
+    ) -> bool {
+        if let Some((child, _, _arrangement)) = children.first() {
+            return child.is_inside(position, ctx);
+        }
+        false
+    }
+
+    fn measure(
+        &self,
+        constraints: &Constraints,
+        children: &[(&dyn AnyWidget<T>, &())],
+        ctx: &WidgetContext,
+    ) -> [f32; 2] {
+        if let Some((child, _)) = children.first() {
+            child.measure(constraints, ctx)
+        } else {
+            [0.0, 0.0]
+        }
+    }
+
+    fn arrange(
+        &self,
+        size: [f32; 2],
+        children: &[(&dyn AnyWidget<T>, &())],
+        ctx: &WidgetContext,
+    ) -> Vec<Arrangement> {
+        if children.is_empty() {
+            return vec![];
+        }
+
+        let child_measured_size = if let Some((child, _)) = children.first() {
+            child.measure(&Constraints::new([0.0, 0.0], size), ctx)
+        } else {
+            [0.0, 0.0]
+        };
+
+        let x = self
+            .left
+            .unwrap_or_else(|| size[0] - child_measured_size[0] - self.right.unwrap_or(0.0));
+        let y = self
+            .top
+            .unwrap_or_else(|| size[1] - child_measured_size[1] - self.bottom.unwrap_or(0.0));
+
+        let w = if let (Some(left), Some(right)) = (self.left, self.right) {
+            (size[0] - left - right).max(0.0)
+        } else {
+            child_measured_size[0]
+        };
+        let h = if let (Some(top), Some(bottom)) = (self.top, self.bottom) {
+            (size[1] - top - bottom).max(0.0)
+        } else {
+            child_measured_size[1]
+        };
+
+        let content_size = [w, h];
+        let transform = Matrix4::new_translation(&nalgebra::Vector3::new(x, y, 0.0));
+
+        vec![Arrangement::new(content_size, transform)]
+    }
+
+    fn render(
+        &self,
+        background: Background,
+        children: &[(&dyn AnyWidget<T>, &(), &Arrangement)],
+        ctx: &WidgetContext,
+    ) -> RenderNode {
+        if let Some((child, _, arrangement)) = children.first() {
+            let final_size = arrangement.size;
+            let affine = arrangement.affine;
+
+            let child_node = child.render(final_size, background, ctx);
+
+            return RenderNode::new().add_child(child_node, affine);
+        }
+        RenderNode::default()
     }
 }

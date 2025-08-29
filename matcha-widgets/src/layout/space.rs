@@ -1,7 +1,3 @@
-use std::any::Any;
-
-use nalgebra::Matrix4;
-
 use matcha_core::ui::widget::InvalidationHandle;
 use matcha_core::{
     device_event::DeviceEvent,
@@ -69,18 +65,17 @@ pub struct SpaceNode {
     height: Size,
 }
 
-impl SpaceNode {
-    fn identity_affine() -> Matrix4<f32> {
-        Matrix4::identity()
-    }
-}
-
 impl<T: Send + 'static> Widget<Space, T, ()> for SpaceNode {
     fn update_widget<'a>(
         &mut self,
         dom: &'a Space,
-        _cache_invalidator: Option<InvalidationHandle>,
+        cache_invalidator: Option<InvalidationHandle>,
     ) -> Vec<(&'a dyn Dom<T>, (), u128)> {
+        if self.width != dom.width || self.height != dom.height {
+            if let Some(handle) = cache_invalidator {
+                handle.relayout_next_frame();
+            }
+        }
         self.label = dom.label.clone();
         self.width = dom.width.clone();
         self.height = dom.height.clone();
@@ -143,11 +138,12 @@ impl<T: Send + 'static> Widget<Space, T, ()> for SpaceNode {
 
     fn arrange(
         &self,
-        size: [f32; 2],
+        _size: [f32; 2],
         _children: &[(&dyn AnyWidget<T>, &())],
         _ctx: &WidgetContext,
     ) -> Vec<Arrangement> {
-        vec![Arrangement::new(size, Self::identity_affine())]
+        // No children to arrange
+        vec![]
     }
 
     fn render(

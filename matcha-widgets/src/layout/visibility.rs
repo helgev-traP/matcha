@@ -1,5 +1,3 @@
-use std::any::Any;
-
 use nalgebra::Matrix4;
 
 use matcha_core::ui::widget::InvalidationHandle;
@@ -12,12 +10,14 @@ use matcha_core::{
     update_flag::UpdateNotifier,
 };
 use renderer::render_node::RenderNode;
-use vello::low_level::Render;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VisibilityState {
+    /// The widget is visible.
     Visible,
+    /// The widget is hidden, but still takes up space.
     Hidden,
+    /// The widget is completely removed from the layout.
     Gone,
 }
 
@@ -47,19 +47,23 @@ where
         self
     }
 
-    pub fn visible(mut self, visible: bool) -> Self {
-        self.visibility = if visible {
-            VisibilityState::Visible
-        } else {
-            VisibilityState::Hidden
-        };
+    pub fn visible(mut self) -> Self {
+        self.visibility = VisibilityState::Visible;
         self
     }
 
-    pub fn gone(mut self, gone: bool) -> Self {
-        if gone {
-            self.visibility = VisibilityState::Gone;
-        }
+    pub fn hidden(mut self) -> Self {
+        self.visibility = VisibilityState::Hidden;
+        self
+    }
+
+    pub fn gone(mut self) -> Self {
+        self.visibility = VisibilityState::Gone;
+        self
+    }
+
+    pub fn visibility(mut self, visibility: VisibilityState) -> Self {
+        self.visibility = visibility;
         self
     }
 
@@ -75,10 +79,18 @@ where
     T: Send + 'static,
 {
     fn build_widget_tree(&self) -> Box<dyn AnyWidgetFrame<T>> {
+        let mut children_and_settings = Vec::new();
+        let mut child_ids = Vec::new();
+
+        if let Some(content_widget) = self.content.as_ref().map(|c| c.build_widget_tree()) {
+            children_and_settings.push((content_widget, ()));
+            child_ids.push(0);
+        }
+
         Box::new(WidgetFrame::new(
             self.label.clone(),
-            vec![],
-            vec![],
+            children_and_settings,
+            child_ids,
             VisibilityNode {
                 visibility: self.visibility,
             },
@@ -109,9 +121,16 @@ where
     fn update_widget<'a>(
         &mut self,
         dom: &'a Visibility<T>,
-        _cache_invalidator: Option<InvalidationHandle>,
+        cache_invalidator: Option<InvalidationHandle>,
     ) -> Vec<(&'a dyn Dom<T>, (), u128)> {
+        if self.visibility != dom.visibility {
+            // If visibility changed, we need to invalidate the cache
+            if let Some(handle) = cache_invalidator {
+                handle.relayout_next_frame();
+            }
+        }
         self.visibility = dom.visibility;
+
         dom.content
             .as_ref()
             .map(|c| (c.as_ref(), (), 0))
@@ -128,8 +147,8 @@ where
         ctx: &WidgetContext,
     ) -> Option<T> {
         if self.visibility == VisibilityState::Visible {
-            if let Some((child, _, _arrangement)) = children.first() {
-                return (*child).device_event(event, ctx);
+            if let Some((child, _, _arrangement)) = children.first_mut() {
+                return child.device_event(event, ctx);
             }
         }
         None
@@ -142,12 +161,15 @@ where
         children: &[(&dyn AnyWidget<T>, &(), &Arrangement)],
         ctx: &WidgetContext,
     ) -> bool {
-        if self.visibility == VisibilityState::Visible {
-            if let Some((child, _, _arrangement)) = children.first() {
-                return child.is_inside(position, ctx);
+        match self.visibility {
+            VisibilityState::Visible => {
+                if let Some((child, _, _arrangement)) = children.first() {
+                    return child.is_inside(position, ctx);
+                }
+                false
             }
+            VisibilityState::Hidden | VisibilityState::Gone => false,
         }
-        false
     }
 
     fn measure(
@@ -156,14 +178,15 @@ where
         children: &[(&dyn AnyWidget<T>, &())],
         ctx: &WidgetContext,
     ) -> [f32; 2] {
-        if self.visibility == VisibilityState::Gone {
-            return [0.0, 0.0];
-        }
-
-        if let Some((child, _)) = children.first() {
-            child.measure(constraints, ctx)
-        } else {
-            [0.0, 0.0]
+        match self.visibility {
+            VisibilityState::Visible | VisibilityState::Hidden => {
+                if let Some((child, _)) = children.first() {
+                    child.measure(constraints, ctx)
+                } else {
+                    [0.0, 0.0]
+                }
+            }
+            VisibilityState::Gone => [0.0, 0.0],
         }
     }
 
@@ -171,12 +194,20 @@ where
         &self,
         size: [f32; 2],
         children: &[(&dyn AnyWidget<T>, &())],
-        _ctx: &WidgetContext,
+        ctx: &WidgetContext,
     ) -> Vec<Arrangement> {
-        if children.is_empty() {
-            vec![]
+        if let Some((child, _)) = children.first() {
+            match self.visibility {
+                VisibilityState::Visible | VisibilityState::Hidden => {
+                    let measured_size = child.measure(&Constraints::from_max_size(size), ctx);
+                    let final_size = [measured_size[0].min(size[0]), measured_size[1].min(size[1])];
+
+                    vec![Arrangement::new(final_size, nalgebra::Matrix4::identity())]
+                }
+                VisibilityState::Gone => vec![Arrangement::default()],
+            }
         } else {
-            vec![Arrangement::new(size, Self::identity_affine())]
+            vec![]
         }
     }
 

@@ -52,6 +52,19 @@ impl Constraints {
         }
     }
 
+    pub fn from_max_size(size: [f32; 2]) -> Self {
+        if size[0] < 0.0 || size[1] < 0.0 {
+            panic!("Invalid constraints: {size:?}");
+        }
+
+        Self {
+            min_width: 0,
+            max_width: (size[0] * SUB_PIXEL_QUANTIZE) as u32,
+            min_height: 0,
+            max_height: (size[1] * SUB_PIXEL_QUANTIZE) as u32,
+        }
+    }
+
     pub fn min_width(&self) -> f32 {
         self.min_width as f32 / SUB_PIXEL_QUANTIZE
     }
@@ -81,6 +94,16 @@ pub struct Arrangement {
     /// inverse of `affine` when invertible. If `None`, the affine collapses at least
     /// one axis and the child is effectively invisible / non-hit-testable in that axis.
     pub affine_inv: Option<Matrix4<f32>>,
+}
+
+impl Default for Arrangement {
+    fn default() -> Self {
+        Self {
+            size: [0.0, 0.0],
+            affine: Matrix4::identity(),
+            affine_inv: Some(Matrix4::identity()),
+        }
+    }
 }
 
 impl Arrangement {
