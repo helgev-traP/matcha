@@ -31,11 +31,11 @@ pub struct MouseState {
 
     // State for each logical button
     primary: ButtonState,
-    primary_dragging_from: Option<[f32; 2]>,
+    dragging_from_primary: Option<[f32; 2]>,
     secondary: ButtonState,
-    secondary_dragging_from: Option<[f32; 2]>,
+    dragging_from_secondary: Option<[f32; 2]>,
     middle: ButtonState,
-    middle_dragging_from: Option<[f32; 2]>,
+    dragging_from_middle: Option<[f32; 2]>,
     back: ButtonState,
     back_dragging_from: Option<[f32; 2]>,
     forward: ButtonState,
@@ -66,11 +66,11 @@ impl MouseState {
                 primary_button,
                 pixel_per_line,
                 primary: ButtonState::default(),
-                primary_dragging_from: None,
+                dragging_from_primary: None,
                 secondary: ButtonState::default(),
-                secondary_dragging_from: None,
+                dragging_from_secondary: None,
                 middle: ButtonState::default(),
-                middle_dragging_from: None,
+                dragging_from_middle: None,
                 back: ButtonState::default(),
                 back_dragging_from: None,
                 forward: ButtonState::default(),
@@ -103,18 +103,18 @@ impl MouseState {
     ///
     /// Updates the cursor position and detects the start of a drag for any pressed buttons.
     /// It generates a `CursorMove` event containing the drag state.
-    pub fn cursor_moved(&mut self, position: PhysicalPosition<f64>) -> DeviceInput {
+    pub fn cursor_moved(&mut self, position: PhysicalPosition<f64>) -> DeviceInputData {
         let prev_position = self.position;
         self.position = [position.x as f32, position.y as f32];
 
-        if self.primary.is_pressed() && self.primary_dragging_from.is_none() {
-            self.primary_dragging_from = Some(prev_position);
+        if self.primary.is_pressed() && self.dragging_from_primary.is_none() {
+            self.dragging_from_primary = Some(prev_position);
         }
-        if self.secondary.is_pressed() && self.secondary_dragging_from.is_none() {
-            self.secondary_dragging_from = Some(prev_position);
+        if self.secondary.is_pressed() && self.dragging_from_secondary.is_none() {
+            self.dragging_from_secondary = Some(prev_position);
         }
-        if self.middle.is_pressed() && self.middle_dragging_from.is_none() {
-            self.middle_dragging_from = Some(prev_position);
+        if self.middle.is_pressed() && self.dragging_from_middle.is_none() {
+            self.dragging_from_middle = Some(prev_position);
         }
         if self.back.is_pressed() && self.back_dragging_from.is_none() {
             self.back_dragging_from = Some(prev_position);
@@ -123,62 +123,54 @@ impl MouseState {
             self.forward_dragging_from = Some(prev_position);
         }
 
-        let event = Self::new_mouse_event(
-            self.position,
-            self.primary_dragging_from,
-            self.secondary_dragging_from,
-            self.middle_dragging_from,
+        Self::new_mouse_event(
+            self.dragging_from_primary,
+            self.dragging_from_secondary,
+            self.dragging_from_middle,
             None,
-        );
-        DeviceInput::new(event)
+        )
     }
 
     /// Generates a `CursorEntered` event.
-    pub fn cursor_entered(&self) -> DeviceInput {
-        let event = Self::new_mouse_event(
-            self.position,
-            self.primary_dragging_from,
-            self.secondary_dragging_from,
-            self.middle_dragging_from,
+    pub fn cursor_entered(&self) -> DeviceInputData {
+        Self::new_mouse_event(
+            self.dragging_from_primary,
+            self.dragging_from_secondary,
+            self.dragging_from_middle,
             Some(MouseInput::Entered),
-        );
-        DeviceInput::new(event)
+        )
     }
 
     /// Generates a `CursorLeft` event.
-    pub fn cursor_left(&self) -> DeviceInput {
-        let event = Self::new_mouse_event(
-            self.position,
-            self.primary_dragging_from,
-            self.secondary_dragging_from,
-            self.middle_dragging_from,
+    pub fn cursor_left(&self) -> DeviceInputData {
+        Self::new_mouse_event(
+            self.dragging_from_primary,
+            self.dragging_from_secondary,
+            self.dragging_from_middle,
             Some(MouseInput::Left),
-        );
-        DeviceInput::new(event)
+        )
     }
 
     /// Generates a `MouseScroll` event.
-    pub fn mouse_wheel(&self, delta: MouseScrollDelta) -> DeviceInput {
+    pub fn mouse_wheel(&self, delta: MouseScrollDelta) -> DeviceInputData {
         let delta = match delta {
             MouseScrollDelta::LineDelta(x, y) => [x * self.pixel_per_line, y * self.pixel_per_line],
             MouseScrollDelta::PixelDelta(PhysicalPosition { x, y }) => [x as f32, y as f32],
         };
 
-        let event = Self::new_mouse_event(
-            self.position,
-            self.primary_dragging_from,
-            self.secondary_dragging_from,
-            self.middle_dragging_from,
+        Self::new_mouse_event(
+            self.dragging_from_primary,
+            self.dragging_from_secondary,
+            self.dragging_from_middle,
             Some(MouseInput::Scroll { delta }),
-        );
-        DeviceInput::new(event)
+        )
     }
 
     pub fn mouse_input(
         &mut self,
         physical_button: WinitMouseButton,
         state: winit::event::ElementState,
-    ) -> Option<DeviceInput> {
+    ) -> Option<DeviceInputData> {
         match state {
             winit::event::ElementState::Pressed => self.button_pressed(physical_button),
             winit::event::ElementState::Released => self.button_released(physical_button),
@@ -188,7 +180,7 @@ impl MouseState {
     /// Handles a mouse button press event.
     ///
     /// It updates the click combo count and status for the given button and generates a `Pressed` event.
-    fn button_pressed(&mut self, physical_button: WinitMouseButton) -> Option<DeviceInput> {
+    fn button_pressed(&mut self, physical_button: WinitMouseButton) -> Option<DeviceInputData> {
         let now = Instant::now();
 
         let logical_button = self.to_logical_button(physical_button)?;
@@ -196,39 +188,35 @@ impl MouseState {
         let (button_state, _) = self.get_mut_button_state(logical_button);
         let click_state = button_state.press(now, combo_duration);
 
-        let event = Self::new_mouse_event(
-            self.position,
-            self.primary_dragging_from,
-            self.secondary_dragging_from,
-            self.middle_dragging_from,
+        Some(Self::new_mouse_event(
+            self.dragging_from_primary,
+            self.dragging_from_secondary,
+            self.dragging_from_middle,
             Some(MouseInput::Click {
                 click_state,
                 button: logical_button,
             }),
-        );
-        Some(DeviceInput::new(event))
+        ))
     }
 
     /// Handles a mouse button release event.
     ///
     /// Resets the click status and drag state for the given button and generates a `Released` event.
-    fn button_released(&mut self, physical_button: WinitMouseButton) -> Option<DeviceInput> {
+    fn button_released(&mut self, physical_button: WinitMouseButton) -> Option<DeviceInputData> {
         let logical_button = self.to_logical_button(physical_button)?;
         let (button_state, dragging_from) = self.get_mut_button_state(logical_button);
         let click_state = button_state.release();
         *dragging_from = None;
 
-        let event = Self::new_mouse_event(
-            self.position,
-            self.primary_dragging_from,
-            self.secondary_dragging_from,
-            self.middle_dragging_from,
+        Some(Self::new_mouse_event(
+            self.dragging_from_primary,
+            self.dragging_from_secondary,
+            self.dragging_from_middle,
             Some(MouseInput::Click {
                 click_state,
                 button: logical_button,
             }),
-        );
-        Some(DeviceInput::new(event))
+        ))
     }
 
     /// Detects long presses for all mouse buttons.
@@ -236,7 +224,7 @@ impl MouseState {
     /// This method should be called on every frame update. It checks if any button has been
     /// held down for the `long_press_duration` without being dragged, and if so, generates
     /// a `LongPressed` event.
-    pub fn long_pressing_detection(&mut self) -> Vec<DeviceInput> {
+    pub fn long_pressing_detection(&mut self) -> Vec<DeviceInputData> {
         let now = Instant::now();
 
         let mut events = Vec::new();
@@ -244,17 +232,17 @@ impl MouseState {
             (
                 MouseLogicalButton::Primary,
                 &mut self.primary,
-                self.primary_dragging_from,
+                self.dragging_from_primary,
             ),
             (
                 MouseLogicalButton::Secondary,
                 &mut self.secondary,
-                self.secondary_dragging_from,
+                self.dragging_from_secondary,
             ),
             (
                 MouseLogicalButton::Middle,
                 &mut self.middle,
-                self.middle_dragging_from,
+                self.dragging_from_middle,
             ),
             (
                 MouseLogicalButton::Back,
@@ -268,10 +256,9 @@ impl MouseState {
             ),
         ];
 
-        let current_position = self.position;
-        let dragging_primary = self.primary_dragging_from;
-        let dragging_secondary = self.secondary_dragging_from;
-        let dragging_middle = self.middle_dragging_from;
+        let dragging_primary = self.dragging_from_primary;
+        let dragging_secondary = self.dragging_from_secondary;
+        let dragging_middle = self.dragging_from_middle;
 
         for (logical_button, button_state, dragging_from) in buttons {
             if dragging_from.is_none() {
@@ -279,7 +266,6 @@ impl MouseState {
                     button_state.detect_long_press(now, self.long_press_duration)
                 {
                     let event = Self::new_mouse_event(
-                        current_position,
                         dragging_primary,
                         dragging_secondary,
                         dragging_middle,
@@ -288,7 +274,7 @@ impl MouseState {
                             button: logical_button,
                         }),
                     );
-                    events.push(DeviceInput::new(event));
+                    events.push(event);
                 }
             }
         }
@@ -332,12 +318,12 @@ impl MouseState {
         button: MouseLogicalButton,
     ) -> (&mut ButtonState, &mut Option<[f32; 2]>) {
         match button {
-            MouseLogicalButton::Primary => (&mut self.primary, &mut self.primary_dragging_from),
+            MouseLogicalButton::Primary => (&mut self.primary, &mut self.dragging_from_primary),
             MouseLogicalButton::Secondary => {
-                (&mut self.secondary, &mut self.secondary_dragging_from)
+                (&mut self.secondary, &mut self.dragging_from_secondary)
             }
 
-            MouseLogicalButton::Middle => (&mut self.middle, &mut self.middle_dragging_from),
+            MouseLogicalButton::Middle => (&mut self.middle, &mut self.dragging_from_middle),
             MouseLogicalButton::Back => (&mut self.back, &mut self.back_dragging_from),
             MouseLogicalButton::Forward => (&mut self.forward, &mut self.forward_dragging_from),
         }
@@ -345,17 +331,15 @@ impl MouseState {
 
     /// A helper function to create a `ConcreteEvent::MouseEvent`.
     fn new_mouse_event(
-        current_position: [f32; 2],
-        dragging_primary: Option<[f32; 2]>,
-        dragging_secondary: Option<[f32; 2]>,
-        dragging_middle: Option<[f32; 2]>,
+        dragging_from_primary: Option<[f32; 2]>,
+        dragging_from_secondary: Option<[f32; 2]>,
+        dragging_from_middle: Option<[f32; 2]>,
         event: Option<MouseInput>,
     ) -> DeviceInputData {
-        DeviceInputData::MouseEvent {
-            current_position,
-            dragging_primary,
-            dragging_secondary,
-            dragging_middle,
+        DeviceInputData::MouseInput {
+            dragging_from_primary,
+            dragging_from_secondary,
+            dragging_from_middle,
             event,
         }
     }
@@ -398,34 +382,32 @@ mod tests {
             let event = mouse_state
                 .mouse_input(b, WinitElementState::Pressed)
                 .unwrap();
-            let expected = MouseState::new_mouse_event(
-                [0.0, 0.0],
-                None,
-                None,
-                None,
-                Some(MouseInput::Click {
+            let expected = DeviceInputData::MouseInput {
+                dragging_from_primary: None,
+                dragging_from_secondary: None,
+                dragging_from_middle: None,
+                event: Some(MouseInput::Click {
                     click_state: ElementState::Pressed(1),
                     button: logical_b,
                 }),
-            );
-            assert_eq!(*event.raw_event(), expected);
+            };
+            assert_eq!(event, expected);
 
             thread::sleep(Duration::from_millis(10));
 
             let event = mouse_state
                 .mouse_input(b, WinitElementState::Released)
                 .unwrap();
-            let expected = MouseState::new_mouse_event(
-                [0.0, 0.0],
-                None,
-                None,
-                None,
-                Some(MouseInput::Click {
+            let expected = DeviceInputData::MouseInput {
+                dragging_from_primary: None,
+                dragging_from_secondary: None,
+                dragging_from_middle: None,
+                event: Some(MouseInput::Click {
                     click_state: ElementState::Released(1),
                     button: logical_b,
                 }),
-            );
-            assert_eq!(*event.raw_event(), expected);
+            };
+            assert_eq!(event, expected);
 
             // シナリオ間のコンボ持ち越しを防ぐため、コンボ継続時間を超えて待機
             thread::sleep(COMBO_DURATION + Duration::from_millis(10));
@@ -438,17 +420,16 @@ mod tests {
             let event = mouse_state
                 .mouse_input(b, WinitElementState::Pressed)
                 .unwrap();
-            let expected = MouseState::new_mouse_event(
-                [0.0, 0.0],
-                None,
-                None,
-                None,
-                Some(MouseInput::Click {
+            let expected = DeviceInputData::MouseInput {
+                dragging_from_primary: None,
+                dragging_from_secondary: None,
+                dragging_from_middle: None,
+                event: Some(MouseInput::Click {
                     click_state: ElementState::Pressed(2), // Combo count = 2
                     button: logical_b,
                 }),
-            );
-            assert_eq!(*event.raw_event(), expected);
+            };
+            assert_eq!(event, expected);
             let _ = mouse_state.mouse_input(b, WinitElementState::Released);
 
             // シナリオ間のコンボ持ち越しを防ぐため、コンボ継続時間を超えて待機
@@ -459,17 +440,16 @@ mod tests {
             thread::sleep(LONG_PRESS_DURATION);
 
             let events = mouse_state.long_pressing_detection();
-            let expected = MouseState::new_mouse_event(
-                [0.0, 0.0],
-                None,
-                None,
-                None,
-                Some(MouseInput::Click {
+            let expected = DeviceInputData::MouseInput {
+                dragging_from_primary: None,
+                dragging_from_secondary: None,
+                dragging_from_middle: None,
+                event: Some(MouseInput::Click {
                     click_state: ElementState::LongPressed(1), // Combo is reset
                     button: logical_b,
                 }),
-            );
-            assert_eq!(*events[0].raw_event(), expected);
+            };
+            assert_eq!(events[0], expected);
             let _ = mouse_state.mouse_input(b, WinitElementState::Released);
         }
     }
@@ -489,33 +469,37 @@ mod tests {
         let logical_b = mouse_state.to_logical_button(b).unwrap();
 
         let event = mouse_state.cursor_moved(PhysicalPosition::new(0.0, 0.0));
-        let expected_event = MouseState::new_mouse_event([0.0, 0.0], None, None, None, None);
-        assert_eq!(*event.raw_event(), expected_event);
+        let expected_event = DeviceInputData::MouseInput {
+            dragging_from_primary: None,
+            dragging_from_secondary: None,
+            dragging_from_middle: None,
+            event: None,
+        };
+        assert_eq!(event, expected_event);
 
         let _ = mouse_state.mouse_input(b, WinitElementState::Pressed);
         thread::sleep(Duration::from_millis(10));
 
         let event = mouse_state.cursor_moved(PhysicalPosition::new(1.0, 1.0));
-        let expected_event = DeviceInputData::MouseEvent {
-            current_position: [1.0, 1.0],
-            dragging_primary: if logical_b == MouseLogicalButton::Primary {
+        let expected_event = DeviceInputData::MouseInput {
+            dragging_from_primary: if logical_b == MouseLogicalButton::Primary {
                 Some([0.0, 0.0])
             } else {
                 None
             },
-            dragging_secondary: if logical_b == MouseLogicalButton::Secondary {
+            dragging_from_secondary: if logical_b == MouseLogicalButton::Secondary {
                 Some([0.0, 0.0])
             } else {
                 None
             },
-            dragging_middle: if logical_b == MouseLogicalButton::Middle {
+            dragging_from_middle: if logical_b == MouseLogicalButton::Middle {
                 Some([0.0, 0.0])
             } else {
                 None
             },
             event: None,
         };
-        assert_eq!(*event.raw_event(), expected_event);
+        assert_eq!(event, expected_event);
 
         // Elapse time for long press, but it shouldn't trigger because we are dragging
         thread::sleep(LONG_PRESS_DURATION);
@@ -526,16 +510,15 @@ mod tests {
         let event = mouse_state
             .mouse_input(b, WinitElementState::Released)
             .unwrap();
-        let expected_event = MouseState::new_mouse_event(
-            [1.0, 1.0], // position is updated
-            None,
-            None,
-            None,
-            Some(MouseInput::Click {
+        let expected_event = DeviceInputData::MouseInput {
+            dragging_from_primary: None,
+            dragging_from_secondary: None,
+            dragging_from_middle: None,
+            event: Some(MouseInput::Click {
                 click_state: ElementState::Released(1),
                 button: logical_b,
             }),
-        );
-        assert_eq!(*event.raw_event(), expected_event);
+        };
+        assert_eq!(event, expected_event);
     }
 }

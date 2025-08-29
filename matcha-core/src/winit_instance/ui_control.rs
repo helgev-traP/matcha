@@ -154,7 +154,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
         get_window_size: impl Fn() -> (PhysicalSize<u32>, PhysicalSize<u32>),
         get_window_position: impl Fn() -> (PhysicalPosition<i32>, PhysicalPosition<i32>),
     ) -> Option<DeviceInput> {
-        match window_event {
+        let device_input_data = match &window_event {
             // we don't handle these events here
             winit::event::WindowEvent::ScaleFactorChanged { .. }
             | winit::event::WindowEvent::Occluded(_)
@@ -165,73 +165,58 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
             // window interactions
             winit::event::WindowEvent::Resized(_) => {
                 let (inner_size, outer_size) = get_window_size();
-                Some(DeviceInput::new(
+                Some(
                     self.window_state
                         .resized(inner_size.into(), outer_size.into()),
-                ))
+                )
             }
             winit::event::WindowEvent::Moved(_) => {
                 let (inner_position, outer_position) = get_window_position();
-                Some(DeviceInput::new(
+                Some(
                     self.window_state
                         .moved(inner_position.into(), outer_position.into()),
-                ))
+                )
             }
-            winit::event::WindowEvent::CloseRequested => {
-                Some(DeviceInput::new(DeviceInputData::CloseRequested))
-            }
+            winit::event::WindowEvent::CloseRequested => Some(DeviceInputData::CloseRequested),
             winit::event::WindowEvent::Focused(focused) => {
-                Some(DeviceInput::new(DeviceInputData::WindowFocus(focused)))
+                Some(DeviceInputData::WindowFocus(*focused))
             }
-            winit::event::WindowEvent::ThemeChanged(theme) => {
-                Some(DeviceInput::new(DeviceInputData::Theme(theme)))
-            }
+            winit::event::WindowEvent::ThemeChanged(theme) => Some(DeviceInputData::Theme(*theme)),
 
             // file drop events
-            winit::event::WindowEvent::DroppedFile(path_buf) => {
-                let mouse_position = self.mouse_state.position();
-                Some(DeviceInput::new(DeviceInputData::FileDrop {
-                    mouse_position,
-                    path_buf,
-                }))
-            }
-            winit::event::WindowEvent::HoveredFile(path_buf) => {
-                let mouse_position = self.mouse_state.position();
-                Some(DeviceInput::new(DeviceInputData::FileHover {
-                    mouse_position,
-                    path_buf,
-                }))
-            }
+            winit::event::WindowEvent::DroppedFile(path_buf) => Some(DeviceInputData::FileDrop {
+                path_buf: path_buf.clone(),
+            }),
+            winit::event::WindowEvent::HoveredFile(path_buf) => Some(DeviceInputData::FileHover {
+                path_buf: path_buf.clone(),
+            }),
             winit::event::WindowEvent::HoveredFileCancelled => {
-                let mouse_position = self.mouse_state.position();
-                Some(DeviceInput::new(DeviceInputData::FileHoverCancelled {
-                    mouse_position,
-                }))
+                Some(DeviceInputData::FileHoverCancelled)
             }
 
             // keyboard events
             winit::event::WindowEvent::KeyboardInput { event, .. } => {
-                self.keyboard_state.keyboard_input(event)
+                self.keyboard_state.keyboard_input(event.clone())
             }
             winit::event::WindowEvent::ModifiersChanged(modifiers) => {
                 self.keyboard_state.modifiers_changed(modifiers.state());
                 None
             }
-            winit::event::WindowEvent::Ime(_) => Some(DeviceInput::new(DeviceInputData::Ime)),
+            winit::event::WindowEvent::Ime(_) => Some(DeviceInputData::Ime),
 
             // mouse events
             winit::event::WindowEvent::CursorMoved { position, .. } => {
-                Some(self.mouse_state.cursor_moved(position))
+                Some(self.mouse_state.cursor_moved(*position))
             }
             winit::event::WindowEvent::CursorEntered { .. } => {
                 Some(self.mouse_state.cursor_entered())
             }
             winit::event::WindowEvent::CursorLeft { .. } => Some(self.mouse_state.cursor_left()),
             winit::event::WindowEvent::MouseWheel { delta, .. } => {
-                Some(self.mouse_state.mouse_wheel(delta))
+                Some(self.mouse_state.mouse_wheel(*delta))
             }
             winit::event::WindowEvent::MouseInput { state, button, .. } => {
-                self.mouse_state.mouse_input(button, state)
+                self.mouse_state.mouse_input(*button, *state)
             }
 
             // touch events
@@ -241,10 +226,13 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
             | winit::event::WindowEvent::RotationGesture { .. }
             | winit::event::WindowEvent::TouchpadPressure { .. }
             | winit::event::WindowEvent::Touch(..)
-            | winit::event::WindowEvent::AxisMotion { .. } => {
-                Some(DeviceInput::new(DeviceInputData::Touch))
-            }
-        }
+            | winit::event::WindowEvent::AxisMotion { .. } => Some(DeviceInputData::Touch),
+        };
+
+        device_input_data.map(|device_input_data| {
+            let mouse_position = self.mouse_state.position();
+            DeviceInput::new(mouse_position, device_input_data, window_event)
+        })
     }
 
     pub fn window_event(

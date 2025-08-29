@@ -17,7 +17,7 @@ impl KeyboardState {
         self.modifiers = modifiers;
     }
 
-    pub fn keyboard_input(&mut self, key_event: winit::event::KeyEvent) -> Option<DeviceInput> {
+    pub fn keyboard_input(&mut self, key_event: winit::event::KeyEvent) -> Option<DeviceInputData> {
         let winit::keyboard::PhysicalKey::Code(key_code) = key_event.physical_key else {
             return None;
         };
@@ -36,10 +36,10 @@ impl KeyboardState {
                 }
             }
         }
-        Some(DeviceInput::new(DeviceInputData::Keyboard(KeyInput {
+        Some(DeviceInputData::Keyboard(KeyInput {
             winit: key_event,
             snapshot: self.clone(),
-        })))
+        }))
     }
 }
 

@@ -120,16 +120,14 @@ impl<T: Send + 'static + Clone> Widget<T> for ButtonNode<T> {
 
         let is_inside = self.is_inside(
             match event.event() {
-                DeviceInputData::MouseEvent {
-                    current_position, ..
-                } => *current_position,
+                DeviceInputData::MouseInput { mouse_position, .. } => *current_position,
                 _ => [-1.0, -1.0], // Not a mouse event, so it's outside
             },
             context,
         );
 
         match event.event() {
-            DeviceInputData::MouseEvent {
+            DeviceInputData::MouseInput {
                 event: Some(mouse_event),
                 ..
             } => match mouse_event {
@@ -165,7 +163,7 @@ impl<T: Send + 'static + Clone> Widget<T> for ButtonNode<T> {
                     }
                 }
             },
-            DeviceInputData::MouseEvent { event: None, .. } => {
+            DeviceInputData::MouseInput { event: None, .. } => {
                 // Cursor just moved
                 if is_inside {
                     if self.state == ButtonState::Normal {
