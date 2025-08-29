@@ -152,7 +152,7 @@ impl<'a: 'static, T: Send + 'static> Widget<T> for TextNode<'a> {
         }
     }
 
-    fn device_event(&mut self, _event: &DeviceInput, _context: &WidgetContext) -> Option<T> {
+    fn device_input(&mut self, _event: &DeviceInput, _context: &WidgetContext) -> Option<T> {
         None
     }
 

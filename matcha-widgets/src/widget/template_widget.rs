@@ -77,7 +77,7 @@ impl<T: Send + 'static> Widget<T> for TemplateNode {
         }
     }
 
-    fn device_event(&mut self, _event: &DeviceInput, _context: &WidgetContext) -> Option<T> {
+    fn device_input(&mut self, _event: &DeviceInput, _context: &WidgetContext) -> Option<T> {
         // Handle device events here.
         // If the widget's state changes and it needs to be redrawn,
         // call self.update_notifier.as_ref().unwrap().notify();

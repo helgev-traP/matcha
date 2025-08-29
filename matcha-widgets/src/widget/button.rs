@@ -114,7 +114,7 @@ impl<T: Send + 'static + Clone> Widget<T> for ButtonNode<T> {
         }
     }
 
-    fn device_event(&mut self, event: &DeviceInput, context: &WidgetContext) -> Option<T> {
+    fn device_input(&mut self, event: &DeviceInput, context: &WidgetContext) -> Option<T> {
         let mut msg = None;
         let mut new_state = self.state;
 
@@ -188,7 +188,7 @@ impl<T: Send + 'static + Clone> Widget<T> for ButtonNode<T> {
         }
 
         let content_event = event.mouse_transition([0.0, 0.0]); // Pass event to content
-        self.content.device_event(&content_event, context)
+        self.content.device_input(&content_event, context)
     }
 
     fn is_inside(&mut self, position: [f32; 2], _context: &WidgetContext) -> bool {

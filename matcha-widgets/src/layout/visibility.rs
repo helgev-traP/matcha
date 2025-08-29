@@ -138,7 +138,7 @@ where
             .collect()
     }
 
-    fn device_event(
+    fn device_input(
         &mut self,
         _bounds: [f32; 2],
         event: &DeviceInput,

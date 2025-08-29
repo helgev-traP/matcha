@@ -69,7 +69,7 @@ pub trait Widget<D: Dom<E>, E: 'static = (), ChildSetting: PartialEq + 'static =
         cache_invalidator: Option<InvalidationHandle>,
     ) -> Vec<(&'a dyn Dom<E>, ChildSetting, u128)>;
 
-    fn device_event(
+    fn device_input(
         &mut self,
         bounds: [f32; 2],
         event: &DeviceInput,
@@ -84,7 +84,12 @@ pub trait Widget<D: Dom<E>, E: 'static = (), ChildSetting: PartialEq + 'static =
         position: [f32; 2],
         children: &[(&dyn AnyWidget<E>, &ChildSetting, &Arrangement)],
         ctx: &WidgetContext,
-    ) -> bool;
+    ) -> bool {
+        0.0 <= position[0]
+            && position[0] <= bounds[0]
+            && 0.0 <= position[1]
+            && position[1] <= bounds[1]
+    }
 
     fn measure(
         &self,
@@ -96,7 +101,7 @@ pub trait Widget<D: Dom<E>, E: 'static = (), ChildSetting: PartialEq + 'static =
     /// The length of returned Vector must match the number of children.
     fn arrange(
         &self,
-        size: [f32; 2],
+        final_size: [f32; 2],
         children: &[(&dyn AnyWidget<E>, &ChildSetting)],
         ctx: &WidgetContext,
     ) -> Vec<Arrangement>;
@@ -276,7 +281,7 @@ where
             .map(|((child, setting), arr)| (&mut **child as &mut dyn AnyWidget<T>, setting, arr))
             .collect();
 
-        self.widget_impl.device_event(
+        self.widget_impl.device_input(
             actual_bounds,
             event,
             &mut children_with_arrangement,
@@ -628,7 +633,7 @@ mod tests {
                 .collect()
         }
 
-        fn device_event(
+        fn device_input(
             &mut self,
             _bounds: [f32; 2],
             _event: &DeviceInput,
@@ -1040,7 +1045,7 @@ mod tests {
                 .collect()
         }
 
-        fn device_event(
+        fn device_input(
             &mut self,
             _bounds: [f32; 2],
             _event: &DeviceInput,
@@ -1159,7 +1164,7 @@ mod tests {
                 .map(|(child, setting)| (child as &dyn Dom<String>, setting.clone(), child.id))
                 .collect()
         }
-        fn device_event(
+        fn device_input(
             &mut self,
             _: [f32; 2],
             _: &DeviceInput,

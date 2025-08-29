@@ -1,4 +1,3 @@
-use matcha_core::device_input;
 use nalgebra::Matrix4;
 
 use matcha_core::ui::widget::InvalidationHandle;
@@ -134,7 +133,7 @@ where
             .collect()
     }
 
-    fn device_event(
+    fn device_input(
         &mut self,
         _bounds: [f32; 2],
         event: &DeviceInput,
@@ -142,24 +141,25 @@ where
         _cache_invalidator: InvalidationHandle,
         ctx: &WidgetContext,
     ) -> Option<T> {
-        if let Some((child, _, _arrangement)) = children.first_mut() {
-            todo!();
-            return child.device_event(event, ctx);
+        if let Some((child, _, arrangement)) = children.first_mut() {
+            let child_event = event.transform(arrangement.affine);
+            return child.device_event(&child_event, ctx);
+        } else {
+            None
         }
-        None
     }
 
     fn is_inside(
         &self,
-        _bounds: [f32; 2],
+        bounds: [f32; 2],
         position: [f32; 2],
-        children: &[(&dyn AnyWidget<T>, &(), &Arrangement)],
-        ctx: &WidgetContext,
+        _children: &[(&dyn AnyWidget<T>, &(), &Arrangement)],
+        _ctx: &WidgetContext,
     ) -> bool {
-        if let Some((child, _, _arrangement)) = children.first() {
-            return child.is_inside(position, ctx);
-        }
-        false
+        0.0 <= position[0]
+            && position[0] <= bounds[0]
+            && 0.0 <= position[1]
+            && position[1] <= bounds[1]
     }
 
     fn measure(
@@ -172,10 +172,10 @@ where
             let inner_constraints = Constraints::new(
                 [
                     (constraints.min_width() - self.left - self.right).max(0.0),
-                    (constraints.min_height() - self.top - self.bottom).max(0.0),
+                    (constraints.max_width() - self.left - self.right).max(0.0),
                 ],
                 [
-                    (constraints.max_width() - self.left - self.right).max(0.0),
+                    (constraints.min_height() - self.top - self.bottom).max(0.0),
                     (constraints.max_height() - self.top - self.bottom).max(0.0),
                 ],
             );
@@ -200,14 +200,14 @@ where
             return vec![];
         }
 
-        let content_size = [
+        let content_final_size = [
             (size[0] - self.left - self.right).max(0.0),
             (size[1] - self.top - self.bottom).max(0.0),
         ];
 
         let transform = Matrix4::new_translation(&nalgebra::Vector3::new(self.left, self.top, 0.0));
 
-        vec![Arrangement::new(content_size, transform)]
+        vec![Arrangement::new(content_final_size, transform)]
     }
 
     fn render(

@@ -108,10 +108,10 @@ impl<T: Send + 'static> Widget<T> for RowNode<T> {
         }
     }
 
-    fn device_event(&mut self, event: &DeviceInput, context: &WidgetContext) -> Option<T> {
+    fn device_input(&mut self, event: &DeviceInput, context: &WidgetContext) -> Option<T> {
         self.items
             .iter_mut()
-            .find_map(|item| item.device_event(event, context))
+            .find_map(|item| item.device_input(event, context))
     }
 
     fn is_inside(&mut self, position: [f32; 2], context: &WidgetContext) -> bool {

@@ -63,10 +63,18 @@ impl<T: Send + 'static> Position<T> {
 #[async_trait::async_trait]
 impl<T: Send + 'static> Dom<T> for Position<T> {
     fn build_widget_tree(&self) -> Box<dyn AnyWidgetFrame<T>> {
+        let mut children_and_settings = Vec::new();
+        let mut child_ids = Vec::new();
+
+        if let Some(content_widget) = self.content.as_ref().map(|c| c.build_widget_tree()) {
+            children_and_settings.push((content_widget, ()));
+            child_ids.push(0);
+        }
+
         Box::new(WidgetFrame::new(
             self.label.clone(),
-            vec![],
-            vec![],
+            children_and_settings,
+            child_ids,
             PositionNode {
                 left: self.left,
                 top: self.top,
@@ -109,7 +117,7 @@ impl<T: Send + 'static> Widget<Position<T>, T, ()> for PositionNode {
             .collect()
     }
 
-    fn device_event(
+    fn device_input(
         &mut self,
         _bounds: [f32; 2],
         event: &DeviceInput,
@@ -117,23 +125,24 @@ impl<T: Send + 'static> Widget<Position<T>, T, ()> for PositionNode {
         _cache_invalidator: InvalidationHandle,
         ctx: &WidgetContext,
     ) -> Option<T> {
-        if let Some((child, _, _arrangement)) = children.first_mut() {
-            return child.device_event(event, ctx);
+        if let Some((child, _, arrangement)) = children.first_mut() {
+            let child_event = event.transform(arrangement.affine);
+            return child.device_event(&child_event, ctx);
         }
         None
     }
 
     fn is_inside(
         &self,
-        _bounds: [f32; 2],
+        bounds: [f32; 2],
         position: [f32; 2],
-        children: &[(&dyn AnyWidget<T>, &(), &Arrangement)],
-        ctx: &WidgetContext,
+        _children: &[(&dyn AnyWidget<T>, &(), &Arrangement)],
+        _ctx: &WidgetContext,
     ) -> bool {
-        if let Some((child, _, _arrangement)) = children.first() {
-            return child.is_inside(position, ctx);
-        }
-        false
+        0.0 <= position[0]
+            && position[0] <= bounds[0]
+            && 0.0 <= position[1]
+            && position[1] <= bounds[1]
     }
 
     fn measure(
@@ -142,11 +151,47 @@ impl<T: Send + 'static> Widget<Position<T>, T, ()> for PositionNode {
         children: &[(&dyn AnyWidget<T>, &())],
         ctx: &WidgetContext,
     ) -> [f32; 2] {
-        if let Some((child, _)) = children.first() {
-            child.measure(constraints, ctx)
+        let mut width = constraints.width();
+        let mut height = constraints.height();
+
+        // left
+        if let Some(left) = self.left {
+            width[0] = (width[0] - left).max(0.0);
+            width[1] = (width[1] - left).max(0.0);
+        }
+
+        // top
+        if let Some(top) = self.top {
+            height[0] = (height[0] - top).max(0.0);
+            height[1] = (height[1] - top).max(0.0);
+        }
+
+        // right
+        if let Some(right) = self.right {
+            width[0] = (width[0] - right).max(0.0);
+            width[1] = (width[1] - right).max(0.0);
+        }
+
+        // bottom
+        if let Some(bottom) = self.bottom {
+            height[0] = (height[0] - bottom).max(0.0);
+            height[1] = (height[1] - bottom).max(0.0);
+        }
+
+        let child_constraints = Constraints::new(width, height);
+
+        let child_measured_size = if let Some((child, _)) = children.first() {
+            child.measure(&child_constraints, ctx)
         } else {
             [0.0, 0.0]
-        }
+        };
+
+        let measured_width =
+            child_measured_size[0] + self.left.unwrap_or(0.0) + self.right.unwrap_or(0.0);
+        let measured_height =
+            child_measured_size[1] + self.top.unwrap_or(0.0) + self.bottom.unwrap_or(0.0);
+
+        [measured_width, measured_height]
     }
 
     fn arrange(
@@ -155,38 +200,41 @@ impl<T: Send + 'static> Widget<Position<T>, T, ()> for PositionNode {
         children: &[(&dyn AnyWidget<T>, &())],
         ctx: &WidgetContext,
     ) -> Vec<Arrangement> {
-        if children.is_empty() {
+        let Some((content, _)) = children.first() else {
             return vec![];
-        }
-
-        let child_measured_size = if let Some((child, _)) = children.first() {
-            child.measure(&Constraints::new([0.0, 0.0], size), ctx)
-        } else {
-            [0.0, 0.0]
         };
 
-        let x = self
-            .left
-            .unwrap_or_else(|| size[0] - child_measured_size[0] - self.right.unwrap_or(0.0));
-        let y = self
-            .top
-            .unwrap_or_else(|| size[1] - child_measured_size[1] - self.bottom.unwrap_or(0.0));
+        // available space for child (parent size minus margins)
+        let available = [
+            (size[0] - self.left.unwrap_or(0.0) - self.right.unwrap_or(0.0)).max(0.0),
+            (size[1] - self.top.unwrap_or(0.0) - self.bottom.unwrap_or(0.0)).max(0.0),
+        ];
 
-        let w = if let (Some(left), Some(right)) = (self.left, self.right) {
-            (size[0] - left - right).max(0.0)
-        } else {
-            child_measured_size[0]
+        // give child a flexible constraint up to available space
+        let content_constraints = Constraints::new([0.0, available[0]], [0.0, available[1]]);
+        let content_measured_size = content.measure(&content_constraints, ctx);
+
+        // final child size: clamp to available (defensive)
+        let final_child_size = [
+            content_measured_size[0].clamp(0.0, available[0]),
+            content_measured_size[1].clamp(0.0, available[1]),
+        ];
+
+        let offset_x = match (self.left, self.right) {
+            (Some(left), _) => left,
+            (None, Some(right)) => size[0] - right - final_child_size[0],
+            (None, None) => 0.0,
         };
-        let h = if let (Some(top), Some(bottom)) = (self.top, self.bottom) {
-            (size[1] - top - bottom).max(0.0)
-        } else {
-            child_measured_size[1]
+        let offset_y = match (self.top, self.bottom) {
+            (Some(top), _) => top,
+            (None, Some(bottom)) => size[1] - bottom - final_child_size[1],
+            (None, None) => 0.0,
         };
 
-        let content_size = [w, h];
-        let transform = Matrix4::new_translation(&nalgebra::Vector3::new(x, y, 0.0));
-
-        vec![Arrangement::new(content_size, transform)]
+        vec![Arrangement::new(
+            final_child_size,
+            Matrix4::new_translation(&nalgebra::Vector3::new(offset_x, offset_y, 0.0)),
+        )]
     }
 
     fn render(

@@ -130,9 +130,9 @@ impl<T: Send + 'static> Widget<T> for PlainNode<T> {
         }
     }
 
-    fn device_event(&mut self, event: &DeviceInput, context: &WidgetContext) -> Option<T> {
+    fn device_input(&mut self, event: &DeviceInput, context: &WidgetContext) -> Option<T> {
         if let Some(content) = &mut self.content {
-            return content.device_event(event, context);
+            return content.device_input(event, context);
         }
         None
     }

@@ -73,12 +73,20 @@ impl Constraints {
         self.max_width as f32 / SUB_PIXEL_QUANTIZE
     }
 
+    pub fn width(&self) -> [f32; 2] {
+        [self.min_width(), self.max_width()]
+    }
+
     pub fn min_height(&self) -> f32 {
         self.min_height as f32 / SUB_PIXEL_QUANTIZE
     }
 
     pub fn max_height(&self) -> f32 {
         self.max_height as f32 / SUB_PIXEL_QUANTIZE
+    }
+
+    pub fn height(&self) -> [f32; 2] {
+        [self.min_height(), self.max_height()]
     }
 }
 

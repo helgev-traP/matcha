@@ -83,7 +83,7 @@ impl<T: Send + 'static> Widget<Space, T, ()> for SpaceNode {
         vec![]
     }
 
-    fn device_event(
+    fn device_input(
         &mut self,
         _bounds: [f32; 2],
         _event: &DeviceInput,
