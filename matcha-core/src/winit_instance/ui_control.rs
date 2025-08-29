@@ -6,7 +6,7 @@ use winit::dpi::{PhysicalPosition, PhysicalSize};
 use crate::{
     Component, UpdateNotifier,
     device_input::{
-        DeviceEventData, DeviceInput,
+        DeviceInput, DeviceInputData,
         key_state::KeyboardState,
         mouse_state::{MousePrimaryButton, MouseState},
         window_state::WindowState,
@@ -178,33 +178,33 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
                 ))
             }
             winit::event::WindowEvent::CloseRequested => {
-                Some(DeviceInput::new(DeviceEventData::CloseRequested))
+                Some(DeviceInput::new(DeviceInputData::CloseRequested))
             }
             winit::event::WindowEvent::Focused(focused) => {
-                Some(DeviceInput::new(DeviceEventData::WindowFocus(focused)))
+                Some(DeviceInput::new(DeviceInputData::WindowFocus(focused)))
             }
             winit::event::WindowEvent::ThemeChanged(theme) => {
-                Some(DeviceInput::new(DeviceEventData::Theme(theme)))
+                Some(DeviceInput::new(DeviceInputData::Theme(theme)))
             }
 
             // file drop events
             winit::event::WindowEvent::DroppedFile(path_buf) => {
                 let mouse_position = self.mouse_state.position();
-                Some(DeviceInput::new(DeviceEventData::FileDrop {
+                Some(DeviceInput::new(DeviceInputData::FileDrop {
                     mouse_position,
                     path_buf,
                 }))
             }
             winit::event::WindowEvent::HoveredFile(path_buf) => {
                 let mouse_position = self.mouse_state.position();
-                Some(DeviceInput::new(DeviceEventData::FileHover {
+                Some(DeviceInput::new(DeviceInputData::FileHover {
                     mouse_position,
                     path_buf,
                 }))
             }
             winit::event::WindowEvent::HoveredFileCancelled => {
                 let mouse_position = self.mouse_state.position();
-                Some(DeviceInput::new(DeviceEventData::FileHoverCancelled {
+                Some(DeviceInput::new(DeviceInputData::FileHoverCancelled {
                     mouse_position,
                 }))
             }
@@ -217,7 +217,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
                 self.keyboard_state.modifiers_changed(modifiers.state());
                 None
             }
-            winit::event::WindowEvent::Ime(_) => Some(DeviceInput::new(DeviceEventData::Ime)),
+            winit::event::WindowEvent::Ime(_) => Some(DeviceInput::new(DeviceInputData::Ime)),
 
             // mouse events
             winit::event::WindowEvent::CursorMoved { position, .. } => {
@@ -242,7 +242,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
             | winit::event::WindowEvent::TouchpadPressure { .. }
             | winit::event::WindowEvent::Touch(..)
             | winit::event::WindowEvent::AxisMotion { .. } => {
-                Some(DeviceInput::new(DeviceEventData::Touch))
+                Some(DeviceInput::new(DeviceInputData::Touch))
             }
         }
     }

@@ -1,4 +1,4 @@
-use super::{ButtonState, DeviceInput, DeviceEventData, MouseInput, MouseLogicalButton};
+use super::{ButtonState, DeviceInput, DeviceInputData, MouseInput, MouseLogicalButton};
 
 use std::time::{Duration, Instant};
 use winit::{
@@ -350,8 +350,8 @@ impl MouseState {
         dragging_secondary: Option<[f32; 2]>,
         dragging_middle: Option<[f32; 2]>,
         event: Option<MouseInput>,
-    ) -> DeviceEventData {
-        DeviceEventData::MouseEvent {
+    ) -> DeviceInputData {
+        DeviceInputData::MouseEvent {
             current_position,
             dragging_primary,
             dragging_secondary,
@@ -496,7 +496,7 @@ mod tests {
         thread::sleep(Duration::from_millis(10));
 
         let event = mouse_state.cursor_moved(PhysicalPosition::new(1.0, 1.0));
-        let expected_event = DeviceEventData::MouseEvent {
+        let expected_event = DeviceInputData::MouseEvent {
             current_position: [1.0, 1.0],
             dragging_primary: if logical_b == MouseLogicalButton::Primary {
                 Some([0.0, 0.0])

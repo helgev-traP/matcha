@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use matcha_core::{
-    device_input::{DeviceInput, DeviceEventData, ElementState, MouseInput, MouseLogicalButton},
+    device_input::{DeviceInput, DeviceInputData, ElementState, MouseInput, MouseLogicalButton},
     types::{color::Color, range::CoverRange},
     ui::{
         Background, Constraints, Dom, DomCompareResult, Style, UpdateWidgetError, Widget,
@@ -120,7 +120,7 @@ impl<T: Send + 'static + Clone> Widget<T> for ButtonNode<T> {
 
         let is_inside = self.is_inside(
             match event.event() {
-                DeviceEventData::MouseEvent {
+                DeviceInputData::MouseEvent {
                     current_position, ..
                 } => *current_position,
                 _ => [-1.0, -1.0], // Not a mouse event, so it's outside
@@ -129,7 +129,7 @@ impl<T: Send + 'static + Clone> Widget<T> for ButtonNode<T> {
         );
 
         match event.event() {
-            DeviceEventData::MouseEvent {
+            DeviceInputData::MouseEvent {
                 event: Some(mouse_event),
                 ..
             } => match mouse_event {
@@ -165,7 +165,7 @@ impl<T: Send + 'static + Clone> Widget<T> for ButtonNode<T> {
                     }
                 }
             },
-            DeviceEventData::MouseEvent { event: None, .. } => {
+            DeviceInputData::MouseEvent { event: None, .. } => {
                 // Cursor just moved
                 if is_inside {
                     if self.state == ButtonState::Normal {

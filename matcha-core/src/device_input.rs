@@ -23,14 +23,14 @@ pub use winit::window::Theme;
 #[derive(Debug, Clone, PartialEq)]
 pub struct DeviceInput {
     /// raw event.
-    raw: DeviceEventData,
+    raw: DeviceInputData,
     /// relative event.
-    relative: DeviceEventData,
+    relative: DeviceInputData,
 }
 
 impl DeviceInput {
     /// Creates a new `Event` from a `ConcreteEvent`.
-    pub(crate) fn new(event: DeviceEventData) -> Self {
+    pub(crate) fn new(event: DeviceInputData) -> Self {
         Self {
             raw: event.clone(),
             relative: event,
@@ -38,16 +38,16 @@ impl DeviceInput {
     }
 
     /// Returns a reference to the raw concrete event.
-    pub fn raw_event(&self) -> &DeviceEventData {
+    pub fn raw_event(&self) -> &DeviceInputData {
         &self.raw
     }
 
     /// Placeholder for a more advanced event processing method.
-    pub fn event(&self) -> &DeviceEventData {
+    pub fn event(&self) -> &DeviceInputData {
         &self.relative
     }
 
-    pub fn relative(&self, event: DeviceEventData) -> Self {
+    pub fn relative(&self, event: DeviceInputData) -> Self {
         Self {
             raw: self.raw.clone(),
             relative: event,
@@ -66,7 +66,7 @@ impl DeviceInput {
 
 /// Represents the concrete type of a UI event.
 #[derive(Debug, Clone, PartialEq)]
-pub enum DeviceEventData {
+pub enum DeviceInputData {
     WindowPositionSize {
         inner_position: [f32; 2],
         outer_position: [f32; 2],
@@ -101,35 +101,35 @@ pub enum DeviceEventData {
     Theme(Theme),
 }
 
-impl DeviceEventData {
+impl DeviceInputData {
     pub fn mouse_transition(&self, delta: [f32; 2]) -> Self {
         match self {
-            DeviceEventData::FileDrop {
+            DeviceInputData::FileDrop {
                 mouse_position,
                 path_buf,
-            } => DeviceEventData::FileDrop {
+            } => DeviceInputData::FileDrop {
                 mouse_position: [mouse_position[0] - delta[0], mouse_position[1] - delta[1]],
                 path_buf: path_buf.clone(),
             },
-            DeviceEventData::FileHover {
+            DeviceInputData::FileHover {
                 mouse_position,
                 path_buf,
-            } => DeviceEventData::FileHover {
+            } => DeviceInputData::FileHover {
                 mouse_position: [mouse_position[0] - delta[0], mouse_position[1] - delta[1]],
                 path_buf: path_buf.clone(),
             },
-            DeviceEventData::FileHoverCancelled { mouse_position } => {
-                DeviceEventData::FileHoverCancelled {
+            DeviceInputData::FileHoverCancelled { mouse_position } => {
+                DeviceInputData::FileHoverCancelled {
                     mouse_position: [mouse_position[0] - delta[0], mouse_position[1] - delta[1]],
                 }
             }
-            DeviceEventData::MouseEvent {
+            DeviceInputData::MouseEvent {
                 current_position,
                 dragging_primary,
                 dragging_secondary,
                 dragging_middle,
                 event,
-            } => DeviceEventData::MouseEvent {
+            } => DeviceInputData::MouseEvent {
                 current_position: [
                     current_position[0] - delta[0],
                     current_position[1] - delta[1],
@@ -140,13 +140,13 @@ impl DeviceEventData {
                 event: *event,
             },
             // For other events that do not have a mouse position, we clone them.
-            DeviceEventData::WindowPositionSize { .. }
-            | DeviceEventData::CloseRequested
-            | DeviceEventData::WindowFocus(_)
-            | DeviceEventData::Keyboard(_)
-            | DeviceEventData::Ime
-            | DeviceEventData::Touch
-            | DeviceEventData::Theme(_) => self.clone(),
+            DeviceInputData::WindowPositionSize { .. }
+            | DeviceInputData::CloseRequested
+            | DeviceInputData::WindowFocus(_)
+            | DeviceInputData::Keyboard(_)
+            | DeviceInputData::Ime
+            | DeviceInputData::Touch
+            | DeviceInputData::Theme(_) => self.clone(),
         }
     }
 }

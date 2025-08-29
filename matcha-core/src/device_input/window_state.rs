@@ -1,4 +1,4 @@
-use super::DeviceEventData;
+use super::DeviceInputData;
 
 pub struct WindowState {
     inner_size: [f32; 2],
@@ -33,11 +33,11 @@ impl WindowState {
         }
     }
 
-    pub fn resized(&mut self, inner_size: [f32; 2], outer_size: [f32; 2]) -> DeviceEventData {
+    pub fn resized(&mut self, inner_size: [f32; 2], outer_size: [f32; 2]) -> DeviceInputData {
         self.inner_size = inner_size;
         self.outer_size = outer_size;
 
-        DeviceEventData::WindowPositionSize {
+        DeviceInputData::WindowPositionSize {
             inner_position: self.inner_position,
             outer_position: self.outer_position,
             inner_size: self.inner_size,
@@ -45,11 +45,11 @@ impl WindowState {
         }
     }
 
-    pub fn moved(&mut self, inner_position: [f32; 2], outer_position: [f32; 2]) -> DeviceEventData {
+    pub fn moved(&mut self, inner_position: [f32; 2], outer_position: [f32; 2]) -> DeviceInputData {
         self.inner_position = inner_position;
         self.outer_position = outer_position;
 
-        DeviceEventData::WindowPositionSize {
+        DeviceInputData::WindowPositionSize {
             inner_position: self.inner_position,
             outer_position: self.outer_position,
             inner_size: self.inner_size,

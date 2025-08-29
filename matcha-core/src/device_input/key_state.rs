@@ -1,4 +1,4 @@
-use super::{DeviceEventData, DeviceInput, KeyInput};
+use super::{DeviceInput, DeviceInputData, KeyInput};
 use std::collections::VecDeque;
 
 #[derive(Clone, Default, Debug, PartialEq, Eq)]
@@ -36,7 +36,7 @@ impl KeyboardState {
                 }
             }
         }
-        Some(DeviceInput::new(DeviceEventData::Keyboard(KeyInput {
+        Some(DeviceInput::new(DeviceInputData::Keyboard(KeyInput {
             winit: key_event,
             snapshot: self.clone(),
         })))
