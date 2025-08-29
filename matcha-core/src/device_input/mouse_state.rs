@@ -1,4 +1,4 @@
-use super::{ButtonState, DeviceEvent, DeviceEventData, MouseInput, MouseLogicalButton};
+use super::{ButtonState, DeviceInput, DeviceEventData, MouseInput, MouseLogicalButton};
 
 use std::time::{Duration, Instant};
 use winit::{
@@ -103,7 +103,7 @@ impl MouseState {
     ///
     /// Updates the cursor position and detects the start of a drag for any pressed buttons.
     /// It generates a `CursorMove` event containing the drag state.
-    pub fn cursor_moved(&mut self, position: PhysicalPosition<f64>) -> DeviceEvent {
+    pub fn cursor_moved(&mut self, position: PhysicalPosition<f64>) -> DeviceInput {
         let prev_position = self.position;
         self.position = [position.x as f32, position.y as f32];
 
@@ -130,11 +130,11 @@ impl MouseState {
             self.middle_dragging_from,
             None,
         );
-        DeviceEvent::new(event)
+        DeviceInput::new(event)
     }
 
     /// Generates a `CursorEntered` event.
-    pub fn cursor_entered(&self) -> DeviceEvent {
+    pub fn cursor_entered(&self) -> DeviceInput {
         let event = Self::new_mouse_event(
             self.position,
             self.primary_dragging_from,
@@ -142,11 +142,11 @@ impl MouseState {
             self.middle_dragging_from,
             Some(MouseInput::Entered),
         );
-        DeviceEvent::new(event)
+        DeviceInput::new(event)
     }
 
     /// Generates a `CursorLeft` event.
-    pub fn cursor_left(&self) -> DeviceEvent {
+    pub fn cursor_left(&self) -> DeviceInput {
         let event = Self::new_mouse_event(
             self.position,
             self.primary_dragging_from,
@@ -154,11 +154,11 @@ impl MouseState {
             self.middle_dragging_from,
             Some(MouseInput::Left),
         );
-        DeviceEvent::new(event)
+        DeviceInput::new(event)
     }
 
     /// Generates a `MouseScroll` event.
-    pub fn mouse_wheel(&self, delta: MouseScrollDelta) -> DeviceEvent {
+    pub fn mouse_wheel(&self, delta: MouseScrollDelta) -> DeviceInput {
         let delta = match delta {
             MouseScrollDelta::LineDelta(x, y) => [x * self.pixel_per_line, y * self.pixel_per_line],
             MouseScrollDelta::PixelDelta(PhysicalPosition { x, y }) => [x as f32, y as f32],
@@ -171,14 +171,14 @@ impl MouseState {
             self.middle_dragging_from,
             Some(MouseInput::Scroll { delta }),
         );
-        DeviceEvent::new(event)
+        DeviceInput::new(event)
     }
 
     pub fn mouse_input(
         &mut self,
         physical_button: WinitMouseButton,
         state: winit::event::ElementState,
-    ) -> Option<DeviceEvent> {
+    ) -> Option<DeviceInput> {
         match state {
             winit::event::ElementState::Pressed => self.button_pressed(physical_button),
             winit::event::ElementState::Released => self.button_released(physical_button),
@@ -188,7 +188,7 @@ impl MouseState {
     /// Handles a mouse button press event.
     ///
     /// It updates the click combo count and status for the given button and generates a `Pressed` event.
-    fn button_pressed(&mut self, physical_button: WinitMouseButton) -> Option<DeviceEvent> {
+    fn button_pressed(&mut self, physical_button: WinitMouseButton) -> Option<DeviceInput> {
         let now = Instant::now();
 
         let logical_button = self.to_logical_button(physical_button)?;
@@ -206,13 +206,13 @@ impl MouseState {
                 button: logical_button,
             }),
         );
-        Some(DeviceEvent::new(event))
+        Some(DeviceInput::new(event))
     }
 
     /// Handles a mouse button release event.
     ///
     /// Resets the click status and drag state for the given button and generates a `Released` event.
-    fn button_released(&mut self, physical_button: WinitMouseButton) -> Option<DeviceEvent> {
+    fn button_released(&mut self, physical_button: WinitMouseButton) -> Option<DeviceInput> {
         let logical_button = self.to_logical_button(physical_button)?;
         let (button_state, dragging_from) = self.get_mut_button_state(logical_button);
         let click_state = button_state.release();
@@ -228,7 +228,7 @@ impl MouseState {
                 button: logical_button,
             }),
         );
-        Some(DeviceEvent::new(event))
+        Some(DeviceInput::new(event))
     }
 
     /// Detects long presses for all mouse buttons.
@@ -236,7 +236,7 @@ impl MouseState {
     /// This method should be called on every frame update. It checks if any button has been
     /// held down for the `long_press_duration` without being dragged, and if so, generates
     /// a `LongPressed` event.
-    pub fn long_pressing_detection(&mut self) -> Vec<DeviceEvent> {
+    pub fn long_pressing_detection(&mut self) -> Vec<DeviceInput> {
         let now = Instant::now();
 
         let mut events = Vec::new();
@@ -288,7 +288,7 @@ impl MouseState {
                             button: logical_button,
                         }),
                     );
-                    events.push(DeviceEvent::new(event));
+                    events.push(DeviceInput::new(event));
                 }
             }
         }

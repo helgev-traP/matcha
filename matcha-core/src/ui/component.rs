@@ -7,7 +7,7 @@ use tokio::sync::{Mutex, RwLock, RwLockReadGuard};
 use utils::back_prop_dirty::BackPropDirty;
 
 use crate::{
-    device_event::DeviceEvent,
+    device_input::DeviceInput,
     ui::{
         AnyWidget, AnyWidgetFrame, Background, Constraints, Dom, UpdateWidgetError, WidgetContext,
         widget::AnyWidgetFramePrivate,
@@ -32,7 +32,7 @@ pub struct Component<
     // update model with message
     update: fn(&Message, &ModelAccessor<Model>),
     // update model with device event
-    input: fn(&DeviceEvent, &ModelAccessor<Model>),
+    input: fn(&DeviceInput, &ModelAccessor<Model>),
     // update model with inner event and can emit new event
     event: fn(InnerEvent, &ModelAccessor<Model>) -> Option<Event>,
     // view function
@@ -54,7 +54,7 @@ impl<Model: Send + Sync + 'static, Message, Event: 'static, InnerEvent: 'static>
             model_update_flag: Arc::new(UpdateFlag::new(false)),
             setup: |_: &ModelAccessor<Model>| {},
             update: |_: &Message, _: &ModelAccessor<Model>| {},
-            input: |_: &DeviceEvent, _: &ModelAccessor<Model>| {},
+            input: |_: &DeviceInput, _: &ModelAccessor<Model>| {},
             event: |_: InnerEvent, _: &ModelAccessor<Model>| None,
             view,
         }
@@ -70,7 +70,7 @@ impl<Model: Send + Sync + 'static, Message, Event: 'static, InnerEvent: 'static>
         self
     }
 
-    pub fn input_fn(mut self, f: fn(&DeviceEvent, &ModelAccessor<Model>)) -> Self {
+    pub fn input_fn(mut self, f: fn(&DeviceInput, &ModelAccessor<Model>)) -> Self {
         self.input = f;
         self
     }
@@ -206,7 +206,7 @@ pub struct ComponentDom<Model: Send + Sync + 'static, Event: 'static, InnerEvent
     label: Option<String>,
 
     model_access: ModelAccessor<Model>,
-    input: fn(&DeviceEvent, &ModelAccessor<Model>),
+    input: fn(&DeviceInput, &ModelAccessor<Model>),
     event: fn(InnerEvent, &ModelAccessor<Model>) -> Option<Event>,
 
     dom_tree: Box<dyn Dom<InnerEvent>>,
@@ -253,7 +253,7 @@ pub struct ComponentWidget<
     label: Option<String>,
 
     model_access: ModelAccessor<Model>,
-    input: fn(&DeviceEvent, &ModelAccessor<Model>),
+    input: fn(&DeviceInput, &ModelAccessor<Model>),
     event: fn(InnerEvent, &ModelAccessor<Model>) -> Option<Event>,
 
     widget_tree: Box<dyn AnyWidgetFrame<InnerEvent>>,
@@ -262,7 +262,7 @@ pub struct ComponentWidget<
 impl<Model: Send + Sync + 'static, Event: 'static, InnerEvent: 'static> AnyWidget<Event>
     for ComponentWidget<Model, Event, InnerEvent>
 {
-    fn device_event(&mut self, event: &DeviceEvent, ctx: &WidgetContext) -> Option<Event> {
+    fn device_event(&mut self, event: &DeviceInput, ctx: &WidgetContext) -> Option<Event> {
         (self.input)(event, &self.model_access);
 
         let inner_event = self.widget_tree.device_event(event, ctx);

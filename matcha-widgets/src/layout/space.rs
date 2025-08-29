@@ -1,6 +1,6 @@
 use matcha_core::ui::widget::InvalidationHandle;
 use matcha_core::{
-    device_event::DeviceEvent,
+    device_input::DeviceInput,
     ui::{
         AnyWidget, AnyWidgetFrame, Arrangement, Background, Constraints, Dom, Widget,
         WidgetContext, WidgetFrame,
@@ -86,7 +86,7 @@ impl<T: Send + 'static> Widget<Space, T, ()> for SpaceNode {
     fn device_event(
         &mut self,
         _bounds: [f32; 2],
-        _event: &DeviceEvent,
+        _event: &DeviceInput,
         _children: &mut [(&mut dyn AnyWidget<T>, &mut (), &Arrangement)],
         _cache_invalidator: InvalidationHandle,
         _ctx: &WidgetContext,

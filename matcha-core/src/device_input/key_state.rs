@@ -1,4 +1,4 @@
-use super::{DeviceEvent, DeviceEventData, KeyInput};
+use super::{DeviceEventData, DeviceInput, KeyInput};
 use std::collections::VecDeque;
 
 #[derive(Clone, Default, Debug, PartialEq, Eq)]
@@ -17,7 +17,7 @@ impl KeyboardState {
         self.modifiers = modifiers;
     }
 
-    pub fn keyboard_input(&mut self, key_event: winit::event::KeyEvent) -> Option<DeviceEvent> {
+    pub fn keyboard_input(&mut self, key_event: winit::event::KeyEvent) -> Option<DeviceInput> {
         let winit::keyboard::PhysicalKey::Code(key_code) = key_event.physical_key else {
             return None;
         };
@@ -36,7 +36,7 @@ impl KeyboardState {
                 }
             }
         }
-        Some(DeviceEvent::new(DeviceEventData::Keyboard(KeyInput {
+        Some(DeviceInput::new(DeviceEventData::Keyboard(KeyInput {
             winit: key_event,
             snapshot: self.clone(),
         })))

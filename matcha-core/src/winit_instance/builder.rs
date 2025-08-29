@@ -5,7 +5,7 @@ use winit::dpi::PhysicalSize;
 use crate::{
     Component,
     backend::Backend,
-    device_event::mouse_state::MousePrimaryButton,
+    device_input::mouse_state::MousePrimaryButton,
     types::color::Color,
     winit_instance::{
         AnyResource, WinitInstance, error, render_control, ticker, ui_control, window_surface,

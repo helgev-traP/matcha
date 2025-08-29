@@ -5,8 +5,8 @@ use winit::dpi::{PhysicalPosition, PhysicalSize};
 
 use crate::{
     Component, UpdateNotifier,
-    device_event::{
-        DeviceEvent, DeviceEventData,
+    device_input::{
+        DeviceEventData, DeviceInput,
         key_state::KeyboardState,
         mouse_state::{MousePrimaryButton, MouseState},
         window_state::WindowState,
@@ -153,7 +153,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
         window_event: winit::event::WindowEvent,
         get_window_size: impl Fn() -> (PhysicalSize<u32>, PhysicalSize<u32>),
         get_window_position: impl Fn() -> (PhysicalPosition<i32>, PhysicalPosition<i32>),
-    ) -> Option<DeviceEvent> {
+    ) -> Option<DeviceInput> {
         match window_event {
             // we don't handle these events here
             winit::event::WindowEvent::ScaleFactorChanged { .. }
@@ -165,46 +165,46 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
             // window interactions
             winit::event::WindowEvent::Resized(_) => {
                 let (inner_size, outer_size) = get_window_size();
-                Some(DeviceEvent::new(
+                Some(DeviceInput::new(
                     self.window_state
                         .resized(inner_size.into(), outer_size.into()),
                 ))
             }
             winit::event::WindowEvent::Moved(_) => {
                 let (inner_position, outer_position) = get_window_position();
-                Some(DeviceEvent::new(
+                Some(DeviceInput::new(
                     self.window_state
                         .moved(inner_position.into(), outer_position.into()),
                 ))
             }
             winit::event::WindowEvent::CloseRequested => {
-                Some(DeviceEvent::new(DeviceEventData::CloseRequested))
+                Some(DeviceInput::new(DeviceEventData::CloseRequested))
             }
             winit::event::WindowEvent::Focused(focused) => {
-                Some(DeviceEvent::new(DeviceEventData::WindowFocus(focused)))
+                Some(DeviceInput::new(DeviceEventData::WindowFocus(focused)))
             }
             winit::event::WindowEvent::ThemeChanged(theme) => {
-                Some(DeviceEvent::new(DeviceEventData::Theme(theme)))
+                Some(DeviceInput::new(DeviceEventData::Theme(theme)))
             }
 
             // file drop events
             winit::event::WindowEvent::DroppedFile(path_buf) => {
                 let mouse_position = self.mouse_state.position();
-                Some(DeviceEvent::new(DeviceEventData::FileDrop {
+                Some(DeviceInput::new(DeviceEventData::FileDrop {
                     mouse_position,
                     path_buf,
                 }))
             }
             winit::event::WindowEvent::HoveredFile(path_buf) => {
                 let mouse_position = self.mouse_state.position();
-                Some(DeviceEvent::new(DeviceEventData::FileHover {
+                Some(DeviceInput::new(DeviceEventData::FileHover {
                     mouse_position,
                     path_buf,
                 }))
             }
             winit::event::WindowEvent::HoveredFileCancelled => {
                 let mouse_position = self.mouse_state.position();
-                Some(DeviceEvent::new(DeviceEventData::FileHoverCancelled {
+                Some(DeviceInput::new(DeviceEventData::FileHoverCancelled {
                     mouse_position,
                 }))
             }
@@ -217,7 +217,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
                 self.keyboard_state.modifiers_changed(modifiers.state());
                 None
             }
-            winit::event::WindowEvent::Ime(_) => Some(DeviceEvent::new(DeviceEventData::Ime)),
+            winit::event::WindowEvent::Ime(_) => Some(DeviceInput::new(DeviceEventData::Ime)),
 
             // mouse events
             winit::event::WindowEvent::CursorMoved { position, .. } => {
@@ -242,7 +242,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
             | winit::event::WindowEvent::TouchpadPressure { .. }
             | winit::event::WindowEvent::Touch(..)
             | winit::event::WindowEvent::AxisMotion { .. } => {
-                Some(DeviceEvent::new(DeviceEventData::Touch))
+                Some(DeviceInput::new(DeviceEventData::Touch))
             }
         }
     }

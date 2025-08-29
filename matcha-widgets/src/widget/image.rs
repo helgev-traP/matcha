@@ -6,7 +6,7 @@ use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
 use image::{DynamicImage, GenericImageView};
 use matcha_core::Style;
 use matcha_core::{
-    device_event::DeviceEvent,
+    device_input::DeviceInput,
     types::range::{CoverRange, Range2D},
     ui::{
         Background, Constraints, Dom, DomCompareResult, UpdateWidgetError, Widget, WidgetContext,

@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use matcha_core::{
-    device_event::{DeviceEvent, DeviceEventData, ElementState, MouseInput, MouseLogicalButton},
+    device_input::{DeviceInput, DeviceEventData, ElementState, MouseInput, MouseLogicalButton},
     types::{color::Color, range::CoverRange},
     ui::{
         Background, Constraints, Dom, DomCompareResult, Style, UpdateWidgetError, Widget,
@@ -114,7 +114,7 @@ impl<T: Send + 'static + Clone> Widget<T> for ButtonNode<T> {
         }
     }
 
-    fn device_event(&mut self, event: &DeviceEvent, context: &WidgetContext) -> Option<T> {
+    fn device_event(&mut self, event: &DeviceInput, context: &WidgetContext) -> Option<T> {
         let mut msg = None;
         let mut new_state = self.state;
 

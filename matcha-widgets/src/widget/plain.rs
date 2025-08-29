@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
 use matcha_core::{
-    device_event::DeviceEvent,
+    device_input::DeviceInput,
     types::range::{CoverRange, Range2D},
     ui::{
         Background, Constraints, Dom, DomCompareResult, Style, UpdateWidgetError, Widget,
@@ -130,7 +130,7 @@ impl<T: Send + 'static> Widget<T> for PlainNode<T> {
         }
     }
 
-    fn device_event(&mut self, event: &DeviceEvent, context: &WidgetContext) -> Option<T> {
+    fn device_event(&mut self, event: &DeviceInput, context: &WidgetContext) -> Option<T> {
         if let Some(content) = &mut self.content {
             return content.device_event(event, context);
         }

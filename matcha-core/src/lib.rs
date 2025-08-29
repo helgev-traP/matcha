@@ -10,7 +10,7 @@ pub mod ui;
 pub mod update_flag;
 
 // winit event handling
-pub mod device_event;
+pub mod device_input;
 
 // resource management
 pub mod any_resource;
@@ -25,7 +25,7 @@ pub mod types;
 
 // Re-export key components
 pub use app::App;
-pub use device_event::DeviceEvent;
+pub use device_input::DeviceInput;
 pub use ui::{
     Background, Component, ComponentDom, ComponentWidget, Constraints, Dom, Style, Widget,
     WidgetContext,

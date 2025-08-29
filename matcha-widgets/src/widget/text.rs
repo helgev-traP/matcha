@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 
 use cosmic_text::{Attrs, Color, Metrics};
 use matcha_core::{
-    device_event::DeviceEvent,
+    device_input::DeviceInput,
     types::range::CoverRange,
     ui::{
         Background, Constraints, Dom, DomCompareResult, Style, UpdateWidgetError, Widget,
@@ -152,7 +152,7 @@ impl<'a: 'static, T: Send + 'static> Widget<T> for TextNode<'a> {
         }
     }
 
-    fn device_event(&mut self, _event: &DeviceEvent, _context: &WidgetContext) -> Option<T> {
+    fn device_event(&mut self, _event: &DeviceInput, _context: &WidgetContext) -> Option<T> {
         None
     }
 

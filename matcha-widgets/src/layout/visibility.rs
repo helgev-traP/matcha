@@ -2,7 +2,7 @@ use nalgebra::Matrix4;
 
 use matcha_core::ui::widget::InvalidationHandle;
 use matcha_core::{
-    device_event::DeviceEvent,
+    device_input::DeviceInput,
     ui::{
         AnyWidget, AnyWidgetFrame, Arrangement, Background, Constraints, Dom, Widget,
         WidgetContext, WidgetFrame,
@@ -141,7 +141,7 @@ where
     fn device_event(
         &mut self,
         _bounds: [f32; 2],
-        event: &DeviceEvent,
+        event: &DeviceInput,
         children: &mut [(&mut dyn AnyWidget<T>, &mut (), &Arrangement)],
         _cache_invalidator: InvalidationHandle,
         ctx: &WidgetContext,

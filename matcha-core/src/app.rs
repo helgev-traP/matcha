@@ -1,7 +1,7 @@
 use super::{
     Component,
     backend::{Backend, StubBackend},
-    device_event::mouse_state::MousePrimaryButton,
+    device_input::mouse_state::MousePrimaryButton,
     types::color::Color,
     winit_instance::{WinitInstance, WinitInstanceBuilder},
 };

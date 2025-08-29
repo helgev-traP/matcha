@@ -21,14 +21,14 @@ pub use winit::window::Theme;
 
 /// Represents a generic UI event within the application.
 #[derive(Debug, Clone, PartialEq)]
-pub struct DeviceEvent {
+pub struct DeviceInput {
     /// raw event.
     raw: DeviceEventData,
     /// relative event.
     relative: DeviceEventData,
 }
 
-impl DeviceEvent {
+impl DeviceInput {
     /// Creates a new `Event` from a `ConcreteEvent`.
     pub(crate) fn new(event: DeviceEventData) -> Self {
         Self {

@@ -5,7 +5,7 @@ use renderer::render_node::RenderNode;
 use utils::{back_prop_dirty::BackPropDirty, cache::Cache};
 
 use crate::{
-    Background, Constraints, DeviceEvent, UpdateNotifier, WidgetContext,
+    Background, Constraints, DeviceInput, UpdateNotifier, WidgetContext,
     ui::{Arrangement, metrics::LayoutSizeKey},
 };
 
@@ -72,7 +72,7 @@ pub trait Widget<D: Dom<E>, E: 'static = (), ChildSetting: PartialEq + 'static =
     fn device_event(
         &mut self,
         bounds: [f32; 2],
-        event: &DeviceEvent,
+        event: &DeviceInput,
         children: &mut [(&mut dyn AnyWidget<E>, &mut ChildSetting, &Arrangement)],
         cache_invalidator: InvalidationHandle,
         ctx: &WidgetContext,
@@ -111,7 +111,7 @@ pub trait Widget<D: Dom<E>, E: 'static = (), ChildSetting: PartialEq + 'static =
 
 /// Make trait object that can be used from widget implement.
 pub trait AnyWidget<E: 'static> {
-    fn device_event(&mut self, event: &DeviceEvent, ctx: &WidgetContext) -> Option<E>;
+    fn device_event(&mut self, event: &DeviceInput, ctx: &WidgetContext) -> Option<E>;
 
     fn is_inside(&self, position: [f32; 2], ctx: &WidgetContext) -> bool;
 
@@ -236,7 +236,7 @@ where
     T: 'static,
     ChildSetting: Send + Sync + PartialEq + Clone + 'static,
 {
-    fn device_event(&mut self, event: &DeviceEvent, ctx: &WidgetContext) -> Option<T> {
+    fn device_event(&mut self, event: &DeviceInput, ctx: &WidgetContext) -> Option<T> {
         let Some(dirty_flags) = &self.dirty_flags else {
             return None;
         };
@@ -583,7 +583,7 @@ where
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use crate::{Constraints, DeviceEvent, UpdateNotifier};
+    use crate::{Constraints, DeviceInput, UpdateNotifier};
     use utils::back_prop_dirty::BackPropDirty;
 
     #[derive(Debug, Clone, PartialEq, Default)]
@@ -631,7 +631,7 @@ mod tests {
         fn device_event(
             &mut self,
             _bounds: [f32; 2],
-            _event: &DeviceEvent,
+            _event: &DeviceInput,
             _children: &mut [(&mut dyn AnyWidget<String>, &mut MockSetting, &Arrangement)],
             _cache_invalidator: InvalidationHandle,
             _ctx: &WidgetContext,
@@ -1043,7 +1043,7 @@ mod tests {
         fn device_event(
             &mut self,
             _bounds: [f32; 2],
-            _event: &DeviceEvent,
+            _event: &DeviceInput,
             _children: &mut [(&mut dyn AnyWidget<String>, &mut MockSetting, &Arrangement)],
             _cache_invalidator: InvalidationHandle,
             _ctx: &WidgetContext,
@@ -1162,7 +1162,7 @@ mod tests {
         fn device_event(
             &mut self,
             _: [f32; 2],
-            _: &DeviceEvent,
+            _: &DeviceInput,
             _: &mut [(&mut dyn AnyWidget<String>, &mut MockSetting, &Arrangement)],
             _: InvalidationHandle,
             _: &WidgetContext,

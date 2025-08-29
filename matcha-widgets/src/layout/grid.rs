@@ -1,7 +1,7 @@
 use std::any::Any;
 
 use matcha_core::{
-    device_event::DeviceEvent,
+    device_input::DeviceInput,
     types::range::{CoverRange, Range2D},
     ui::{
         Background, Constraints, Dom, DomCompareResult, UpdateWidgetError, Widget, WidgetContext,
@@ -142,7 +142,7 @@ impl<T: Send + 'static> Widget<T> for GridNode<T> {
         }
     }
 
-    fn device_event(&mut self, event: &DeviceEvent, context: &WidgetContext) -> Option<T> {
+    fn device_event(&mut self, event: &DeviceInput, context: &WidgetContext) -> Option<T> {
         self.items
             .iter_mut()
             .find_map(|item| item.item.device_event(event, context))
