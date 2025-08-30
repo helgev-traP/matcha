@@ -1,36 +1,52 @@
-use std::any::Any;
+use nalgebra::Matrix4;
 
+use matcha_core::ui::widget::InvalidationHandle;
 use matcha_core::{
     device_input::DeviceInput,
-    types::range::CoverRange,
     ui::{
-        Background, Constraints, Dom, DomCompareResult, UpdateWidgetError, Widget, WidgetContext,
+        AnyWidget, AnyWidgetFrame, Arrangement, Background, Constraints, Dom, Widget,
+        WidgetContext, WidgetFrame,
     },
     update_flag::UpdateNotifier,
 };
 use renderer::render_node::RenderNode;
 
 use crate::types::flex::{AlignItems, JustifyContent};
+use crate::types::size::{Size, ChildSize};
 
 // MARK: DOM
 
-pub struct Column<T> {
-    pub label: Option<String>,
-    pub justify_content: JustifyContent,
-    pub align_items: AlignItems,
-    pub items: Vec<Box<dyn Dom<T>>>,
+pub struct Column<T>
+where
+    T: Send + 'static,
+{
+    label: Option<String>,
+    justify_content: JustifyContent,
+    align_items: AlignItems,
+    items: Vec<Box<dyn Dom<T>>>,
 }
 
-impl<T> Column<T> {
-    pub fn new(label: Option<&str>) -> Box<Self> {
-        Box::new(Self {
+impl<T> Column<T>
+where
+    T: Send + 'static,
+{
+    pub fn new(label: Option<&str>) -> Self {
+        Self {
             label: label.map(String::from),
-            justify_content: JustifyContent::FlexStart {
-                gap: std::sync::Arc::new(|_, _| 0.0),
-            },
+            justify_content: JustifyContent::FlexStart { gap: Size::px(0.0) },
             align_items: AlignItems::Start,
             items: Vec::new(),
-        })
+        }
+    }
+
+    pub fn justify_content(mut self, justify_content: JustifyContent) -> Self {
+        self.justify_content = justify_content;
+        self
+    }
+
+    pub fn align_items(mut self, align_items: AlignItems) -> Self {
+        self.align_items = align_items;
+        self
     }
 
     pub fn push(mut self, item: Box<dyn Dom<T>>) -> Self {
@@ -40,20 +56,29 @@ impl<T> Column<T> {
 }
 
 #[async_trait::async_trait]
-impl<T: Send + 'static> Dom<T> for Column<T> {
-    fn build_widget_tree(&self) -> Box<dyn Widget<T>> {
-        Box::new(ColumnNode {
-            label: self.label.clone(),
-            justify_content: self.justify_content.clone(),
-            align_items: self.align_items,
-            items: self
-                .items
-                .iter()
-                .map(|item| item.build_widget_tree())
-                .collect(),
-            item_sizes: Vec::new(),
-            size: [0.0, 0.0],
-        })
+impl<T> Dom<T> for Column<T>
+where
+    T: Send + 'static,
+{
+    fn build_widget_tree(&self) -> Box<dyn AnyWidgetFrame<T>> {
+        let mut children_and_settings = Vec::new();
+        let mut child_ids = Vec::new();
+
+        for (index, item) in self.items.iter().enumerate() {
+            let child_widget = item.build_widget_tree();
+            children_and_settings.push((child_widget, ()));
+            child_ids.push(index as u128);
+        }
+
+        Box::new(WidgetFrame::new(
+            self.label.clone(),
+            children_and_settings,
+            child_ids,
+            ColumnNode {
+                justify_content: self.justify_content.clone(),
+                align_items: self.align_items,
+            },
+        ))
     }
 
     async fn set_update_notifier(&self, notifier: &UpdateNotifier) {
@@ -65,103 +90,303 @@ impl<T: Send + 'static> Dom<T> for Column<T> {
 
 // MARK: Widget
 
-pub struct ColumnNode<T> {
-    label: Option<String>,
+pub struct ColumnNode {
     justify_content: JustifyContent,
     align_items: AlignItems,
-    items: Vec<Box<dyn Widget<T>>>,
-    item_sizes: Vec<[f32; 2]>,
-    size: [f32; 2],
 }
 
-#[async_trait::async_trait]
-impl<T: Send + 'static> Widget<T> for ColumnNode<T> {
-    fn label(&self) -> Option<&str> {
-        self.label.as_deref()
-    }
+impl ColumnNode {
+    /// Calculate gap and initial offset for given justify_content (vertical axis).
+    /// - container_size: full available height
+    /// - total_child_height: sum of measured child heights
+    /// - child_max_width: maximum child width (used when Size functions consult child size)
+    /// - child_count: number of children
+    fn calc_gap_and_offset(
+        &self,
+        justify_content: &JustifyContent,
+        container_size: f32,
+        total_child_height: f32,
+        child_max_width: f32,
+        child_count: usize,
+        ctx: &WidgetContext,
+    ) -> (f32, f32) {
+        if child_count == 0 {
+            return (0.0, 0.0);
+        }
 
-    async fn update_widget_tree(
+        let mut gap: f32 = 0.0;
+        let mut offset: f32 = 0.0;
+
+        // Representative ChildSize: [width, height]
+        let mut rep_child_size = ChildSize::with_size([child_max_width, total_child_height]);
+
+        match justify_content {
+            JustifyContent::FlexStart { gap: g }
+            | JustifyContent::FlexEnd { gap: g }
+            | JustifyContent::Center { gap: g } => {
+                match g.clone() {
+                    Size::Grow(_) => {
+                        if child_count >= 2 {
+                            let available_space = container_size - total_child_height;
+                            gap = (available_space / (child_count - 1) as f32).max(0.0);
+                            offset = 0.0;
+                        } else {
+                            // single child: gap 0, offset depends on alignment
+                            gap = 0.0;
+                            offset = match justify_content {
+                                JustifyContent::FlexEnd { .. } => container_size - total_child_height,
+                                JustifyContent::Center { .. } => (container_size - total_child_height) / 2.0,
+                                _ => 0.0,
+                            };
+                        }
+                    }
+                    _ => {
+                        gap = g.size([Some(container_size), Some(child_max_width)], &mut rep_child_size, ctx);
+                        offset = 0.0;
+                    }
+                }
+            }
+            JustifyContent::SpaceAround => {
+                let available_space = container_size - total_child_height;
+                gap = available_space / child_count as f32;
+                offset = gap / 2.0;
+            }
+            JustifyContent::SpaceEvenly => {
+                let available_space = container_size - total_child_height;
+                gap = available_space / (child_count + 1) as f32;
+                offset = gap;
+            }
+            JustifyContent::SpaceBetween => {
+                let available_space = container_size - total_child_height;
+                if child_count >= 2 {
+                    gap = (available_space / (child_count - 1) as f32).max(0.0);
+                    offset = 0.0;
+                } else {
+                    gap = 0.0;
+                    offset = 0.0;
+                }
+            }
+        }
+
+        gap = gap.max(0.0);
+
+        offset = match justify_content {
+            JustifyContent::FlexEnd { .. } => container_size - total_child_height - gap * (child_count - 1) as f32,
+            JustifyContent::Center { .. } => (container_size - total_child_height - gap * (child_count - 1) as f32) / 2.0,
+            JustifyContent::SpaceAround => gap / 2.0,
+            JustifyContent::SpaceEvenly => gap,
+            _ => offset,
+        };
+
+        (gap, offset)
+    }
+}
+
+impl<T> Widget<Column<T>, T, ()> for ColumnNode
+where
+    T: Send + 'static,
+{
+    fn update_widget<'a>(
         &mut self,
-        _component_updated: bool,
-        dom: &dyn Dom<T>,
-    ) -> Result<(), UpdateWidgetError> {
-        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Column<T>>() {
-            self.label = dom.label.clone();
-            self.justify_content = dom.justify_content.clone();
-            self.align_items = dom.align_items;
-            // This is a simplified update. A real implementation would diff the items.
-            self.items = dom
-                .items
-                .iter()
-                .map(|item| item.build_widget_tree())
-                .collect();
-            Ok(())
-        } else {
-            Err(UpdateWidgetError::TypeMismatch)
-        }
-    }
+        dom: &'a Column<T>,
+        cache_invalidator: Option<InvalidationHandle>,
+    ) -> Vec<(&'a dyn Dom<T>, (), u128)> {
+        // Check if justify_content or align_items changed
+        let justify_content_changed = !matches!(
+            (&self.justify_content, &dom.justify_content),
+            (
+                JustifyContent::FlexStart { .. },
+                JustifyContent::FlexStart { .. }
+            ) | (
+                JustifyContent::FlexEnd { .. },
+                JustifyContent::FlexEnd { .. }
+            ) | (JustifyContent::Center { .. }, JustifyContent::Center { .. })
+                | (JustifyContent::SpaceBetween, JustifyContent::SpaceBetween)
+                | (JustifyContent::SpaceAround, JustifyContent::SpaceAround)
+                | (JustifyContent::SpaceEvenly, JustifyContent::SpaceEvenly)
+        );
 
-    fn compare(&self, dom: &dyn Dom<T>) -> DomCompareResult {
-        if (dom as &dyn Any).downcast_ref::<Column<T>>().is_some() {
-            DomCompareResult::Same // Simplified
-        } else {
-            DomCompareResult::Different
-        }
-    }
-
-    fn device_input(&mut self, event: &DeviceInput, context: &WidgetContext) -> Option<T> {
-        self.items
-            .iter_mut()
-            .find_map(|item| item.device_input(event, context))
-    }
-
-    fn is_inside(&mut self, position: [f32; 2], context: &WidgetContext) -> bool {
-        self.items
-            .iter_mut()
-            .any(|item| item.is_inside(position, context))
-    }
-
-    fn preferred_size(&mut self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
-        let mut total_height = 0.0;
-        let mut max_width: f32 = 0.0;
-        self.item_sizes.clear();
-
-        for item in &mut self.items {
-            let item_size = item.preferred_size(constraints, context);
-            self.item_sizes.push(item_size);
-            total_height += item_size[1];
-            max_width = max_width.max(item_size[0]);
+        if justify_content_changed || self.align_items != dom.align_items {
+            cache_invalidator.map(|h| h.relayout_next_frame());
         }
 
-        [max_width, total_height]
+        self.justify_content = dom.justify_content.clone();
+        self.align_items = dom.align_items;
+
+        dom.items
+            .iter()
+            .enumerate()
+            .map(|(index, item)| (item.as_ref(), (), index as u128))
+            .collect()
     }
 
-    fn arrange(&mut self, final_size: [f32; 2], context: &WidgetContext) {
-        self.size = final_size;
-        let mut y_pos = 0.0;
-        for (item, &item_size) in self.items.iter_mut().zip(&self.item_sizes) {
-            // This is a simplified arrangement (FlexStart).
-            // A full implementation would handle justify_content and align_items.
-            let child_final_size = [final_size[0], item_size[1]];
-            item.arrange(child_final_size, context);
-            y_pos += item_size[1];
+    fn device_input(
+        &mut self,
+        _bounds: [f32; 2],
+        event: &DeviceInput,
+        children: &mut [(&mut dyn AnyWidget<T>, &mut (), &Arrangement)],
+        _cache_invalidator: InvalidationHandle,
+        ctx: &WidgetContext,
+    ) -> Option<T> {
+        // Process children in reverse order for proper event handling
+        for (child, _, arrangement) in children.iter_mut().rev() {
+            let child_event = event.transform(arrangement.affine);
+            if let Some(result) = child.device_event(&child_event, ctx) {
+                return Some(result);
+            }
         }
+        None
     }
 
-    fn need_rerendering(&self) -> bool {
-        self.items.iter().any(|item| item.need_rerendering())
+    fn is_inside(
+        &self,
+        bounds: [f32; 2],
+        position: [f32; 2],
+        _children: &[(&dyn AnyWidget<T>, &(), &Arrangement)],
+        _ctx: &WidgetContext,
+    ) -> bool {
+        0.0 <= position[0]
+            && position[0] <= bounds[0]
+            && 0.0 <= position[1]
+            && position[1] <= bounds[1]
     }
 
-    fn render(&mut self, background: Background, ctx: &WidgetContext) -> RenderNode {
-        let mut render_node = RenderNode::new();
-        let mut y_pos = 0.0;
+    fn measure(
+        &self,
+        constraints: &Constraints,
+        children: &[(&dyn AnyWidget<T>, &())],
+        ctx: &WidgetContext,
+    ) -> [f32; 2] {
+        if children.is_empty() {
+            return [0.0, 0.0];
+        }
 
-        for (item, &item_size) in self.items.iter_mut().zip(&self.item_sizes) {
+        let mut total_height = 0.0f32;
+        let mut max_width = 0.0f32;
+
+        // Measure all children
+        for (child, _) in children {
+            let child_size = child.measure(constraints, ctx);
+            total_height += child_size[1];
+            max_width = max_width.max(child_size[0]);
+        }
+
+        // Compute gap using helper (accounts for Grow and space distribution)
+        let (gap, _offset) = self.calc_gap_and_offset(
+            &self.justify_content,
+            constraints.max_height(),
+            total_height,
+            max_width,
+            children.len(),
+            ctx,
+        );
+
+        if children.len() > 1 {
+            total_height += gap * (children.len() - 1) as f32;
+        }
+
+        [
+            max_width.min(constraints.max_width()),
+            total_height.min(constraints.max_height()),
+        ]
+    }
+
+    fn arrange(
+        &self,
+        size: [f32; 2],
+        children: &[(&dyn AnyWidget<T>, &())],
+        ctx: &WidgetContext,
+    ) -> Vec<Arrangement> {
+        if children.is_empty() {
+            return vec![];
+        }
+
+        // Measure children to get their preferred sizes constrained by final size
+        let child_constraints = Constraints::new([0.0, size[0]], [0.0, size[1]]);
+        let child_sizes: Vec<[f32; 2]> = children
+            .iter()
+            .map(|(child, _)| child.measure(&child_constraints, ctx))
+            .collect();
+
+        let total_child_height: f32 = child_sizes.iter().map(|s| s[1]).sum();
+
+        // Compute child max width for Size evaluation and get gap + starting offset
+        let mut child_max_width: f32 = 0.0;
+        for s in &child_sizes {
+            child_max_width = child_max_width.max(s[0]);
+        }
+
+        let (gap, mut y_offset) = self.calc_gap_and_offset(
+            &self.justify_content,
+            size[1],
+            total_child_height,
+            child_max_width,
+            child_sizes.len(),
+            ctx,
+        );
+
+        let mut arrangements = Vec::new();
+
+        for (index, &child_size) in child_sizes.iter().enumerate() {
+            // Calculate x offset based on align_items (cross-axis)
+            let x_offset = match self.align_items {
+                AlignItems::Start => 0.0,
+                AlignItems::End => size[0] - child_size[0],
+                AlignItems::Center => (size[0] - child_size[0]) / 2.0,
+            };
+
             let transform =
-                nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(0.0, y_pos, 0.0));
-            let child_node = item.render(background.translate([0.0, y_pos]), ctx);
-            render_node.push_child(child_node, transform);
-            y_pos += item_size[1];
+                Matrix4::new_translation(&nalgebra::Vector3::new(x_offset, y_offset, 0.0));
+            arrangements.push(Arrangement::new(child_size, transform));
+
+            // Calculate spacing for next child (vertical spacing)
+            let spacing = match &self.justify_content {
+                JustifyContent::FlexStart { .. }
+                | JustifyContent::FlexEnd { .. }
+                | JustifyContent::Center { .. } => gap,
+                JustifyContent::SpaceBetween => {
+                    if children.len() > 1 && index < children.len() - 1 {
+                        (size[1] - total_child_height) / (children.len() - 1) as f32
+                    } else {
+                        0.0
+                    }
+                }
+                JustifyContent::SpaceAround => {
+                    if children.len() > 1 {
+                        (size[1] - total_child_height) / children.len() as f32
+                    } else {
+                        0.0
+                    }
+                }
+                JustifyContent::SpaceEvenly => {
+                    if children.len() > 1 {
+                        (size[1] - total_child_height) / (children.len() + 1) as f32
+                    } else {
+                        0.0
+                    }
+                }
+            };
+
+            y_offset += child_size[1] + spacing;
+        }
+
+        arrangements
+    }
+
+    fn render(
+        &self,
+        background: Background,
+        children: &[(&dyn AnyWidget<T>, &(), &Arrangement)],
+        ctx: &WidgetContext,
+    ) -> RenderNode {
+        let mut render_node = RenderNode::new();
+
+        for (child, _, arrangement) in children {
+            let final_size = arrangement.size;
+            let affine = arrangement.affine;
+
+            let child_node = child.render(final_size, background, ctx);
+            render_node = render_node.add_child(child_node, affine);
         }
 
         render_node

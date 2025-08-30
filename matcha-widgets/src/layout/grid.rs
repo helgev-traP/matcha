@@ -1,10 +1,11 @@
-use std::any::Any;
+use nalgebra::Matrix4;
 
+use matcha_core::ui::widget::InvalidationHandle;
 use matcha_core::{
     device_input::DeviceInput,
-    types::range::{CoverRange, Range2D},
     ui::{
-        Background, Constraints, Dom, DomCompareResult, UpdateWidgetError, Widget, WidgetContext,
+        AnyWidget, AnyWidgetFrame, Arrangement, Background, Constraints, Dom, Widget,
+        WidgetContext, WidgetFrame,
     },
     update_flag::UpdateNotifier,
 };
@@ -41,6 +42,11 @@ impl<T: Send + 'static> Grid<T> {
         }
     }
 
+    pub fn label(mut self, label: Option<String>) -> Self {
+        self.label = label;
+        self
+    }
+
     pub fn template_columns(mut self, columns: Vec<Size>) -> Self {
         self.template_columns = columns;
         self
@@ -48,6 +54,16 @@ impl<T: Send + 'static> Grid<T> {
 
     pub fn template_rows(mut self, rows: Vec<Size>) -> Self {
         self.template_rows = rows;
+        self
+    }
+
+    pub fn gap_columns(mut self, gap: Size) -> Self {
+        self.gap_columns = gap;
+        self
+    }
+
+    pub fn gap_rows(mut self, gap: Size) -> Self {
+        self.gap_rows = gap;
         self
     }
 
@@ -68,25 +84,33 @@ impl<T: Send + 'static> Grid<T> {
 
 #[async_trait::async_trait]
 impl<T: Send + 'static> Dom<T> for Grid<T> {
-    fn build_widget_tree(&self) -> Box<dyn Widget<T>> {
-        Box::new(GridNode {
-            label: self.label.clone(),
-            template_columns: self.template_columns.clone(),
-            template_rows: self.template_rows.clone(),
-            gap_columns: self.gap_columns.clone(),
-            gap_rows: self.gap_rows.clone(),
-            items: self
-                .items
-                .iter()
-                .map(|item| GridNodeItem {
-                    column: item.column,
-                    row: item.row,
-                    item: item.item.build_widget_tree(),
-                })
-                .collect(),
-            column_ranges: Vec::new(),
-            row_ranges: Vec::new(),
-        })
+    fn build_widget_tree(&self) -> Box<dyn AnyWidgetFrame<T>> {
+        let mut children_and_settings = Vec::new();
+        let mut child_ids = Vec::new();
+
+        for (index, grid_item) in self.items.iter().enumerate() {
+            let child_widget = grid_item.item.build_widget_tree();
+            let grid_child_setting = GridChildSetting {
+                column: grid_item.column,
+                row: grid_item.row,
+            };
+            children_and_settings.push((child_widget, grid_child_setting));
+            child_ids.push(index as u128);
+        }
+
+        Box::new(WidgetFrame::new(
+            self.label.clone(),
+            children_and_settings,
+            child_ids,
+            GridNode {
+                template_columns: self.template_columns.clone(),
+                template_rows: self.template_rows.clone(),
+                gap_columns: self.gap_columns.clone(),
+                gap_rows: self.gap_rows.clone(),
+                column_ranges: Vec::new(),
+                row_ranges: Vec::new(),
+            },
+        ))
     }
 
     async fn set_update_notifier(&self, notifier: &UpdateNotifier) {
@@ -98,203 +122,281 @@ impl<T: Send + 'static> Dom<T> for Grid<T> {
 
 // MARK: Widget
 
-pub struct GridNode<T: Send + 'static> {
-    label: Option<String>,
+#[derive(Clone, PartialEq)]
+pub struct GridChildSetting {
+    pub column: [usize; 2],
+    pub row: [usize; 2],
+}
+
+pub struct GridNode {
     template_columns: Vec<Size>,
     template_rows: Vec<Size>,
     gap_columns: Size,
     gap_rows: Size,
-    items: Vec<GridNodeItem<T>>,
     column_ranges: Vec<[f32; 2]>,
     row_ranges: Vec<[f32; 2]>,
 }
 
-struct GridNodeItem<T: Send + 'static> {
-    column: [usize; 2],
-    row: [usize; 2],
-    item: Box<dyn Widget<T>>,
-}
-
-#[async_trait::async_trait]
-impl<T: Send + 'static> Widget<T> for GridNode<T> {
-    fn label(&self) -> Option<&str> {
-        self.label.as_deref()
-    }
-
-    async fn update_widget_tree(
+impl<T> Widget<Grid<T>, T, GridChildSetting> for GridNode
+where
+    T: Send + 'static,
+{
+    fn update_widget<'a>(
         &mut self,
-        _component_updated: bool,
-        dom: &dyn Dom<T>,
-    ) -> Result<(), UpdateWidgetError> {
-        if let Some(_dom) = (dom as &dyn Any).downcast_ref::<Grid<T>>() {
-            // Simplified update logic
-            Ok(())
-        } else {
-            Err(UpdateWidgetError::TypeMismatch)
+        dom: &'a Grid<T>,
+        cache_invalidator: Option<InvalidationHandle>,
+    ) -> Vec<(&'a dyn Dom<T>, GridChildSetting, u128)> {
+        // Check if template or gap settings changed
+        if self.template_columns != dom.template_columns
+            || self.template_rows != dom.template_rows
+            || self.gap_columns != dom.gap_columns
+            || self.gap_rows != dom.gap_rows
+        {
+            if let Some(handle) = cache_invalidator {
+                handle.relayout_next_frame();
+            }
         }
+
+        self.template_columns = dom.template_columns.clone();
+        self.template_rows = dom.template_rows.clone();
+        self.gap_columns = dom.gap_columns.clone();
+        self.gap_rows = dom.gap_rows.clone();
+
+        dom.items
+            .iter()
+            .enumerate()
+            .map(|(index, grid_item)| {
+                (
+                    grid_item.item.as_ref(),
+                    GridChildSetting {
+                        column: grid_item.column,
+                        row: grid_item.row,
+                    },
+                    index as u128,
+                )
+            })
+            .collect()
     }
 
-    fn compare(&self, dom: &dyn Dom<T>) -> DomCompareResult {
-        if (dom as &dyn Any).downcast_ref::<Grid<T>>().is_some() {
-            DomCompareResult::Same // Simplified
-        } else {
-            DomCompareResult::Different
+    fn device_input(
+        &mut self,
+        _bounds: [f32; 2],
+        event: &DeviceInput,
+        children: &mut [(&mut dyn AnyWidget<T>, &mut GridChildSetting, &Arrangement)],
+        _cache_invalidator: InvalidationHandle,
+        ctx: &WidgetContext,
+    ) -> Option<T> {
+        for (child, _, arrangement) in children.iter_mut() {
+            let child_event = event.transform(arrangement.affine);
+            if let Some(result) = child.device_event(&child_event, ctx) {
+                return Some(result);
+            }
         }
+        None
     }
 
-    fn device_input(&mut self, event: &DeviceInput, context: &WidgetContext) -> Option<T> {
-        self.items
-            .iter_mut()
-            .find_map(|item| item.item.device_input(event, context))
-    }
-
-    fn is_inside(&mut self, position: [f32; 2], context: &WidgetContext) -> bool {
-        self.items
-            .iter_mut()
-            .any(|item| item.item.is_inside(position, context))
-    }
-
-    fn preferred_size(&mut self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
-        // A proper implementation would calculate the preferred size based on content.
-        // For now, we just use the constraints.
-        [constraints.max_width, constraints.max_height]
-    }
-
-    fn arrange(&mut self, final_size: [f32; 2], context: &WidgetContext) {
-        let (column_ranges, row_ranges) = calc_px_siz(
-            [Some(final_size[0]), Some(final_size[1])],
-            &self.template_columns,
-            &self.gap_columns,
-            &self.template_rows,
-            &self.gap_rows,
-            context,
-        );
-        self.column_ranges = column_ranges;
-        self.row_ranges = row_ranges;
-
-        for item in &mut self.items {
-            let col_start = self.column_ranges[item.column[0]][0];
-            let col_end = self.column_ranges[item.column[1] - 1][1];
-            let row_start = self.row_ranges[item.row[0]][0];
-            let row_end = self.row_ranges[item.row[1] - 1][1];
-            let item_size = [col_end - col_start, row_end - row_start];
-            item.item.arrange(item_size, context);
+    fn is_inside(
+        &self,
+        bounds: [f32; 2],
+        position: [f32; 2],
+        children: &[(&dyn AnyWidget<T>, &GridChildSetting, &Arrangement)],
+        ctx: &WidgetContext,
+    ) -> bool {
+        // Check if position is within grid bounds
+        if position[0] < 0.0
+            || position[0] > bounds[0]
+            || position[1] < 0.0
+            || position[1] > bounds[1]
+        {
+            return false;
         }
+
+        // Check if position is within any child
+        for (child, _, arrangement) in children {
+            let local_position = arrangement.to_local(position);
+            if child.is_inside(local_position, ctx) {
+                return true;
+            }
+        }
+
+        false
     }
 
-    fn need_rerendering(&self) -> bool {
-        self.items.iter().any(|item| item.item.need_rerendering())
+    fn measure(
+        &self,
+        constraints: &Constraints,
+        children: &[(&dyn AnyWidget<T>, &GridChildSetting)],
+        ctx: &WidgetContext,
+    ) -> [f32; 2] {
+        if self.template_columns.is_empty() || self.template_rows.is_empty() {
+            return [0.0, 0.0];
+        }
+
+        let parent_size = [
+            Some(constraints.max_width()),
+            Some(constraints.max_height()),
+        ];
+        let (column_ranges, row_ranges) = self.calc_grid_layout(parent_size, ctx);
+
+        let total_width = column_ranges.last().map(|r| r[1]).unwrap_or(0.0);
+        let total_height = row_ranges.last().map(|r| r[1]).unwrap_or(0.0);
+
+        [
+            total_width
+                .min(constraints.max_width())
+                .max(constraints.min_width()),
+            total_height
+                .min(constraints.max_height())
+                .max(constraints.min_height()),
+        ]
     }
 
-    fn render(&mut self, background: Background, ctx: &WidgetContext) -> RenderNode {
+    fn arrange(
+        &self,
+        size: [f32; 2],
+        children: &[(&dyn AnyWidget<T>, &GridChildSetting)],
+        ctx: &WidgetContext,
+    ) -> Vec<Arrangement> {
+        let parent_size = [Some(size[0]), Some(size[1])];
+        let (column_ranges, row_ranges) = self.calc_grid_layout(parent_size, ctx);
+
+        children
+            .iter()
+            .map(|(_, setting)| {
+                let col_start = column_ranges
+                    .get(setting.column[0])
+                    .map(|r| r[0])
+                    .unwrap_or(0.0);
+                let col_end = column_ranges
+                    .get(setting.column[1].saturating_sub(1))
+                    .map(|r| r[1])
+                    .unwrap_or(col_start);
+                let row_start = row_ranges.get(setting.row[0]).map(|r| r[0]).unwrap_or(0.0);
+                let row_end = row_ranges
+                    .get(setting.row[1].saturating_sub(1))
+                    .map(|r| r[1])
+                    .unwrap_or(row_start);
+
+                let child_size = [
+                    (col_end - col_start).max(0.0),
+                    (row_end - row_start).max(0.0),
+                ];
+
+                let transform =
+                    Matrix4::new_translation(&nalgebra::Vector3::new(col_start, row_start, 0.0));
+
+                Arrangement::new(child_size, transform)
+            })
+            .collect()
+    }
+
+    fn render(
+        &self,
+        background: Background,
+        children: &[(&dyn AnyWidget<T>, &GridChildSetting, &Arrangement)],
+        ctx: &WidgetContext,
+    ) -> RenderNode {
         let mut render_node = RenderNode::new();
 
-        for item in &mut self.items {
-            let col_start = self.column_ranges[item.column[0]][0];
-            let row_start = self.row_ranges[item.row[0]][0];
-            let position = [col_start, row_start];
-
-            let transform = nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(
-                position[0],
-                position[1],
-                0.0,
-            ));
-            let child_node = item.item.render(background.translate(position), ctx);
-            render_node.push_child(child_node, transform);
+        for (child, _, arrangement) in children {
+            let child_node = child.render(arrangement.size, background, ctx);
+            render_node = render_node.add_child(child_node, arrangement.affine);
         }
 
         render_node
     }
 }
 
-fn calc_px_siz(
-    parent_size: [Option<f32>; 2],
-    template_columns: &[Size],
-    column_gap: &Size,
-    template_rows: &[Size],
-    row_gap: &Size,
-    context: &WidgetContext,
-) -> (Vec<[f32; 2]>, Vec<[f32; 2]>) {
-    let (column_px_sum, column_grow_sum) =
-        template_columns
-            .iter()
-            .fold((0.0, 0.0), |(sum, grow_sum), size| match size {
-                Size::Size(f) => (
-                    sum + f(parent_size, &mut ChildSize::default(), context),
-                    grow_sum,
-                ),
-                Size::Grow(f) => (
-                    sum,
-                    grow_sum + f(parent_size, &mut ChildSize::default(), context),
-                ),
-            });
+impl GridNode {
+    fn calc_grid_layout(
+        &self,
+        parent_size: [Option<f32>; 2],
+        context: &WidgetContext,
+    ) -> (Vec<[f32; 2]>, Vec<[f32; 2]>) {
+        let (column_px_sum, column_grow_sum) =
+            self.template_columns
+                .iter()
+                .fold((0.0, 0.0), |(sum, grow_sum), size| match size {
+                    Size::Size(f) => (
+                        sum + f(parent_size, &mut ChildSize::default(), context),
+                        grow_sum,
+                    ),
+                    Size::Grow(f) => (
+                        sum,
+                        grow_sum + f(parent_size, &mut ChildSize::default(), context),
+                    ),
+                });
 
-    let (row_px_sum, row_grow_sum) =
-        template_rows
-            .iter()
-            .fold((0.0, 0.0), |(sum, grow_sum), size| match size {
-                Size::Size(f) => (
-                    sum + f(parent_size, &mut ChildSize::default(), context),
-                    grow_sum,
-                ),
-                Size::Grow(f) => (
-                    sum,
-                    grow_sum + f(parent_size, &mut ChildSize::default(), context),
-                ),
-            });
+        let (row_px_sum, row_grow_sum) =
+            self.template_rows
+                .iter()
+                .fold((0.0, 0.0), |(sum, grow_sum), size| match size {
+                    Size::Size(f) => (
+                        sum + f(parent_size, &mut ChildSize::default(), context),
+                        grow_sum,
+                    ),
+                    Size::Grow(f) => (
+                        sum,
+                        grow_sum + f(parent_size, &mut ChildSize::default(), context),
+                    ),
+                });
 
-    let column_gap_px = match column_gap {
-        Size::Size(f) => f(parent_size, &mut ChildSize::default(), context),
-        Size::Grow(f) => f(parent_size, &mut ChildSize::default(), context), // Grow in gap is not well-defined, treat as px for now
-    };
-    let total_column_gap = column_gap_px * (template_columns.len().saturating_sub(1) as f32);
-
-    let row_gap_px = match row_gap {
-        Size::Size(f) => f(parent_size, &mut ChildSize::default(), context),
-        Size::Grow(f) => f(parent_size, &mut ChildSize::default(), context),
-    };
-    let total_row_gap = row_gap_px * (template_rows.len().saturating_sub(1) as f32);
-
-    let column_px_per_grow = if column_grow_sum > 0.0 {
-        ((parent_size[0].unwrap_or(0.0) - column_px_sum - total_column_gap) / column_grow_sum)
-            .max(0.0)
-    } else {
-        0.0
-    };
-
-    let row_px_per_grow = if row_grow_sum > 0.0 {
-        ((parent_size[1].unwrap_or(0.0) - row_px_sum - total_row_gap) / row_grow_sum).max(0.0)
-    } else {
-        0.0
-    };
-
-    let mut column_ranges = Vec::with_capacity(template_columns.len());
-    let mut current_x = 0.0;
-    for size in template_columns {
-        let start = current_x;
-        let width = match size {
+        let column_gap_px = match &self.gap_columns {
             Size::Size(f) => f(parent_size, &mut ChildSize::default(), context),
-            Size::Grow(f) => {
-                column_px_per_grow * f(parent_size, &mut ChildSize::default(), context)
-            }
+            Size::Grow(f) => f(parent_size, &mut ChildSize::default(), context),
         };
-        let end = start + width;
-        column_ranges.push([start, end]);
-        current_x = end + column_gap_px;
-    }
+        let total_column_gap =
+            column_gap_px * (self.template_columns.len().saturating_sub(1) as f32);
 
-    let mut row_ranges = Vec::with_capacity(template_rows.len());
-    let mut current_y = 0.0;
-    for size in template_rows {
-        let start = current_y;
-        let height = match size {
+        let row_gap_px = match &self.gap_rows {
             Size::Size(f) => f(parent_size, &mut ChildSize::default(), context),
-            Size::Grow(f) => row_px_per_grow * f(parent_size, &mut ChildSize::default(), context),
+            Size::Grow(f) => f(parent_size, &mut ChildSize::default(), context),
         };
-        let end = start + height;
-        row_ranges.push([start, end]);
-        current_y = end + row_gap_px;
-    }
+        let total_row_gap = row_gap_px * (self.template_rows.len().saturating_sub(1) as f32);
 
-    (column_ranges, row_ranges)
+        let column_px_per_grow = if column_grow_sum > 0.0 {
+            ((parent_size[0].unwrap_or(0.0) - column_px_sum - total_column_gap) / column_grow_sum)
+                .max(0.0)
+        } else {
+            0.0
+        };
+
+        let row_px_per_grow = if row_grow_sum > 0.0 {
+            ((parent_size[1].unwrap_or(0.0) - row_px_sum - total_row_gap) / row_grow_sum).max(0.0)
+        } else {
+            0.0
+        };
+
+        let mut column_ranges = Vec::with_capacity(self.template_columns.len());
+        let mut current_x = 0.0;
+        for size in &self.template_columns {
+            let start = current_x;
+            let width = match size {
+                Size::Size(f) => f(parent_size, &mut ChildSize::default(), context),
+                Size::Grow(f) => {
+                    column_px_per_grow * f(parent_size, &mut ChildSize::default(), context)
+                }
+            };
+            let end = start + width;
+            column_ranges.push([start, end]);
+            current_x = end + column_gap_px;
+        }
+
+        let mut row_ranges = Vec::with_capacity(self.template_rows.len());
+        let mut current_y = 0.0;
+        for size in &self.template_rows {
+            let start = current_y;
+            let height = match size {
+                Size::Size(f) => f(parent_size, &mut ChildSize::default(), context),
+                Size::Grow(f) => {
+                    row_px_per_grow * f(parent_size, &mut ChildSize::default(), context)
+                }
+            };
+            let end = start + height;
+            row_ranges.push([start, end]);
+            current_y = end + row_gap_px;
+        }
+
+        (column_ranges, row_ranges)
+    }
 }

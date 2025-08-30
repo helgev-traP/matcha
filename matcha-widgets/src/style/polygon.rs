@@ -10,6 +10,7 @@ use renderer::{
     vertex::colored_vertex::ColorVertex,
     widgets_renderer::vertex_color::{RenderData, TargetData, VertexColor},
 };
+use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
 
 type PolygonFn = dyn for<'a> Fn([f32; 2], &'a WidgetContext) -> Mesh + Send + Sync + 'static;
 type AdaptFn =
@@ -187,13 +188,18 @@ impl Style for Polygon {
 
     fn draw(
         &self,
-        render_pass: &mut wgpu::RenderPass<'_>,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &AtlasRegion,
         target_size: [u32; 2],
         target_format: wgpu::TextureFormat,
         boundary_size: [f32; 2],
         offset: [f32; 2],
         ctx: &WidgetContext,
     ) {
+        let mut render_pass = match target.begin_render_pass(encoder) {
+            Ok(rp) => rp,
+            Err(_) => return,
+        };
         let mut cache = self.caches.lock();
         let mesh = if self.cache_the_mesh {
             &cache
@@ -278,7 +284,7 @@ impl Style for Polygon {
         let transform_matrix = screen_to_clip * local_to_screen * adaptive_affine;
 
         renderer.render(
-            render_pass,
+            &mut render_pass,
             TargetData {
                 target_size,
                 target_format,

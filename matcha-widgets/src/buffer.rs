@@ -1,5 +1,6 @@
 use matcha_core::{types::range::Range2D, ui::Style, ui::WidgetContext};
 use utils::cache::Cache;
+use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
 
 pub struct Buffer {
     style: Vec<Box<dyn Style>>,
@@ -8,7 +9,7 @@ pub struct Buffer {
 }
 
 pub struct BufferData {
-    pub texture: wgpu::Texture,
+    pub texture: AtlasRegion,
     pub texture_position: Range2D<f32>,
 }
 
@@ -75,42 +76,17 @@ impl Buffer {
                 (y_max_int - y_min_int) as u32,
             ];
 
-            let texture = ctx.device().create_texture(&wgpu::TextureDescriptor {
-                label: Some("Buffer Texture"),
-                size: wgpu::Extent3d {
-                    width: texture_size[0],
-                    height: texture_size[1],
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: self.buffer_format,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
-                    | wgpu::TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            });
-
-            // render each style into the texture
-
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Buffer Render Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &texture.create_view(&wgpu::TextureViewDescriptor::default()),
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            });
+            // Allocate a region in the texture atlas and render each style into it.
+            // We unwrap here because allocation failure is unexpected in normal operation.
+            let atlas_region = ctx
+                .texture_atlas()
+                .allocate_color(ctx.device(), ctx.queue(), texture_size)
+                .expect("Texture atlas allocation failed for Buffer");
 
             for style in &self.style {
                 style.draw(
-                    &mut render_pass,
+                    encoder,
+                    &atlas_region,
                     texture_size,
                     self.buffer_format,
                     boundary,
@@ -120,7 +96,7 @@ impl Buffer {
             }
 
             BufferData {
-                texture,
+                texture: atlas_region,
                 texture_position,
             }
         });

@@ -1,4 +1,5 @@
 use crate::{WidgetContext, types::range::Range2D};
+use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
 
 /// A trait that defines the visual appearance and drawing logic of a widget.
 ///
@@ -34,7 +35,8 @@ pub trait Style: Send + Sync {
     /// - Coordinates are in pixels; the origin is the upper-left of the boundary and the Y axis points downwards.
     fn draw(
         &self,
-        render_pass: &mut wgpu::RenderPass<'_>,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &AtlasRegion,
         target_size: [u32; 2],
         target_format: wgpu::TextureFormat,
         boundary_size: [f32; 2],

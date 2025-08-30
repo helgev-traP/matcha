@@ -6,6 +6,7 @@ use renderer::{
     vertex::colored_vertex::ColorVertex,
     widgets_renderer::vertex_color::{RenderData, TargetData, VertexColor},
 };
+use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
 
 // todo: more documentation
 
@@ -33,7 +34,8 @@ impl Style for SolidBox {
 
     fn draw(
         &self,
-        render_pass: &mut wgpu::RenderPass<'_>,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &AtlasRegion,
         target_size: [u32; 2],
         target_format: wgpu::TextureFormat,
         boundary_size: [f32; 2],
@@ -41,6 +43,12 @@ impl Style for SolidBox {
         ctx: &WidgetContext,
     ) {
         let renderer = ctx.any_resource().get_or_insert_default::<VertexColor>();
+
+        // create a render pass targeting the atlas region so implementations can use multiple passes if needed
+        let mut render_pass = match target.begin_render_pass(encoder) {
+            Ok(rp) => rp,
+            Err(_) => return,
+        };
 
         let vertices = [
             ColorVertex {
@@ -76,7 +84,7 @@ impl Style for SolidBox {
         let transform_matrix = screen_to_clip * local_to_screen;
 
         renderer.render(
-            render_pass,
+            &mut render_pass,
             TargetData {
                 target_size,
                 target_format,

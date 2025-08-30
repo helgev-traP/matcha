@@ -319,7 +319,8 @@ impl Style for Image {
 
     fn draw(
         &self,
-        render_pass: &mut wgpu::RenderPass<'_>,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion,
         target_size: [u32; 2],
         target_format: wgpu::TextureFormat,
         boundary_size: [f32; 2],
@@ -332,9 +333,15 @@ impl Style for Image {
             let (size_x, size_y, offset_x, offset_y) = self.calc_layout(boundary, image_size, ctx);
             let draw_offset = [offset_x + offset[0], offset_y + offset[1]];
 
+            // begin a render pass targeting the atlas region so the renderer can create its own passes if needed
+            let mut render_pass = match target.begin_render_pass(encoder) {
+                Ok(rp) => rp,
+                Err(_) => return,
+            };
+
             let texture_copy = TextureCopy::default();
             texture_copy.render(
-                render_pass,
+                &mut render_pass,
                 TargetData {
                     target_size,
                     target_format,

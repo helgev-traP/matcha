@@ -1,16 +1,16 @@
 use std::any::Any;
-use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use matcha_core::{
     device_input::{DeviceInput, DeviceInputData, ElementState, MouseInput, MouseLogicalButton},
-    types::{color::Color, range::CoverRange},
+    types::color::Color,
     ui::{
-        Background, Constraints, Dom, DomCompareResult, Style, UpdateWidgetError, Widget,
-        WidgetContext,
+        widget::{AnyWidget, InvalidationHandle},
+        AnyWidgetFrame, Arrangement, Constraints, Dom, Style, Widget, WidgetContext, WidgetFrame,
     },
     update_flag::UpdateNotifier,
+    Background,
 };
 use renderer::render_node::RenderNode;
 
@@ -48,16 +48,17 @@ impl<T: 'static> Button<T> {
 }
 
 #[async_trait::async_trait]
-impl<T: Send + 'static + Clone> Dom<T> for Button<T> {
-    fn build_widget_tree(&self) -> Box<dyn Widget<T>> {
-        Box::new(ButtonNode {
-            label: self.label.clone(),
-            content: self.content.build_widget_tree(),
-            on_click: self.on_click.clone(),
-            state: ButtonState::Normal,
-            update_notifier: None,
-            size: [0.0, 0.0],
-        })
+impl<T: Send + Sync + 'static> Dom<T> for Button<T> {
+    fn build_widget_tree(&self) -> Box<dyn AnyWidgetFrame<T>> {
+        Box::new(WidgetFrame::new(
+            self.label.clone(),
+            vec![(self.content.build_widget_tree(), ())],
+            vec![0], // Use a fixed ID for the single child
+            ButtonNode {
+                on_click: self.on_click.clone(),
+                state: ButtonState::Normal,
+            },
+        ))
     }
 
     async fn set_update_notifier(&self, notifier: &UpdateNotifier) {
@@ -67,7 +68,7 @@ impl<T: Send + 'static + Clone> Dom<T> for Button<T> {
 
 // MARK: Widget
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum ButtonState {
     Normal,
     Hovered,
@@ -75,56 +76,62 @@ enum ButtonState {
 }
 
 pub struct ButtonNode<T> {
-    label: Option<String>,
-    content: Box<dyn Widget<T>>,
     on_click: Option<Arc<dyn Fn() -> T + Send + Sync>>,
     state: ButtonState,
-    update_notifier: Option<UpdateNotifier>,
-    size: [f32; 2],
 }
 
-#[async_trait::async_trait]
-impl<T: Send + 'static + Clone> Widget<T> for ButtonNode<T> {
-    fn label(&self) -> Option<&str> {
-        self.label.as_deref()
-    }
-
-    async fn update_widget_tree(
+impl<T: Send + Sync + 'static> Widget<Button<T>, T, ()> for ButtonNode<T> {
+    fn update_widget<'a>(
         &mut self,
-        component_updated: bool,
-        dom: &dyn Dom<T>,
-    ) -> Result<(), UpdateWidgetError> {
-        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Button<T>>() {
-            self.label = dom.label.clone();
-            self.on_click = dom.on_click.clone();
-            self.content
-                .update_widget_tree(component_updated, &*dom.content)
-                .await?;
-            Ok(())
+        dom: &'a Button<T>,
+        _cache_invalidator: Option<InvalidationHandle>,
+    ) -> Vec<(&'a dyn Dom<T>, (), u128)> {
+        self.on_click = dom.on_click.clone();
+        vec![(&*dom.content, (), 0)]
+    }
+
+    fn measure(
+        &self,
+        constraints: &Constraints,
+        children: &[(&dyn AnyWidget<T>, &())],
+        ctx: &WidgetContext,
+    ) -> [f32; 2] {
+        if let Some((content, _)) = children.first() {
+            content.measure(constraints, ctx)
         } else {
-            Err(UpdateWidgetError::TypeMismatch)
+            [0.0, 0.0]
         }
     }
 
-    fn compare(&self, dom: &dyn Dom<T>) -> DomCompareResult {
-        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Button<T>>() {
-            self.content.compare(&*dom.content)
-        } else {
-            DomCompareResult::Different
-        }
+    fn arrange(
+        &self,
+        final_size: [f32; 2],
+        _children: &[(&dyn AnyWidget<T>, &())],
+        _ctx: &WidgetContext,
+    ) -> Vec<Arrangement> {
+        vec![Arrangement::new(
+            final_size,
+            nalgebra::Matrix4::identity(),
+        )]
     }
 
-    fn device_input(&mut self, event: &DeviceInput, context: &WidgetContext) -> Option<T> {
+    fn device_input(
+        &mut self,
+        bounds: [f32; 2],
+        event: &DeviceInput,
+        children: &mut [(&mut dyn AnyWidget<T>, &mut (), &Arrangement)],
+        cache_invalidator: InvalidationHandle,
+        ctx: &WidgetContext,
+    ) -> Option<T> {
         let mut msg = None;
         let mut new_state = self.state;
 
-        let is_inside = self.is_inside(
-            match event.event() {
-                DeviceInputData::MouseInput { mouse_position, .. } => *current_position,
-                _ => [-1.0, -1.0], // Not a mouse event, so it's outside
-            },
-            context,
-        );
+        let position = event.mouse_position().unwrap_or([-1.0, -1.0]);
+
+        let is_inside = position[0] >= 0.0
+            && position[0] <= bounds[0]
+            && position[1] >= 0.0
+            && position[1] <= bounds[1];
 
         match event.event() {
             DeviceInputData::MouseInput {
@@ -152,8 +159,7 @@ impl<T: Send + 'static + Clone> Widget<T> for ButtonNode<T> {
                         }
                     }
                 }
-                _ => {
-                    // CursorMoved, Wheel, etc.
+                _ => { // CursorMoved, Wheel, etc.
                     if is_inside {
                         if self.state == ButtonState::Normal {
                             new_state = ButtonState::Hovered;
@@ -163,8 +169,7 @@ impl<T: Send + 'static + Clone> Widget<T> for ButtonNode<T> {
                     }
                 }
             },
-            DeviceInputData::MouseInput { event: None, .. } => {
-                // Cursor just moved
+            DeviceInputData::MouseInput { event: None, .. } => { // Cursor just moved
                 if is_inside {
                     if self.state == ButtonState::Normal {
                         new_state = ButtonState::Hovered;
@@ -178,99 +183,75 @@ impl<T: Send + 'static + Clone> Widget<T> for ButtonNode<T> {
 
         if new_state != self.state {
             self.state = new_state;
-            if let Some(notifier) = &mut self.update_notifier {
-                notifier.notify();
-            }
+            cache_invalidator.redraw_next_frame();
         }
 
         if msg.is_some() {
             return msg;
         }
 
-        let content_event = event.mouse_transition([0.0, 0.0]); // Pass event to content
-        self.content.device_input(&content_event, context)
+        if let Some((content, _, arrangement)) = children.first_mut() {
+            let content_event = event.transform(arrangement.affine);
+            return content.device_event(&content_event, ctx);
+        }
+
+        None
     }
 
-    fn is_inside(&mut self, position: [f32; 2], _context: &WidgetContext) -> bool {
-        position[0] >= 0.0
-            && position[0] <= self.size[0]
-            && position[1] >= 0.0
-            && position[1] <= self.size[1]
-    }
-
-    fn preferred_size(&mut self, constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
-        self.content.preferred_size(constraints, context)
-    }
-
-    fn arrange(&mut self, final_size: [f32; 2], context: &WidgetContext) {
-        self.size = final_size;
-        self.content.arrange(final_size, context);
-    }
-
-    fn need_rerendering(&self) -> bool {
-        self.content.need_rerendering()
-    }
-
-    fn render(&mut self, background: Background, ctx: &WidgetContext) -> RenderNode {
+    fn render(
+        &self,
+        background: Background,
+        children: &[(&dyn AnyWidget<T>, &(), &Arrangement)],
+        ctx: &WidgetContext,
+    ) -> RenderNode {
         let bg_color = match self.state {
-            ButtonState::Normal => Color::RgbaF32 {
-                r: 0.8,
-                g: 0.8,
-                b: 0.8,
-                a: 1.0,
-            },
-            ButtonState::Hovered => Color::RgbaF32 {
-                r: 0.9,
-                g: 0.9,
-                b: 0.9,
-                a: 1.0,
-            },
-            ButtonState::Pressed => Color::RgbaF32 {
-                r: 0.7,
-                g: 0.7,
-                b: 0.7,
-                a: 1.0,
-            },
+            ButtonState::Normal => Color::RgbaF32 { r: 0.8, g: 0.8, b: 0.8, a: 1.0 },
+            ButtonState::Hovered => Color::RgbaF32 { r: 0.9, g: 0.9, b: 0.9, a: 1.0 },
+            ButtonState::Pressed => Color::RgbaF32 { r: 0.7, g: 0.7, b: 0.7, a: 1.0 },
         };
 
-        let texture_size = [self.size[0].ceil() as u32, self.size[1].ceil() as u32];
-        if texture_size[0] == 0 || texture_size[1] == 0 {
-            return self.content.render(background, ctx);
-        }
-
-        let style_region = ctx
-            .texture_atlas()
-            .allocate_color(ctx.device(), ctx.queue(), texture_size)
-            .unwrap();
-
-        let mut encoder = ctx
-            .device()
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Button BG Render Encoder"),
-            });
-
-        {
-            let mut render_pass = style_region.begin_render_pass(&mut encoder).unwrap();
-            let bg_style = SolidBox {
-                color: bg_color.to_rgba_f32(),
-            };
-            bg_style.draw(
-                &mut render_pass,
-                texture_size,
-                style_region.formats()[0],
-                self.size,
-                [0.0, 0.0],
-                ctx,
-            );
-        }
-        ctx.queue().submit(Some(encoder.finish()));
-
         let mut render_node = RenderNode::new();
-        render_node.texture_and_position =
-            Some((style_region.clone(), nalgebra::Matrix4::identity()));
 
-        let content_node = self.content.render(background, ctx);
-        render_node.push_child(content_node, nalgebra::Matrix4::identity());
+        if let Some((content, _, arrangement)) = children.first() {
+            let texture_size = [
+                arrangement.size[0].ceil() as u32,
+                arrangement.size[1].ceil() as u32,
+            ];
+            if texture_size[0] > 0 && texture_size[1] > 0 {
+                // This is inefficient and should be replaced with a direct color rendering in the renderer.
+                // For now, we replicate the old behavior of drawing to a texture atlas.
+                if let Ok(style_region) =
+                    ctx.texture_atlas()
+                        .allocate_color(ctx.device(), ctx.queue(), texture_size)
+                {
+                    let mut encoder =
+                        ctx.device()
+                            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                                label: Some("Button BG Render Encoder"),
+                            });
+
+                    let bg_style = SolidBox {
+                        color: bg_color.to_rgba_f32(),
+                    };
+                    bg_style.draw(
+                        &mut encoder,
+                        &style_region,
+                        texture_size,
+                        style_region.formats()[0],
+                        arrangement.size,
+                        [0.0, 0.0],
+                        ctx,
+                    );
+
+                    ctx.queue().submit(Some(encoder.finish()));
+                    render_node.texture_and_position =
+                        Some((style_region, nalgebra::Matrix4::identity()));
+                }
+            }
+
+            let content_node = content.render(arrangement.size, background, ctx);
+            render_node.push_child(content_node, arrangement.affine);
+        }
 
         render_node
     }

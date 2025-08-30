@@ -1,5 +1,6 @@
 use cosmic_text::{Attrs, Buffer, Color, FontSystem, Metrics, Shaping, SwashCache};
 use matcha_core::{ui::Style, ui::WidgetContext};
+use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
 use parking_lot::Mutex;
 
 struct FontContext {
@@ -286,13 +287,59 @@ impl Style for TextCosmic<'static> {
 
     fn draw(
         &self,
-        _render_pass: &mut wgpu::RenderPass<'_>,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &AtlasRegion,
         _target_size: [u32; 2],
         _target_format: wgpu::TextureFormat,
         _boundary_size: [f32; 2],
         _offset: [f32; 2],
-        _ctx: &WidgetContext,
+        ctx: &WidgetContext,
     ) {
-        // TODO: Reimplement with texture atlas and proper text rendering pipeline
+        // Ensure buffer and in-memory cache exist
+        let font_context = ctx.any_resource().get_or_insert_default::<FontContext>();
+
+        let font_system = &font_context.font_system;
+        let swash_cache = &font_context.swash_cache;
+
+        let mut buffer_lock = self.buffer.lock();
+        let mut cache_in_memory_lock = self.cache_in_memory.lock();
+
+        if buffer_lock.is_none() {
+            *buffer_lock = Some(Self::set_buffer(&mut font_system.lock(), self.metrics));
+        }
+        let buffer = buffer_lock.as_mut().unwrap();
+
+        if cache_in_memory_lock.is_none() {
+            *cache_in_memory_lock = Some(Self::render_to_memory(
+                &self.texts,
+                self.color,
+                buffer,
+                &mut font_system.lock(),
+                &mut swash_cache.lock(),
+                self.max_size,
+            ));
+        }
+        let cache_in_memory = cache_in_memory_lock.as_ref().unwrap();
+
+        // Nothing to draw
+        if cache_in_memory.size[0] == 0 || cache_in_memory.size[1] == 0 {
+            return;
+        }
+
+        // Attempt to write raw RGBA data into the atlas region using the queue.
+        // AtlasRegion::write_data performs a queue.write_texture internally.
+        // We pass the raw bytes for the first (and typically only) format.
+        let data = &cache_in_memory.data;
+        let write_result = target.write_data(ctx.queue(), &[data.as_slice()]);
+
+        if let Err(_err) = write_result {
+            // If writing directly failed, bail out silently.
+            // A more advanced fallback could render the text into a temporary texture
+            // and then copy it into the atlas via encoder.copy_texture_to_texture, but
+            // that requires access to atlas internal textures which is intentionally hidden.
+            return;
+        }
+
+        // At this point the atlas contains the text bitmap. No further render-pass work is required here.
     }
 }

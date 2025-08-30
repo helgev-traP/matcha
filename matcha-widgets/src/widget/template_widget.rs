@@ -1,10 +1,9 @@
-use std::any::Any;
-
 use matcha_core::{
+    Background,
     device_input::DeviceInput,
-    types::range::CoverRange,
     ui::{
-        Background, Constraints, Dom, DomCompareResult, UpdateWidgetError, Widget, WidgetContext,
+        AnyWidgetFrame, Arrangement, Constraints, Dom, Widget, WidgetContext, WidgetFrame,
+        widget::{AnyWidget, InvalidationHandle},
     },
     update_flag::UpdateNotifier,
 };
@@ -27,11 +26,16 @@ impl Template {
 }
 
 #[async_trait::async_trait]
-impl<T: Send + 'static> Dom<T> for Template {
-    fn build_widget_tree(&self) -> Box<dyn Widget<T>> {
-        Box::new(TemplateNode {
-            label: self.label.clone(),
-        })
+impl<E: Send + 'static> Dom<E> for Template {
+    fn build_widget_tree(&self) -> Box<dyn AnyWidgetFrame<E>> {
+        Box::new(WidgetFrame::new(
+            self.label.clone(),
+            vec![],
+            vec![],
+            TemplateNode {
+                label: self.label.clone(),
+            },
+        ))
     }
 
     async fn set_update_notifier(&self, _notifier: &UpdateNotifier) {
@@ -48,64 +52,69 @@ pub struct TemplateNode {
 
 // MARK: Widget trait
 
-#[async_trait::async_trait]
-impl<T: Send + 'static> Widget<T> for TemplateNode {
-    fn label(&self) -> Option<&str> {
-        self.label.as_deref()
-    }
-
-    async fn update_widget_tree(
+impl<E: Send + 'static> Widget<Template, E, ()> for TemplateNode {
+    fn update_widget<'a>(
         &mut self,
-        _component_updated: bool,
-        dom: &dyn Dom<T>,
-    ) -> Result<(), UpdateWidgetError> {
-        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Template>() {
-            self.label = dom.label.clone();
-            Ok(())
-        } else {
-            Err(UpdateWidgetError::TypeMismatch)
-        }
+        dom: &'a Template,
+        _cache_invalidator: Option<InvalidationHandle>,
+    ) -> Vec<(&'a dyn Dom<E>, (), u128)> {
+        // In a real widget, you would compare properties here.
+        // If properties are different, call handle.relayout_next_frame() or handle.redraw_next_frame().
+        self.label = dom.label.clone();
+        // This widget has no children, so return an empty vec.
+        vec![]
     }
 
-    fn compare(&self, dom: &dyn Dom<T>) -> DomCompareResult {
-        if (dom as &dyn Any).downcast_ref::<Template>().is_some() {
-            // In a real widget, you would compare properties here.
-            // If properties are different, return DomComPareResult::Changed(hash).
-            DomCompareResult::Same
-        } else {
-            DomCompareResult::Different
-        }
-    }
-
-    fn device_input(&mut self, _event: &DeviceInput, _context: &WidgetContext) -> Option<T> {
+    fn device_input(
+        &mut self,
+        _bounds: [f32; 2],
+        _event: &DeviceInput,
+        _children: &mut [(&mut dyn AnyWidget<E>, &mut (), &Arrangement)],
+        _cache_invalidator: InvalidationHandle,
+        _ctx: &WidgetContext,
+    ) -> Option<E> {
         // Handle device events here.
-        // If the widget's state changes and it needs to be redrawn,
-        // call self.update_notifier.as_ref().unwrap().notify();
         None
     }
 
-    fn is_inside(&mut self, _position: [f32; 2], _context: &WidgetContext) -> bool {
+    fn is_inside(
+        &self,
+        _bounds: [f32; 2],
+        _position: [f32; 2],
+        _children: &[(&dyn AnyWidget<E>, &(), &Arrangement)],
+        _ctx: &WidgetContext,
+    ) -> bool {
         // Implement this if your widget has a non-rectangular shape or transparent areas.
         // For a simple template, we can assume it's always inside its bounds.
         true
     }
 
-    fn preferred_size(&mut self, _constraints: &Constraints, _context: &WidgetContext) -> [f32; 2] {
+    fn measure(
+        &self,
+        _constraints: &Constraints,
+        _children: &[(&dyn AnyWidget<E>, &())],
+        _ctx: &WidgetContext,
+    ) -> [f32; 2] {
         // This widget has no content, so it takes up no space.
         [0.0, 0.0]
     }
 
-    fn arrange(&mut self, _final_size: [f32; 2], _context: &WidgetContext) {
+    fn arrange(
+        &self,
+        _final_size: [f32; 2],
+        _children: &[(&dyn AnyWidget<E>, &())],
+        _ctx: &WidgetContext,
+    ) -> Vec<Arrangement> {
         // This widget has no children to arrange.
+        vec![]
     }
 
-    fn need_rerendering(&self) -> bool {
-        // A real widget would have state to track this.
-        // For a template, we can assume it doesn't need rerendering unless updated.
-        false
-    }
-
-    fn render(&mut self, _background: Background, _ctx: &WidgetContext) -> RenderNode {
+    fn render(
+        &self,
+        _background: Background,
+        _children: &[(&dyn AnyWidget<E>, &(), &Arrangement)],
+        _ctx: &WidgetContext,
+    ) -> RenderNode {
         // This widget doesn't draw anything.
         RenderNode::new()
     }

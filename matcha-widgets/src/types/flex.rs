@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use crate::types::size::Size;
 
 use matcha_core::ui::WidgetContext;
 
@@ -10,17 +10,15 @@ pub enum FlexWrap {
 }
 
 /// control the alignment of children on the **main axis**
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum JustifyContent {
-    FlexStart { gap: Arc<GapFn> },
-    FlexEnd { gap: Arc<GapFn> },
-    Center { gap: Arc<GapFn> },
+    FlexStart { gap: Size },
+    FlexEnd { gap: Size },
+    Center { gap: Size },
     SpaceBetween,
     SpaceAround,
     SpaceEvenly,
 }
-
-type GapFn = dyn Fn(Option<f32>, &WidgetContext) -> f32 + Sync + Send;
 
 /// control the alignment of children on the **cross axis**
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
