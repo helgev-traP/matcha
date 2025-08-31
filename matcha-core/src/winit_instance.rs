@@ -1,9 +1,9 @@
 use std::fmt::Debug;
 
 use crate::{
-    Component,
     any_resource::AnyResource,
     backend::Backend,
+    ui::component::Component,
     ui::{Background, WidgetContext},
 };
 

@@ -8,8 +8,9 @@ pub mod metrics;
 pub use metrics::{Arrangement, Constraints, LayoutSizeKey};
 
 pub mod widget;
-pub use widget::{AnyWidget, Dom, UpdateWidgetError, Widget};
-pub use widget::{AnyWidgetFrame, WidgetFrame};
+pub use widget::{
+    AnyWidget, AnyWidgetFrame, Dom, InvalidationHandle, UpdateWidgetError, Widget, WidgetFrame,
+};
 
 pub mod widget_context;
 pub use widget_context::WidgetContext;

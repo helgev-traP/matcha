@@ -1,4 +1,5 @@
-use crate::{WidgetContext, types::range::Range2D};
+use super::WidgetContext;
+use crate::types::range::Range2D;
 use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
 
 /// A trait that defines the visual appearance and drawing logic of a widget.

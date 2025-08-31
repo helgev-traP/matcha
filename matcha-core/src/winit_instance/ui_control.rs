@@ -4,14 +4,14 @@ use thiserror::Error;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 
 use crate::{
-    Component, UpdateNotifier,
     device_input::{
         DeviceInput, DeviceInputData,
         key_state::KeyboardState,
         mouse_state::{MousePrimaryButton, MouseState},
         window_state::WindowState,
     },
-    ui::{AnyWidget, AnyWidgetFrame, Background, Constraints, Widget, WidgetContext},
+    ui::component::Component,
+    ui::{AnyWidgetFrame, Background, Constraints, WidgetContext},
     update_flag::UpdateFlag,
 };
 use renderer::render_node::RenderNode;

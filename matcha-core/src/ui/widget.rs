@@ -4,10 +4,9 @@ use parking_lot::Mutex;
 use renderer::render_node::RenderNode;
 use utils::{back_prop_dirty::BackPropDirty, cache::Cache};
 
-use crate::{
-    Background, Constraints, DeviceInput, UpdateNotifier, WidgetContext,
-    ui::{Arrangement, metrics::LayoutSizeKey},
-};
+use crate::{device_input::DeviceInput, update_flag::UpdateNotifier};
+
+use super::{Arrangement, Background, Constraints, WidgetContext, metrics::LayoutSizeKey};
 
 /// Lightweight handle passed into widget update / event handlers allowing them
 /// to request layout or visual invalidation without touching internal caches.
@@ -588,7 +587,7 @@ where
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use crate::{Constraints, DeviceInput, UpdateNotifier};
+    use super::{Constraints, DeviceInput, UpdateNotifier};
     use utils::back_prop_dirty::BackPropDirty;
 
     #[derive(Debug, Clone, PartialEq, Default)]
@@ -1013,7 +1012,7 @@ mod tests {
         ar: &'a AnyResource,
     ) -> WidgetContext<'a> {
         WidgetContext::new(
-            dq.clone(),
+            *dq,
             wgpu::TextureFormat::Rgba8UnormSrgb,
             [800.0, 600.0],
             1.0,
@@ -1116,10 +1115,6 @@ mod tests {
         let call_count = Arc::new(CallCount::default());
         let widget_impl = MockWidgetWithCallCount {
             call_count: Arc::clone(&call_count),
-        };
-        let dom = MockDom {
-            id: 0,
-            children: vec![],
         };
         let mut widget_frame = WidgetFrame::new(None, vec![], vec![], widget_impl);
         widget_frame.update_dirty_flags(BackPropDirty::new(), BackPropDirty::new());

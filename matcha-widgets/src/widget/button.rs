@@ -3,9 +3,9 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use matcha_core::{
-    Background,
     device_input::{DeviceInput, DeviceInputData, ElementState, MouseInput, MouseLogicalButton},
     types::color::Color,
+    ui::Background,
     ui::{
         AnyWidgetFrame, Arrangement, Constraints, Dom, Style, Widget, WidgetContext, WidgetFrame,
         widget::{AnyWidget, InvalidationHandle},

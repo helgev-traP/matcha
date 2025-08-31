@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use matcha_core::{Constraints, ui::WidgetContext};
+use matcha_core::{ui::Constraints, ui::WidgetContext};
 use nalgebra::constraint;
 
 pub struct ChildSize<'a> {

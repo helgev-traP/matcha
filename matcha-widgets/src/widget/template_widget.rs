@@ -1,6 +1,6 @@
 use matcha_core::{
-    Background,
     device_input::DeviceInput,
+    ui::Background,
     ui::{
         AnyWidgetFrame, Arrangement, Constraints, Dom, Widget, WidgetContext, WidgetFrame,
         widget::{AnyWidget, InvalidationHandle},

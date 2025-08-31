@@ -2,7 +2,7 @@
 pub mod app;
 
 // event loop, window handling and rendering
-pub mod winit_instance;
+mod winit_instance;
 
 // widget system
 pub mod backend;
@@ -14,11 +14,12 @@ pub mod device_input;
 
 // resource management
 pub mod any_resource;
+pub use any_resource::AnyResource;
 // gpu preparation
-pub mod gpu;
+mod gpu;
 
 // allocator for area in texture atlas
-pub mod texture_allocator;
+mod texture_allocator;
 
 // types
 pub mod types;
@@ -27,7 +28,8 @@ pub mod types;
 pub use app::App;
 pub use device_input::DeviceInput;
 pub use ui::{
-    Background, Component, ComponentDom, ComponentWidget, Constraints, Dom, ModelAccessor, Style,
-    Widget, WidgetContext, component,
+    AnyWidget, AnyWidgetFrame, Arrangement, Background, Component, ComponentDom, ComponentWidget,
+    Constraints, Dom, InvalidationHandle, LayoutSizeKey, ModelAccessor, Style, UpdateWidgetError,
+    Widget, WidgetContext, WidgetFrame, component,
 };
 pub use update_flag::UpdateNotifier;

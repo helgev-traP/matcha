@@ -1,8 +1,8 @@
 use super::{
-    Component,
     backend::{Backend, StubBackend},
     device_input::mouse_state::MousePrimaryButton,
     types::color::Color,
+    ui::component::Component,
     winit_instance::{WinitInstance, WinitInstanceBuilder},
 };
 use std::time::Duration;
