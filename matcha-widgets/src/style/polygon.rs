@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
 use matcha_core::{
     types::{color::Color, range::Range2D},
     ui::Style,
@@ -10,7 +11,6 @@ use renderer::{
     vertex::colored_vertex::ColorVertex,
     widgets_renderer::vertex_color::{RenderData, TargetData, VertexColor},
 };
-use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
 
 type PolygonFn = dyn for<'a> Fn([f32; 2], &'a WidgetContext) -> Mesh + Send + Sync + 'static;
 type AdaptFn =
@@ -190,12 +190,12 @@ impl Style for Polygon {
         &self,
         encoder: &mut wgpu::CommandEncoder,
         target: &AtlasRegion,
-        target_size: [u32; 2],
-        target_format: wgpu::TextureFormat,
         boundary_size: [f32; 2],
         offset: [f32; 2],
         ctx: &WidgetContext,
     ) {
+        let target_size = target.size();
+        let target_format = target.format();
         let mut render_pass = match target.begin_render_pass(encoder) {
             Ok(rp) => rp,
             Err(_) => return,

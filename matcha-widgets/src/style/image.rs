@@ -321,12 +321,12 @@ impl Style for Image {
         &self,
         encoder: &mut wgpu::CommandEncoder,
         target: &gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion,
-        target_size: [u32; 2],
-        target_format: wgpu::TextureFormat,
         boundary_size: [f32; 2],
         offset: [f32; 2],
         ctx: &WidgetContext,
     ) {
+        let target_size = target.size();
+        let target_format = target.format();
         self.with_image(ctx, |image| {
             let image_size = [image.width as f32, image.height as f32];
             let boundary = Self::boundary_opt(boundary_size);

@@ -194,7 +194,7 @@ impl Bezier2d {
         let compute_vertices = div + 1;
         let num_vertices = compute_vertices + 2;
 
-        let target_format = atlas_region.formats()[0];
+        let target_format = atlas_region.format();
         let target_size = atlas_region.size();
 
         // Setup Bezier implementation

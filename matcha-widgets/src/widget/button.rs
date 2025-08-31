@@ -3,14 +3,14 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use matcha_core::{
+    Background,
     device_input::{DeviceInput, DeviceInputData, ElementState, MouseInput, MouseLogicalButton},
     types::color::Color,
     ui::{
-        widget::{AnyWidget, InvalidationHandle},
         AnyWidgetFrame, Arrangement, Constraints, Dom, Style, Widget, WidgetContext, WidgetFrame,
+        widget::{AnyWidget, InvalidationHandle},
     },
     update_flag::UpdateNotifier,
-    Background,
 };
 use renderer::render_node::RenderNode;
 
@@ -109,10 +109,7 @@ impl<T: Send + Sync + 'static> Widget<Button<T>, T, ()> for ButtonNode<T> {
         _children: &[(&dyn AnyWidget<T>, &())],
         _ctx: &WidgetContext,
     ) -> Vec<Arrangement> {
-        vec![Arrangement::new(
-            final_size,
-            nalgebra::Matrix4::identity(),
-        )]
+        vec![Arrangement::new(final_size, nalgebra::Matrix4::identity())]
     }
 
     fn device_input(
@@ -159,7 +156,8 @@ impl<T: Send + Sync + 'static> Widget<Button<T>, T, ()> for ButtonNode<T> {
                         }
                     }
                 }
-                _ => { // CursorMoved, Wheel, etc.
+                _ => {
+                    // CursorMoved, Wheel, etc.
                     if is_inside {
                         if self.state == ButtonState::Normal {
                             new_state = ButtonState::Hovered;
@@ -169,7 +167,8 @@ impl<T: Send + Sync + 'static> Widget<Button<T>, T, ()> for ButtonNode<T> {
                     }
                 }
             },
-            DeviceInputData::MouseInput { event: None, .. } => { // Cursor just moved
+            DeviceInputData::MouseInput { event: None, .. } => {
+                // Cursor just moved
                 if is_inside {
                     if self.state == ButtonState::Normal {
                         new_state = ButtonState::Hovered;
@@ -205,9 +204,24 @@ impl<T: Send + Sync + 'static> Widget<Button<T>, T, ()> for ButtonNode<T> {
         ctx: &WidgetContext,
     ) -> RenderNode {
         let bg_color = match self.state {
-            ButtonState::Normal => Color::RgbaF32 { r: 0.8, g: 0.8, b: 0.8, a: 1.0 },
-            ButtonState::Hovered => Color::RgbaF32 { r: 0.9, g: 0.9, b: 0.9, a: 1.0 },
-            ButtonState::Pressed => Color::RgbaF32 { r: 0.7, g: 0.7, b: 0.7, a: 1.0 },
+            ButtonState::Normal => Color::RgbaF32 {
+                r: 0.8,
+                g: 0.8,
+                b: 0.8,
+                a: 1.0,
+            },
+            ButtonState::Hovered => Color::RgbaF32 {
+                r: 0.9,
+                g: 0.9,
+                b: 0.9,
+                a: 1.0,
+            },
+            ButtonState::Pressed => Color::RgbaF32 {
+                r: 0.7,
+                g: 0.7,
+                b: 0.7,
+                a: 1.0,
+            },
         };
 
         let mut render_node = RenderNode::new();
@@ -236,8 +250,6 @@ impl<T: Send + Sync + 'static> Widget<Button<T>, T, ()> for ButtonNode<T> {
                     bg_style.draw(
                         &mut encoder,
                         &style_region,
-                        texture_size,
-                        style_region.formats()[0],
                         arrangement.size,
                         [0.0, 0.0],
                         ctx,

@@ -1,6 +1,6 @@
+use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
 use matcha_core::{types::range::Range2D, ui::Style, ui::WidgetContext};
 use utils::cache::Cache;
-use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
 
 pub struct Buffer {
     style: Vec<Box<dyn Style>>,
@@ -87,8 +87,6 @@ impl Buffer {
                 style.draw(
                     encoder,
                     &atlas_region,
-                    texture_size,
-                    self.buffer_format,
                     boundary,
                     [x_min_int as f32, y_min_int as f32],
                     ctx,

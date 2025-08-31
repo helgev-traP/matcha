@@ -27,7 +27,7 @@ pub mod types;
 pub use app::App;
 pub use device_input::DeviceInput;
 pub use ui::{
-    Background, Component, ComponentDom, ComponentWidget, Constraints, Dom, Style, Widget,
-    WidgetContext,
+    Background, Component, ComponentDom, ComponentWidget, Constraints, Dom, ModelAccessor, Style,
+    Widget, WidgetContext, component,
 };
 pub use update_flag::UpdateNotifier;

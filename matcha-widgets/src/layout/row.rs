@@ -134,15 +134,23 @@ impl RowNode {
                             // single child: follow existing behaviour -> gap 0, offset depends on alignment
                             gap = 0.0;
                             offset = match justify_content {
-                                JustifyContent::FlexEnd { .. } => container_size - total_child_width,
-                                JustifyContent::Center { .. } => (container_size - total_child_width) / 2.0,
+                                JustifyContent::FlexEnd { .. } => {
+                                    container_size - total_child_width
+                                }
+                                JustifyContent::Center { .. } => {
+                                    (container_size - total_child_width) / 2.0
+                                }
                                 _ => 0.0,
                             };
                         }
                     }
                     // For Size::Size and other Size variants, evaluate the function.
                     _ => {
-                        gap = g.size([Some(container_size), Some(child_max_height)], &mut rep_child_size, ctx);
+                        gap = g.size(
+                            [Some(container_size), Some(child_max_height)],
+                            &mut rep_child_size,
+                            ctx,
+                        );
                         offset = 0.0;
                     }
                 }
@@ -174,8 +182,12 @@ impl RowNode {
 
         // Recalculate offsets that depend on gap (FlexEnd / Center)
         offset = match justify_content {
-            JustifyContent::FlexEnd { .. } => container_size - total_child_width - gap * (child_count - 1) as f32,
-            JustifyContent::Center { .. } => (container_size - total_child_width - gap * (child_count - 1) as f32) / 2.0,
+            JustifyContent::FlexEnd { .. } => {
+                container_size - total_child_width - gap * (child_count - 1) as f32
+            }
+            JustifyContent::Center { .. } => {
+                (container_size - total_child_width - gap * (child_count - 1) as f32) / 2.0
+            }
             JustifyContent::SpaceAround => gap / 2.0,
             JustifyContent::SpaceEvenly => gap,
             _ => offset,

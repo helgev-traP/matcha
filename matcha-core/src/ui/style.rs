@@ -37,8 +37,6 @@ pub trait Style: Send + Sync {
         &self,
         encoder: &mut wgpu::CommandEncoder,
         target: &AtlasRegion,
-        target_size: [u32; 2],
-        target_format: wgpu::TextureFormat,
         boundary_size: [f32; 2],
         offset: [f32; 2],
         ctx: &WidgetContext,

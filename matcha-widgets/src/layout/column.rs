@@ -12,7 +12,7 @@ use matcha_core::{
 use renderer::render_node::RenderNode;
 
 use crate::types::flex::{AlignItems, JustifyContent};
-use crate::types::size::{Size, ChildSize};
+use crate::types::size::{ChildSize, Size};
 
 // MARK: DOM
 
@@ -134,14 +134,22 @@ impl ColumnNode {
                             // single child: gap 0, offset depends on alignment
                             gap = 0.0;
                             offset = match justify_content {
-                                JustifyContent::FlexEnd { .. } => container_size - total_child_height,
-                                JustifyContent::Center { .. } => (container_size - total_child_height) / 2.0,
+                                JustifyContent::FlexEnd { .. } => {
+                                    container_size - total_child_height
+                                }
+                                JustifyContent::Center { .. } => {
+                                    (container_size - total_child_height) / 2.0
+                                }
                                 _ => 0.0,
                             };
                         }
                     }
                     _ => {
-                        gap = g.size([Some(container_size), Some(child_max_width)], &mut rep_child_size, ctx);
+                        gap = g.size(
+                            [Some(container_size), Some(child_max_width)],
+                            &mut rep_child_size,
+                            ctx,
+                        );
                         offset = 0.0;
                     }
                 }
@@ -171,8 +179,12 @@ impl ColumnNode {
         gap = gap.max(0.0);
 
         offset = match justify_content {
-            JustifyContent::FlexEnd { .. } => container_size - total_child_height - gap * (child_count - 1) as f32,
-            JustifyContent::Center { .. } => (container_size - total_child_height - gap * (child_count - 1) as f32) / 2.0,
+            JustifyContent::FlexEnd { .. } => {
+                container_size - total_child_height - gap * (child_count - 1) as f32
+            }
+            JustifyContent::Center { .. } => {
+                (container_size - total_child_height - gap * (child_count - 1) as f32) / 2.0
+            }
             JustifyContent::SpaceAround => gap / 2.0,
             JustifyContent::SpaceEvenly => gap,
             _ => offset,

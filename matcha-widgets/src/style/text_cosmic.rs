@@ -1,6 +1,6 @@
 use cosmic_text::{Attrs, Buffer, Color, FontSystem, Metrics, Shaping, SwashCache};
-use matcha_core::{ui::Style, ui::WidgetContext};
 use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
+use matcha_core::{ui::Style, ui::WidgetContext};
 use parking_lot::Mutex;
 
 struct FontContext {
@@ -287,10 +287,8 @@ impl Style for TextCosmic<'static> {
 
     fn draw(
         &self,
-        encoder: &mut wgpu::CommandEncoder,
+        _encoder: &mut wgpu::CommandEncoder,
         target: &AtlasRegion,
-        _target_size: [u32; 2],
-        _target_format: wgpu::TextureFormat,
         _boundary_size: [f32; 2],
         _offset: [f32; 2],
         ctx: &WidgetContext,
@@ -330,7 +328,7 @@ impl Style for TextCosmic<'static> {
         // AtlasRegion::write_data performs a queue.write_texture internally.
         // We pass the raw bytes for the first (and typically only) format.
         let data = &cache_in_memory.data;
-        let write_result = target.write_data(ctx.queue(), &[data.as_slice()]);
+        let write_result = target.write_data(ctx.queue(), data.as_slice());
 
         if let Err(_err) = write_result {
             // If writing directly failed, bail out silently.

@@ -21,7 +21,7 @@ pub struct AtlasManager {
     max_size_of_3d_texture: wgpu::Extent3d,
     memory_strategy: MemoryAllocateStrategy,
 
-    atlases: DashMap<Vec<wgpu::TextureFormat>, Arc<Mutex<TextureAtlas>>>,
+    atlases: DashMap<wgpu::TextureFormat, Arc<Mutex<TextureAtlas>>>,
 }
 
 impl AtlasManager {
@@ -40,14 +40,8 @@ impl AtlasManager {
         }
     }
 
-    pub fn add_format_set(
-        &self,
-        formats: Vec<wgpu::TextureFormat>,
-    ) -> Result<(), AtlasManagerError> {
-        if formats.is_empty() {
-            return Err(AtlasManagerError::EmptyFormatSet);
-        }
-        if self.atlases.contains_key(&formats) {
+    pub fn add_format(&self, format: wgpu::TextureFormat) -> Result<(), AtlasManagerError> {
+        if self.atlases.contains_key(&format) {
             return Err(AtlasManagerError::FormatSetAlreadyExists);
         }
 
@@ -58,9 +52,9 @@ impl AtlasManager {
                 height: self.max_size_of_3d_texture.height,
                 depth_or_array_layers: self.memory_strategy.initial_pages,
             },
-            &formats,
+            format,
         );
-        self.atlases.insert(formats, atlas);
+        self.atlases.insert(format, atlas);
 
         Ok(())
     }
@@ -68,7 +62,7 @@ impl AtlasManager {
     pub fn allocate(
         &self,
         size: [u32; 2],
-        formats: &[wgpu::TextureFormat],
+        format: wgpu::TextureFormat,
     ) -> Result<AtlasRegion, AtlasManagerError> {
         if size[0] == 0 || size[1] == 0 {
             return Err(AtlasManagerError::InvalidTextureSize);
@@ -81,7 +75,7 @@ impl AtlasManager {
 
         let atlas_entry = self
             .atlases
-            .get(formats)
+            .get(&format)
             .ok_or(AtlasManagerError::FormatSetNotFound)?;
         let mut atlas = atlas_entry.lock();
 
@@ -94,8 +88,6 @@ impl AtlasManager {
 
 #[derive(Debug, Error)]
 pub enum AtlasManagerError {
-    #[error("Format set cannot be empty")]
-    EmptyFormatSet,
     #[error("Format set already exists in the manager")]
     FormatSetAlreadyExists,
     #[error(
@@ -139,12 +131,12 @@ mod tests {
             self.atlases.len()
         }
 
-        fn get_atlas_size(&self, formats: &[wgpu::TextureFormat]) -> Option<wgpu::Extent3d> {
-            self.atlases.get(formats).map(|atlas| atlas.lock().size())
+        fn get_atlas_size(&self, format: wgpu::TextureFormat) -> Option<wgpu::Extent3d> {
+            self.atlases.get(&format).map(|atlas| atlas.lock().size())
         }
 
-        fn get_atlas_usage(&self, formats: &[wgpu::TextureFormat]) -> Option<usize> {
-            self.atlases.get(formats).map(|atlas| atlas.lock().usage())
+        fn get_atlas_usage(&self, format: wgpu::TextureFormat) -> Option<usize> {
+            self.atlases.get(&format).map(|atlas| atlas.lock().usage())
         }
     }
 
@@ -174,7 +166,7 @@ mod tests {
 
     /// Tests adding a new format set to the manager.
     #[test]
-    fn test_add_format_set() {
+    fn test_add_format() {
         pollster::block_on(async {
             let (device, queue) = setup_wgpu().await;
             let memory_strategy = MemoryAllocateStrategy {
@@ -192,23 +184,19 @@ mod tests {
             let manager =
                 AtlasManager::new(Arc::new(device), Arc::new(queue), memory_strategy, max_size);
 
-            let formats = vec![wgpu::TextureFormat::Rgba8UnormSrgb];
-            manager.add_format_set(formats.clone()).unwrap();
+            let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+            manager.add_format(format).unwrap();
             assert_eq!(manager.atlas_count(), 1);
             assert_eq!(
                 manager
-                    .get_atlas_size(&formats)
+                    .get_atlas_size(format)
                     .unwrap()
                     .depth_or_array_layers,
                 2
             );
 
-            // Test adding empty format set
-            let result = manager.add_format_set(vec![]);
-            assert!(matches!(result, Err(AtlasManagerError::EmptyFormatSet)));
-
             // Test adding existing format set
-            let result = manager.add_format_set(formats.clone());
+            let result = manager.add_format(format);
             assert!(matches!(
                 result,
                 Err(AtlasManagerError::FormatSetAlreadyExists)
@@ -236,12 +224,12 @@ mod tests {
             let manager =
                 AtlasManager::new(Arc::new(device), Arc::new(queue), memory_strategy, max_size);
 
-            let formats = vec![wgpu::TextureFormat::Rgba8UnormSrgb];
-            manager.add_format_set(formats.clone()).unwrap();
+            let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+            manager.add_format(format).unwrap();
 
-            let texture = manager.allocate([32, 32], &formats).unwrap();
+            let texture = manager.allocate([32, 32], format).unwrap();
             assert_eq!(texture.size(), [32, 32]);
-            assert_eq!(manager.get_atlas_usage(&formats).unwrap(), 32 * 32);
+            assert_eq!(manager.get_atlas_usage(format).unwrap(), 32 * 32);
         });
     }
 
@@ -265,30 +253,30 @@ mod tests {
             let manager =
                 AtlasManager::new(Arc::new(device), Arc::new(queue), memory_strategy, max_size);
 
-            let formats = vec![wgpu::TextureFormat::Rgba8UnormSrgb];
-            manager.add_format_set(formats.clone()).unwrap();
+            let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+            manager.add_format(format).unwrap();
 
             // Zero width
-            let result = manager.allocate([0, 32], &formats);
+            let result = manager.allocate([0, 32], format);
             assert!(matches!(result, Err(AtlasManagerError::InvalidTextureSize)));
 
             // Zero height
-            let result = manager.allocate([32, 0], &formats);
+            let result = manager.allocate([32, 0], format);
             assert!(matches!(result, Err(AtlasManagerError::InvalidTextureSize)));
 
             // Exceeds max width
-            let result = manager.allocate([257, 32], &formats);
+            let result = manager.allocate([257, 32], format);
             assert!(matches!(result, Err(AtlasManagerError::InvalidTextureSize)));
 
             // Exceeds max height
-            let result = manager.allocate([32, 257], &formats);
+            let result = manager.allocate([32, 257], format);
             assert!(matches!(result, Err(AtlasManagerError::InvalidTextureSize)));
         });
     }
 
     /// Tests allocation with a non-existent format set.
     #[test]
-    fn test_allocate_format_set_not_found() {
+    fn test_allocate_format_not_found() {
         pollster::block_on(async {
             let (device, queue) = setup_wgpu().await;
             let memory_strategy = MemoryAllocateStrategy {
@@ -306,8 +294,8 @@ mod tests {
             let manager =
                 AtlasManager::new(Arc::new(device), Arc::new(queue), memory_strategy, max_size);
 
-            let formats = vec![wgpu::TextureFormat::Rgba8UnormSrgb];
-            let result = manager.allocate([32, 32], &formats);
+            let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+            let result = manager.allocate([32, 32], format);
             assert!(matches!(result, Err(AtlasManagerError::FormatSetNotFound)));
         });
     }

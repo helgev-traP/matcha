@@ -22,8 +22,8 @@ struct RegionData {
     // interaction with the atlas
     atlas: Weak<Mutex<TextureAtlas>>,
     // It may be useful to store some information about the texture that will not change during atlas resizing
-    size: [u32; 2],                    // size of the texture in pixels
-    formats: Vec<wgpu::TextureFormat>, // formats of the texture
+    size: [u32; 2],              // size of the texture in pixels
+    format: wgpu::TextureFormat, // format of the texture
 }
 
 /// Public API to interact with a texture.
@@ -54,8 +54,8 @@ impl AtlasRegion {
         self.inner.size
     }
 
-    pub fn formats(&self) -> &[wgpu::TextureFormat] {
-        &self.inner.formats
+    pub fn format(&self) -> wgpu::TextureFormat {
+        self.inner.format
     }
 
     pub fn atlas_pointer(&self) -> Option<usize> {
@@ -93,23 +93,18 @@ impl AtlasRegion {
         Ok(translated_vertices)
     }
 
-    pub fn write_data(&self, queue: &wgpu::Queue, data: &[&[u8]]) -> Result<(), TextureError> {
+    pub fn write_data(&self, queue: &wgpu::Queue, data: &[u8]) -> Result<(), TextureError> {
         // Check data consistency
-        if data.len() != self.inner.formats.len() {
-            return Err(TextureError::DataConsistencyError(
-                "Data length does not match formats length".to_string(),
-            ));
-        }
-        for (i, format) in self.inner.formats.iter().enumerate() {
-            let bytes_per_pixel = format
-                .block_copy_size(None)
-                .ok_or(TextureError::InvalidFormatBlockCopySize)?;
-            let expected_size = self.inner.size[0] * self.inner.size[1] * bytes_per_pixel;
-            if data[i].len() as u32 != expected_size {
-                return Err(TextureError::DataConsistencyError(format!(
-                    "Data size for format {i} does not match expected size"
-                )));
-            }
+        let bytes_per_pixel = self
+            .inner
+            .format
+            .block_copy_size(None)
+            .ok_or(TextureError::InvalidFormatBlockCopySize)?;
+        let expected_size = self.inner.size[0] * self.inner.size[1] * bytes_per_pixel;
+        if data.len() as u32 != expected_size {
+            return Err(TextureError::DataConsistencyError(format!(
+                "Data size does not match expected size"
+            )));
         }
 
         // Get the texture in the atlas and location
@@ -118,46 +113,38 @@ impl AtlasRegion {
         };
         let atlas = atlas.lock();
 
-        let textures = atlas.textures();
+        let texture = atlas.texture();
         let Some(location) = atlas.get_location(self.inner.texture_id) else {
             return Err(TextureError::TextureNotFoundInAtlas);
         };
 
-        for (i, texture) in textures.iter().enumerate() {
-            let data = data[i];
+        let bytes_per_row = self.inner.size[0] * bytes_per_pixel;
 
-            let bytes_per_pixel = texture
-                .format()
-                .block_copy_size(None)
-                .ok_or(TextureError::InvalidFormatBlockCopySize)?;
-            let bytes_per_row = self.inner.size[0] * bytes_per_pixel;
+        let origin = wgpu::Origin3d {
+            x: location.bounds.min_x() as u32,
+            y: location.bounds.min_y() as u32,
+            z: location.page_index,
+        };
 
-            let origin = wgpu::Origin3d {
-                x: location.bounds.min_x() as u32,
-                y: location.bounds.min_y() as u32,
-                z: location.page_index,
-            };
-
-            queue.write_texture(
-                wgpu::TexelCopyTextureInfo {
-                    texture,
-                    mip_level: 0,
-                    origin,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                data,
-                wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(bytes_per_row),
-                    rows_per_image: None,
-                },
-                wgpu::Extent3d {
-                    width: self.inner.size[0],
-                    height: self.inner.size[1],
-                    depth_or_array_layers: 1,
-                },
-            );
-        }
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture,
+                mip_level: 0,
+                origin,
+                aspect: wgpu::TextureAspect::All,
+            },
+            data,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(bytes_per_row),
+                rows_per_image: None,
+            },
+            wgpu::Extent3d {
+                width: self.inner.size[0],
+                height: self.inner.size[1],
+                depth_or_array_layers: 1,
+            },
+        );
 
         Ok(())
     }
@@ -219,25 +206,17 @@ impl AtlasRegion {
         };
 
         // Create a render pass for the texture area, targeting the specific array layer (page) with 2D views
+        let view = &atlas.layer_texture_views[location.page_index as usize];
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("Texture Atlas Render Pass"),
-            color_attachments: atlas
-                .layer_texture_views
-                .iter()
-                .map(|views| {
-                    let view = &views[location.page_index as usize];
-                    wgpu::RenderPassColorAttachment {
-                        view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                            store: wgpu::StoreOp::Store,
-                        },
-                    }
-                })
-                .map(Option::Some)
-                .collect::<Vec<_>>()
-                .as_slice(),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
             depth_stencil_attachment: None,
             timestamp_writes: None,
             occlusion_query_set: None,
@@ -337,11 +316,11 @@ impl TextureAtlasId {
 pub struct TextureAtlas {
     id: TextureAtlasId,
 
-    textures: Vec<wgpu::Texture>,
-    texture_views: Vec<wgpu::TextureView>,
-    layer_texture_views: Vec<Vec<wgpu::TextureView>>,
+    texture: wgpu::Texture,
+    texture_view: wgpu::TextureView,
+    layer_texture_views: Vec<wgpu::TextureView>,
     size: wgpu::Extent3d,
-    formats: Vec<wgpu::TextureFormat>,
+    format: wgpu::TextureFormat,
 
     state: TextureAtlasState,
 
@@ -360,10 +339,10 @@ impl TextureAtlas {
     pub fn new(
         device: &wgpu::Device,
         size: wgpu::Extent3d,
-        formats: &[wgpu::TextureFormat],
+        format: wgpu::TextureFormat,
     ) -> Arc<Mutex<Self>> {
-        let (textures, texture_views, layer_texture_views) =
-            Self::create_texture_and_view(device, formats, size);
+        let (texture, texture_view, layer_texture_views) =
+            Self::create_texture_and_view(device, format, size);
 
         // Initialize the state with an empty allocator and allocation map.
         let state = TextureAtlasState {
@@ -379,11 +358,11 @@ impl TextureAtlas {
         Arc::new_cyclic(|weak_self| {
             Mutex::new(Self {
                 id: TextureAtlasId::new(),
-                textures,
-                texture_views,
+                texture,
+                texture_view,
                 layer_texture_views,
                 size,
-                formats: formats.to_vec(),
+                format,
                 state,
                 weak_self: weak_self.clone(),
             })
@@ -394,8 +373,8 @@ impl TextureAtlas {
         self.size
     }
 
-    pub fn formats(&self) -> &[wgpu::TextureFormat] {
-        &self.formats
+    pub fn format(&self) -> wgpu::TextureFormat {
+        self.format
     }
 
     pub fn capacity(&self) -> usize {
@@ -471,7 +450,7 @@ impl TextureAtlas {
                     atlas_id: self.id,
                     atlas: self.weak_self.clone(),
                     size: [size.width as u32, size.height as u32],
-                    formats: self.formats.clone(),
+                    format: self.format,
                 };
                 let texture = AtlasRegion {
                     inner: Arc::new(texture_inner),
@@ -530,7 +509,7 @@ impl TextureAtlas {
             atlas_id: self.id,
             atlas: self.weak_self.clone(),
             size: [size.width as u32, size.height as u32],
-            formats: self.formats.clone(),
+            format: self.format,
         };
         let texture = AtlasRegion {
             inner: Arc::new(texture_inner),
@@ -586,8 +565,8 @@ impl TextureAtlas {
             depth_or_array_layers: self.size.depth_or_array_layers + 1,
         };
 
-        let (new_textures, new_texture_views, new_layer_texture_views) =
-            Self::create_texture_and_view(device, &self.formats, new_size);
+        let (new_texture, new_texture_view, new_layer_texture_views) =
+            Self::create_texture_and_view(device, self.format, new_size);
 
         self.state.allocators.push(AtlasAllocator::new(Size::new(
             new_size.width as i32,
@@ -599,33 +578,31 @@ impl TextureAtlas {
             label: Some("TextureAtlas Resize Encoder"),
         });
 
-        for (old_texture, new_texture) in self.textures.iter().zip(new_textures.iter()) {
-            encoder.copy_texture_to_texture(
-                wgpu::TexelCopyTextureInfo {
-                    texture: old_texture,
-                    mip_level: 0,
-                    aspect: wgpu::TextureAspect::All,
-                    origin: wgpu::Origin3d { x: 0, y: 0, z: 0 },
-                },
-                wgpu::TexelCopyTextureInfo {
-                    texture: new_texture,
-                    mip_level: 0,
-                    aspect: wgpu::TextureAspect::All,
-                    origin: wgpu::Origin3d { x: 0, y: 0, z: 0 },
-                },
-                wgpu::Extent3d {
-                    width: self.size.width,
-                    height: self.size.height,
-                    depth_or_array_layers: self.size.depth_or_array_layers,
-                },
-            );
-        }
+        encoder.copy_texture_to_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &self.texture,
+                mip_level: 0,
+                aspect: wgpu::TextureAspect::All,
+                origin: wgpu::Origin3d { x: 0, y: 0, z: 0 },
+            },
+            wgpu::TexelCopyTextureInfo {
+                texture: &new_texture,
+                mip_level: 0,
+                aspect: wgpu::TextureAspect::All,
+                origin: wgpu::Origin3d { x: 0, y: 0, z: 0 },
+            },
+            wgpu::Extent3d {
+                width: self.size.width,
+                height: self.size.height,
+                depth_or_array_layers: self.size.depth_or_array_layers,
+            },
+        );
 
         queue.submit(Some(encoder.finish()));
 
         // Update the atlas state with the new textures and views.
-        self.textures = new_textures;
-        self.texture_views = new_texture_views;
+        self.texture = new_texture;
+        self.texture_view = new_texture_view;
         self.layer_texture_views = new_layer_texture_views;
         self.size = new_size;
     }
@@ -636,12 +613,12 @@ impl TextureAtlas {
         self.state.texture_id_to_location.get(&id).copied()
     }
 
-    pub fn textures(&self) -> &[wgpu::Texture] {
-        &self.textures
+    pub fn texture(&self) -> &wgpu::Texture {
+        &self.texture
     }
 
-    pub fn texture_views(&self) -> &[wgpu::TextureView] {
-        &self.texture_views
+    pub fn texture_view(&self) -> &wgpu::TextureView {
+        &self.texture_view
     }
 }
 
@@ -649,66 +626,52 @@ impl TextureAtlas {
 impl TextureAtlas {
     fn create_texture_and_view(
         device: &wgpu::Device,
-        formats: &[wgpu::TextureFormat],
+        format: wgpu::TextureFormat,
         page_size: wgpu::Extent3d,
-    ) -> (
-        Vec<wgpu::Texture>,
-        Vec<wgpu::TextureView>,
-        Vec<Vec<wgpu::TextureView>>,
-    ) {
-        let mut textures = Vec::with_capacity(formats.len());
-        let mut texture_views = Vec::with_capacity(formats.len());
-        let mut layer_texture_views = Vec::with_capacity(formats.len());
+    ) -> (wgpu::Texture, wgpu::TextureView, Vec<wgpu::TextureView>) {
+        let texture_label = format!("texture_atlas_texture_{format:?}");
+        let texture_view_label = format!("texture_atlas_texture_view_{format:?}");
 
-        for &format in formats {
-            let texture_label = format!("texture_atlas_texture_{format:?}");
-            let texture_view_label = format!("texture_atlas_texture_view_{format:?}");
+        let texture_descriptor = wgpu::TextureDescriptor {
+            label: Some(&texture_label),
+            size: page_size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::COPY_DST
+                | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[],
+        };
+        let texture = device.create_texture(&texture_descriptor);
 
-            let texture_descriptor = wgpu::TextureDescriptor {
-                label: Some(&texture_label),
-                size: page_size,
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING
-                    | wgpu::TextureUsages::RENDER_ATTACHMENT
-                    | wgpu::TextureUsages::COPY_DST
-                    | wgpu::TextureUsages::COPY_SRC,
-                view_formats: &[],
-            };
-            let texture = device.create_texture(&texture_descriptor);
+        // D2Array view for sampling all layers
+        let texture_view = texture.create_view(&wgpu::TextureViewDescriptor {
+            label: Some(&texture_view_label),
+            dimension: Some(wgpu::TextureViewDimension::D2Array),
+            aspect: wgpu::TextureAspect::All,
+            ..Default::default()
+        });
 
-            // D2Array view for sampling all layers
-            let texture_view = texture.create_view(&wgpu::TextureViewDescriptor {
-                label: Some(&texture_view_label),
-                dimension: Some(wgpu::TextureViewDimension::D2Array),
+        // Per-layer D2 views for render attachments (one per array layer)
+        let mut per_layer_views = Vec::with_capacity(page_size.depth_or_array_layers as usize);
+        for layer in 0..page_size.depth_or_array_layers {
+            let layer_view = texture.create_view(&wgpu::TextureViewDescriptor {
+                label: Some(&format!("texture_atlas_layer_view_{format:?}_{layer}")),
+                dimension: Some(wgpu::TextureViewDimension::D2),
+                base_mip_level: 0,
+                mip_level_count: Some(1),
+                base_array_layer: layer,
+                array_layer_count: Some(1),
                 aspect: wgpu::TextureAspect::All,
                 ..Default::default()
             });
-
-            // Per-layer D2 views for render attachments (one per array layer)
-            let mut per_layer_views = Vec::with_capacity(page_size.depth_or_array_layers as usize);
-            for layer in 0..page_size.depth_or_array_layers {
-                let layer_view = texture.create_view(&wgpu::TextureViewDescriptor {
-                    label: Some(&format!("texture_atlas_layer_view_{format:?}_{layer}")),
-                    dimension: Some(wgpu::TextureViewDimension::D2),
-                    base_mip_level: 0,
-                    mip_level_count: Some(1),
-                    base_array_layer: layer,
-                    array_layer_count: Some(1),
-                    aspect: wgpu::TextureAspect::All,
-                    ..Default::default()
-                });
-                per_layer_views.push(layer_view);
-            }
-
-            textures.push(texture);
-            texture_views.push(texture_view);
-            layer_texture_views.push(per_layer_views);
+            per_layer_views.push(layer_view);
         }
 
-        (textures, texture_views, layer_texture_views)
+        (texture, texture_view, per_layer_views)
     }
 }
 
@@ -793,24 +756,20 @@ mod tests {
                 height: 256,
                 depth_or_array_layers: 4,
             };
-            let formats = &[wgpu::TextureFormat::Rgba8UnormSrgb];
-            let atlas = TextureAtlas::new(&device, size, formats);
+            let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+            let atlas = TextureAtlas::new(&device, size, format);
             let atlas = atlas.lock();
 
             assert_eq!(atlas.size(), size);
-            assert_eq!(atlas.formats(), formats);
+            assert_eq!(atlas.format(), format);
             assert_eq!(atlas.capacity(), 256 * 256 * 4);
             assert_eq!(atlas.usage(), 0);
             assert_eq!(atlas.allocation_count(), 0);
 
-            let textures = atlas.textures();
-            assert_eq!(textures.len(), formats.len());
+            let texture = atlas.texture();
+            assert_eq!(texture.format(), format);
 
-            for (texture, format) in textures.iter().zip(formats.iter()) {
-                assert_eq!(texture.format(), *format);
-            }
-            let texture_views = atlas.texture_views();
-            assert_eq!(texture_views.len(), formats.len());
+            let _texture_view = atlas.texture_view();
         });
     }
 
@@ -825,8 +784,8 @@ mod tests {
                 height: 64,
                 depth_or_array_layers: 1,
             };
-            let formats = &[wgpu::TextureFormat::Rgba8UnormSrgb];
-            let atlas = TextureAtlas::new(&device, size, formats);
+            let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+            let atlas = TextureAtlas::new(&device, size, format);
 
             // Allocate one texture
             let texture1 = atlas.lock().allocate(&device, &queue, [32, 32]).unwrap();
@@ -888,8 +847,8 @@ mod tests {
                 height: 64,
                 depth_or_array_layers: 1,
             };
-            let formats = &[wgpu::TextureFormat::Rgba8UnormSrgb];
-            let atlas = TextureAtlas::new(&device, size, formats);
+            let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+            let atlas = TextureAtlas::new(&device, size, format);
 
             let texture1 = atlas.lock().allocate(&device, &queue, [64, 64]).unwrap();
             assert_eq!(atlas.lock().allocation_count(), 1);
@@ -913,8 +872,8 @@ mod tests {
                 height: 128,
                 depth_or_array_layers: 1,
             };
-            let formats = &[wgpu::TextureFormat::Rgba8UnormSrgb];
-            let atlas = TextureAtlas::new(&device, size, formats);
+            let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+            let atlas = TextureAtlas::new(&device, size, format);
 
             let texture = atlas.lock().allocate(&device, &queue, [32, 64]).unwrap();
             let uv = texture.uv().unwrap();
@@ -941,8 +900,8 @@ mod tests {
                 height: 128,
                 depth_or_array_layers: 1,
             };
-            let formats = &[wgpu::TextureFormat::Rgba8UnormSrgb];
-            let atlas = TextureAtlas::new(&device, size, formats);
+            let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+            let atlas = TextureAtlas::new(&device, size, format);
 
             let texture = atlas.lock().allocate(&device, &queue, [32, 32]).unwrap();
 
@@ -964,7 +923,7 @@ mod tests {
                 depth_or_array_layers: 1,
             };
             let texture_format = wgpu::TextureFormat::R8Uint;
-            let atlas = TextureAtlas::new(&device, atlas_size, &[texture_format]);
+            let atlas = TextureAtlas::new(&device, atlas_size, texture_format);
 
             // Allocate two textures to ensure the second one is not at the origin
             let _texture1 = atlas.lock().allocate(&device, &queue, [10, 10]).unwrap();
@@ -977,7 +936,7 @@ mod tests {
             let data: Vec<u8> = (0..texture_size[0] * texture_size[1])
                 .map(|i| (i % 256) as u8)
                 .collect();
-            texture2.write_data(&queue, &[&data]).unwrap();
+            texture2.write_data(&queue, &data).unwrap();
 
             // Create a buffer to read the data back, respecting alignment
             let bytes_per_pixel = texture_format.block_copy_size(None).unwrap();
@@ -1004,7 +963,7 @@ mod tests {
             };
             encoder.copy_texture_to_buffer(
                 wgpu::TexelCopyTextureInfo {
-                    texture: &atlas.lock().textures()[0],
+                    texture: atlas.lock().texture(),
                     mip_level: 0,
                     origin: wgpu::Origin3d {
                         x: location.bounds.min_x() as u32,

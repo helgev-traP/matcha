@@ -29,9 +29,9 @@ impl TextureAllocator {
             depth_or_array_layers: 1,
         };
 
-        let rgba_atlas = texture_atlas::TextureAtlas::new(gpu.device(), size, &[color_format]);
+        let rgba_atlas = texture_atlas::TextureAtlas::new(gpu.device(), size, color_format);
 
-        let stencil_atlas = texture_atlas::TextureAtlas::new(gpu.device(), size, &[stencil_format]);
+        let stencil_atlas = texture_atlas::TextureAtlas::new(gpu.device(), size, stencil_format);
 
         Self {
             size: max_size,
@@ -75,11 +75,11 @@ impl TextureAllocator {
     }
 
     pub fn color_texture(&self) -> wgpu::Texture {
-        self.color.lock().textures()[0].clone()
+        self.color.lock().texture().clone()
     }
 
     pub fn stencil_texture(&self) -> wgpu::Texture {
-        self.stencil.lock().textures()[0].clone()
+        self.stencil.lock().texture().clone()
     }
 }
 

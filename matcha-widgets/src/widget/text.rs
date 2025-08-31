@@ -1,14 +1,10 @@
-use std::any::Any;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
-
 use cosmic_text::{Attrs, Color, Metrics};
 use matcha_core::{
     device_input::DeviceInput,
-    types::range::CoverRange,
     ui::{
-        Background, Constraints, Dom, DomCompareResult, Style, UpdateWidgetError, Widget,
-        WidgetContext,
+        AnyWidgetFrame, Arrangement, Background, Constraints, Dom, Style, Widget, WidgetContext,
+        WidgetFrame,
+        widget::{AnyWidget, InvalidationHandle},
     },
     update_flag::UpdateNotifier,
 };
@@ -52,8 +48,8 @@ impl<'a> Text<'a> {
 }
 
 #[async_trait::async_trait]
-impl<'a: 'static, T: Send + 'static> Dom<T> for Text<'a> {
-    fn build_widget_tree(&self) -> Box<dyn Widget<T>> {
+impl<'a: 'static, T: Send + Sync + 'static> Dom<T> for Text<'a> {
+    fn build_widget_tree(&self) -> Box<dyn AnyWidgetFrame<T>> {
         let text_element = TextElement {
             text: self.content.clone(),
             attrs: self.attrs.clone(),
@@ -69,14 +65,17 @@ impl<'a: 'static, T: Send + 'static> Dom<T> for Text<'a> {
             cache_in_texture: Default::default(),
         };
 
-        Box::new(TextNode {
-            label: self.label.clone(),
-            content: self.content.clone(),
-            attrs: self.attrs.clone(),
-            metrics: self.metrics,
-            style,
-            size: [0.0, 0.0],
-        })
+        Box::new(WidgetFrame::new(
+            self.label.clone(),
+            vec![],
+            vec![],
+            TextNode {
+                content: self.content.clone(),
+                attrs: self.attrs.clone(),
+                metrics: self.metrics,
+                style,
+            },
+        ))
     }
 
     async fn set_update_notifier(&self, _notifier: &UpdateNotifier) {}
@@ -85,100 +84,121 @@ impl<'a: 'static, T: Send + 'static> Dom<T> for Text<'a> {
 // MARK: Widget
 
 pub struct TextNode<'a> {
-    label: Option<String>,
     content: String,
     attrs: Attrs<'a>,
     metrics: Metrics,
     style: TextCosmic<'a>,
-    size: [f32; 2],
 }
 
-#[async_trait::async_trait]
-impl<'a: 'static, T: Send + 'static> Widget<T> for TextNode<'a> {
-    fn label(&self) -> Option<&str> {
-        self.label.as_deref()
-    }
-
-    async fn update_widget_tree(
+impl<'a: 'static, T: Send + Sync + 'static> Widget<Text<'a>, T, ()> for TextNode<'a> {
+    fn update_widget<'b>(
         &mut self,
-        _component_updated: bool,
-        dom: &dyn Dom<T>,
-    ) -> Result<(), UpdateWidgetError> {
-        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Text<'a>>() {
-            let mut changed = false;
-            if self.content != dom.content {
-                self.content = dom.content.clone();
-                changed = true;
-            }
-            if self.attrs != dom.attrs {
-                self.attrs = dom.attrs.clone();
-                changed = true;
-            }
-            if self.metrics != dom.metrics {
-                self.metrics = dom.metrics;
-                changed = true;
-            }
-
-            if changed {
-                let text_element = TextElement {
-                    text: self.content.clone(),
-                    attrs: self.attrs.clone(),
-                };
-                self.style.texts = vec![text_element];
-                self.style.metrics = self.metrics;
-            }
-
-            self.label = dom.label.clone();
-            Ok(())
-        } else {
-            Err(UpdateWidgetError::TypeMismatch)
+        dom: &'b Text<'a>,
+        cache_invalidator: Option<InvalidationHandle>,
+    ) -> Vec<(&'b dyn Dom<T>, (), u128)> {
+        let mut changed = false;
+        if self.content != dom.content {
+            self.content = dom.content.clone();
+            changed = true;
         }
-    }
-
-    fn compare(&self, dom: &dyn Dom<T>) -> DomCompareResult {
-        if let Some(dom) = (dom as &dyn Any).downcast_ref::<Text<'a>>() {
-            if self.content == dom.content && self.attrs == dom.attrs && self.metrics == dom.metrics
-            {
-                DomCompareResult::Same
-            } else {
-                let mut hasher = DefaultHasher::new();
-                dom.content.hash(&mut hasher);
-                dom.attrs.hash(&mut hasher);
-                // dom.metrics.hash(&mut hasher); // Metrics does not implement Hash
-                DomCompareResult::Changed(hasher.finish() as usize)
-            }
-        } else {
-            DomCompareResult::Different
+        if self.attrs != dom.attrs {
+            self.attrs = dom.attrs.clone();
+            changed = true;
         }
+        if self.metrics != dom.metrics {
+            self.metrics = dom.metrics;
+            changed = true;
+        }
+
+        if changed {
+            if let Some(handle) = cache_invalidator {
+                handle.relayout_next_frame();
+            }
+            let text_element = TextElement {
+                text: self.content.clone(),
+                attrs: self.attrs.clone(),
+            };
+            self.style.texts = vec![text_element];
+            self.style.metrics = self.metrics;
+        }
+        vec![]
     }
 
-    fn device_input(&mut self, _event: &DeviceInput, _context: &WidgetContext) -> Option<T> {
-        None
-    }
-
-    fn is_inside(&mut self, position: [f32; 2], context: &WidgetContext) -> bool {
-        self.style.is_inside(position, self.size, context)
-    }
-
-    fn preferred_size(&mut self, _constraints: &Constraints, context: &WidgetContext) -> [f32; 2] {
-        let range = self.style.draw_range(self.size, context);
+    fn measure(
+        &self,
+        _constraints: &Constraints,
+        _children: &[(&dyn AnyWidget<T>, &())],
+        ctx: &WidgetContext,
+    ) -> [f32; 2] {
+        let range = self.style.draw_range([f32::MAX, f32::MAX], ctx);
         [range.width(), range.height()]
     }
 
-    fn arrange(&mut self, final_size: [f32; 2], _context: &WidgetContext) {
-        self.size = final_size;
+    fn arrange(
+        &self,
+        _final_size: [f32; 2],
+        _children: &[(&dyn AnyWidget<T>, &())],
+        _ctx: &WidgetContext,
+    ) -> Vec<Arrangement> {
+        vec![]
     }
 
-    fn need_rerendering(&self) -> bool {
-        true
+    fn device_input(
+        &mut self,
+        _bounds: [f32; 2],
+        _event: &DeviceInput,
+        _children: &mut [(&mut dyn AnyWidget<T>, &mut (), &Arrangement)],
+        _cache_invalidator: InvalidationHandle,
+        _ctx: &WidgetContext,
+    ) -> Option<T> {
+        None
     }
 
-    fn render(&mut self, _background: Background, ctx: &WidgetContext) -> RenderNode {
-        // The actual drawing logic is in TextCosmic's draw method,
-        // which is not fully implemented yet.
-        // For now, we'll just return an empty node.
-        // When TextCosmic::draw is implemented, this should be updated
-        // to render the text to a texture and return a RenderNode with it.
-        RenderNode::new()
+    fn is_inside(
+        &self,
+        bounds: [f32; 2],
+        position: [f32; 2],
+        _children: &[(&dyn AnyWidget<T>, &(), &Arrangement)],
+        ctx: &WidgetContext,
+    ) -> bool {
+        self.style.is_inside(position, bounds, ctx)
+    }
+
+    fn render(
+        &self,
+        _background: Background,
+        _children: &[(&dyn AnyWidget<T>, &(), &Arrangement)],
+        ctx: &WidgetContext,
+    ) -> RenderNode {
+        let mut render_node = RenderNode::new();
+        let size = <Self as Widget<Text, T, ()>>::measure(
+            self,
+            &Constraints::new([0.0f32, f32::INFINITY], [0.0f32, f32::INFINITY]),
+            &[],
+            ctx,
+        );
+
+        if size[0] > 0.0 && size[1] > 0.0 {
+            let texture_size = [size[0].ceil() as u32, size[1].ceil() as u32];
+            if let Ok(style_region) =
+                ctx.texture_atlas()
+                    .allocate_color(ctx.device(), ctx.queue(), texture_size)
+            {
+                let mut encoder =
+                    ctx.device()
+                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                            label: Some("Text Render Encoder"),
+                        });
+
+                self.style
+                    .draw(&mut encoder, &style_region, size, [0.0, 0.0], ctx);
+
+                ctx.queue().submit(Some(encoder.finish()));
+                render_node.texture_and_position =
+                    Some((style_region, nalgebra::Matrix4::identity()));
+            }
+        }
+
+        render_node
     }
 }

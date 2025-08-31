@@ -695,7 +695,7 @@ fn create_instance_and_stencil_data_recursive(
     mut current_stencil: u32,
 ) -> Result<(), TextureValidationError> {
     if let Some((stencil, stencil_position)) = &object.stencil_and_position {
-        if stencil.formats() != [stencil_format] {
+        if stencil.format() != stencil_format {
             return Err(TextureValidationError::FormatMismatch);
         }
 
@@ -729,7 +729,7 @@ fn create_instance_and_stencil_data_recursive(
     }
 
     if let Some((texture, texture_position)) = &object.texture_and_position {
-        if texture.formats() != [texture_format] {
+        if texture.format() != texture_format {
             return Err(TextureValidationError::FormatMismatch);
         }
 
