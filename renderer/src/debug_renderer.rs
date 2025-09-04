@@ -1,15 +1,17 @@
-use std::sync::Arc;
 use crate::render_node::RenderNode;
+use gpu_utils::texture_atlas;
+use std::sync::Arc;
 use texture_atlas::TextureError;
 
-/// A very small debug renderer that draws the first layer of the provided atlas
-/// as a fullscreen quad. API is intentionally similar to `Renderer` (new + render).
+/// A very small debug renderer that draws a single layer of the provided atlas
+/// as a fullscreen quad. API mirrors `CoreRenderer::render`.
 pub struct DebugRenderer {
     texture_sampler: wgpu::Sampler,
     texture_bind_group_layout: wgpu::BindGroupLayout,
     pipeline_layout: wgpu::PipelineLayout,
     shader_module: wgpu::ShaderModule,
-    render_pipeline_cache: moka::sync::Cache<wgpu::TextureFormat, Arc<wgpu::RenderPipeline>, fxhash::FxBuildHasher>,
+    render_pipeline_cache:
+        moka::sync::Cache<wgpu::TextureFormat, Arc<wgpu::RenderPipeline>, fxhash::FxBuildHasher>,
 }
 
 impl DebugRenderer {
@@ -50,48 +52,11 @@ impl DebugRenderer {
                 ],
             });
 
-        // simple WGSL shader that draws a full-screen quad sampling layer 0
-        let shader_source = r#"
-struct VertexOutput {
-    @builtin(position) pos : vec4<f32>;
-    @location(0) uv : vec2<f32>;
-};
-
-@vertex
-fn vertex_main(@builtin(vertex_index) v_idx : u32) -> VertexOutput {
-    var out : VertexOutput;
-    // triangle-strip quad (0..3)
-    let positions = array<vec2<f32>,4>(
-        vec2<f32>(-1.0, -1.0),
-        vec2<f32>(-1.0,  1.0),
-        vec2<f32>( 1.0, -1.0),
-        vec2<f32>( 1.0,  1.0)
-    );
-    let uvs = array<vec2<f32>,4>(
-        vec2<f32>(0.0, 1.0),
-        vec2<f32>(0.0, 0.0),
-        vec2<f32>(1.0, 1.0),
-        vec2<f32>(1.0, 0.0)
-    );
-    out.pos = vec4<f32>(positions[v_idx], 0.0, 1.0);
-    out.uv = uvs[v_idx];
-    return out;
-}
-
-@group(0) @binding(0) var samp : sampler;
-@group(0) @binding(1) var tex : texture_2d_array<f32>;
-
-@fragment
-fn fragment_main(in_ : VertexOutput) -> @location(0) vec4<f32> {
-    // sample layer 0
-    let col = textureSample(tex, samp, vec3<f32>(in_.uv, 0.0));
-    return col;
-}
-"#;
-
+        // shader will be created per-instance (we keep a module here but the layer
+        // index is baked into the shader at creation time in `render`)
         let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("DebugRenderer Shader"),
-            source: wgpu::ShaderSource::Wgsl(shader_source.into()),
+            label: Some("DebugRenderer Shader (placeholder)"),
+            source: wgpu::ShaderSource::Wgsl("".into()),
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -116,20 +81,21 @@ fn fragment_main(in_ : VertexOutput) -> @location(0) vec4<f32> {
     fn create_render_pipeline(
         &self,
         device: &wgpu::Device,
+        shader_module: &wgpu::ShaderModule,
         target_format: wgpu::TextureFormat,
     ) -> wgpu::RenderPipeline {
         device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("DebugRenderer Pipeline"),
             layout: Some(&self.pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &self.shader_module,
-                entry_point: "vertex_main",
+                module: shader_module,
+                entry_point: Some("vertex_main"),
                 buffers: &[],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
-                module: &self.shader_module,
-                entry_point: "fragment_main",
+                module: shader_module,
+                entry_point: Some("fragment_main"),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: target_format,
                     blend: None,
@@ -148,7 +114,7 @@ fn fragment_main(in_ : VertexOutput) -> @location(0) vec4<f32> {
         })
     }
 
-    /// Render the given atlas (layer 0) fullscreen. This intentionally ignores `objects`.
+    /// Render the given atlas (specified layer) fullscreen. Mirrors CoreRenderer::render signature.
     #[allow(clippy::too_many_arguments)]
     pub fn render(
         &self,
@@ -156,14 +122,62 @@ fn fragment_main(in_ : VertexOutput) -> @location(0) vec4<f32> {
         queue: &wgpu::Queue,
         surface_format: wgpu::TextureFormat,
         destination_view: &wgpu::TextureView,
-        _destination_size: [f32; 2],
-        _objects: RenderNode,
+        destination_size: [f32; 2],
+        _objects: &RenderNode,
         load_color: wgpu::Color,
         texture_atlas: &wgpu::Texture,
         _stencil_atlas: &wgpu::Texture,
-    ) -> Result<(), crate::renderer::TextureValidationError> {
+    ) -> Result<(), crate::core_renderer::TextureValidationError> {
+        // Hardcoded atlas layer to display (change as needed).
+        const DEBUG_ATLAS_LAYER: u32 = 0;
+
+        // Build shader source with baked layer index.
+        let shader_source = format!(
+            r#"
+struct VertexOutput {{
+    @builtin(position) pos : vec4<f32>,
+    @location(0) uv : vec2<f32>,
+}};
+
+@vertex
+fn vertex_main(@builtin(vertex_index) v_idx : u32) -> VertexOutput {{
+    var out : VertexOutput;
+    let positions = array<vec2<f32>,4>(
+        vec2<f32>(-1.0, -1.0),
+        vec2<f32>(-1.0,  1.0),
+        vec2<f32>( 1.0, -1.0),
+        vec2<f32>( 1.0,  1.0)
+    );
+    let uvs = array<vec2<f32>,4>(
+        vec2<f32>(0.0, 1.0),
+        vec2<f32>(0.0, 0.0),
+        vec2<f32>(1.0, 1.0),
+        vec2<f32>(1.0, 0.0)
+    );
+    out.pos = vec4<f32>(positions[v_idx], 0.0, 1.0);
+    out.uv = uvs[v_idx];
+    return out;
+}}
+
+@group(0) @binding(0) var samp : sampler;
+@group(0) @binding(1) var tex : texture_2d_array<f32>;
+
+@fragment
+fn fragment_main(in_ : VertexOutput) -> @location(0) vec4<f32> {{
+    // sample hardcoded layer
+    let col = textureSample(tex, samp, in_.uv, {DEBUG_ATLAS_LAYER});
+    return col;
+}}
+"#
+        );
+
+        let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("DebugRenderer Shader"),
+            source: wgpu::ShaderSource::Wgsl(shader_source.into()),
+        });
+
         let pipeline = self.render_pipeline_cache.get_with(surface_format, || {
-            Arc::new(self.create_render_pipeline(device, surface_format))
+            Arc::new(self.create_render_pipeline(device, &shader_module, surface_format))
         });
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {

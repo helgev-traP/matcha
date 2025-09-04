@@ -3,6 +3,9 @@ pub use core_renderer::CoreRenderer;
 pub mod render_node;
 pub use render_node::RenderNode;
 
+pub mod debug_renderer;
+pub use debug_renderer::DebugRenderer;
+
 pub mod vertex;
 
 pub mod widgets_renderer;
