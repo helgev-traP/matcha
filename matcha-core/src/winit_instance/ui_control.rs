@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use thiserror::Error;
+use utils::back_prop_dirty::BackPropDirty;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 
 use crate::{
@@ -122,10 +123,13 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
                     self.widget = None;
                 }
             }
-            if self.widget.is_none() {
+            let widget = self.widget.get_or_insert_with(|| {
                 // Initialize widget
-                self.widget = Some(dom.build_widget_tree());
-            }
+                dom.build_widget_tree()
+            });
+
+            // set dirty flags
+            widget.update_dirty_flags(BackPropDirty::new(true), BackPropDirty::new(true));
         }
 
         let widget = self.widget.as_mut().expect("widget initialized above");

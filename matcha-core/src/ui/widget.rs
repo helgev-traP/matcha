@@ -706,7 +706,7 @@ mod tests {
         };
 
         let mut widget_frame: Box<dyn AnyWidgetFrame<String>> = initial_dom.build_widget_tree();
-        widget_frame.update_dirty_flags(BackPropDirty::new(), BackPropDirty::new());
+        widget_frame.update_dirty_flags(BackPropDirty::new(true), BackPropDirty::new(true));
 
         let widget_frame_concrete = (&mut *widget_frame as &mut dyn Any)
             .downcast_mut::<MockWidgetFrame>()
@@ -775,7 +775,7 @@ mod tests {
         };
 
         let mut widget_frame: Box<dyn AnyWidgetFrame<String>> = initial_dom.build_widget_tree();
-        widget_frame.update_dirty_flags(BackPropDirty::new(), BackPropDirty::new());
+        widget_frame.update_dirty_flags(BackPropDirty::new(true), BackPropDirty::new(true));
 
         // Update with a new child added
         let updated_dom = MockDom {
@@ -838,7 +838,7 @@ mod tests {
         };
 
         let mut widget_frame: Box<dyn AnyWidgetFrame<String>> = initial_dom.build_widget_tree();
-        widget_frame.update_dirty_flags(BackPropDirty::new(), BackPropDirty::new());
+        widget_frame.update_dirty_flags(BackPropDirty::new(true), BackPropDirty::new(true));
 
         // Update with a child removed
         let updated_dom = MockDom {
@@ -892,7 +892,7 @@ mod tests {
         };
 
         let mut widget_frame: Box<dyn AnyWidgetFrame<String>> = initial_dom.build_widget_tree();
-        widget_frame.update_dirty_flags(BackPropDirty::new(), BackPropDirty::new());
+        widget_frame.update_dirty_flags(BackPropDirty::new(true), BackPropDirty::new(true));
 
         // Update with children reordered
         let updated_dom = MockDom {
@@ -946,7 +946,7 @@ mod tests {
         };
 
         let mut widget_frame: Box<dyn AnyWidgetFrame<String>> = initial_dom.build_widget_tree();
-        widget_frame.update_dirty_flags(BackPropDirty::new(), BackPropDirty::new());
+        widget_frame.update_dirty_flags(BackPropDirty::new(true), BackPropDirty::new(true));
         let widget_frame_concrete = (&mut *widget_frame as &mut dyn Any)
             .downcast_mut::<MockWidgetFrame>()
             .unwrap();
@@ -1117,7 +1117,7 @@ mod tests {
             call_count: Arc::clone(&call_count),
         };
         let mut widget_frame = WidgetFrame::new(None, vec![], vec![], widget_impl);
-        widget_frame.update_dirty_flags(BackPropDirty::new(), BackPropDirty::new());
+        widget_frame.update_dirty_flags(BackPropDirty::new(true), BackPropDirty::new(true));
 
         let constraints = Constraints::new([0.0, 200.0], [0.0, 200.0]);
 
@@ -1216,7 +1216,7 @@ mod tests {
             vec![],
             WidgetRequestingRearrange,
         ));
-        widget_frame.update_dirty_flags(BackPropDirty::new(), BackPropDirty::new());
+        widget_frame.update_dirty_flags(BackPropDirty::new(true), BackPropDirty::new(true));
 
         let frame_impl_before = (&*widget_frame as &dyn Any)
             .downcast_ref::<WidgetFrame<MockDom, WidgetRequestingRearrange, String, MockSetting>>()

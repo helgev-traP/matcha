@@ -5,7 +5,9 @@ use crate::{
     texture_allocator::TextureAllocator,
 };
 use renderer::{
-    core_renderer::{CoreRenderer, TextureValidationError},
+    core_renderer::TextureValidationError,
+    // core_renderer::CoreRenderer,
+    debug_renderer::DebugRenderer as CoreRenderer,
     render_node::RenderNode,
 };
 

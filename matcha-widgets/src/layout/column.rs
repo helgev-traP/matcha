@@ -114,8 +114,8 @@ impl ColumnNode {
             return (0.0, 0.0);
         }
 
-        let mut gap: f32 = 0.0;
-        let mut offset: f32 = 0.0;
+        let mut gap: f32;
+        let mut offset: f32;
 
         // Representative ChildSize: [width, height]
         let mut rep_child_size = ChildSize::with_size([child_max_width, total_child_height]);
@@ -219,7 +219,9 @@ where
         );
 
         if justify_content_changed || self.align_items != dom.align_items {
-            cache_invalidator.map(|h| h.relayout_next_frame());
+            if let Some(h) = cache_invalidator {
+                h.relayout_next_frame()
+            }
         }
 
         self.justify_content = dom.justify_content.clone();

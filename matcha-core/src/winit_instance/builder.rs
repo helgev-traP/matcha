@@ -232,6 +232,7 @@ impl<
             ui_control,
             backend: self.backend,
             benchmarker: super::benchmark::Benchmark::new(60),
+            frame: 0,
             ticker: ticker::Ticker::new(),
         })
     }

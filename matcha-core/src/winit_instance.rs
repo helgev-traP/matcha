@@ -30,22 +30,23 @@ pub struct WinitInstance<
     InnerEvent: 'static = Event,
 > {
     // --- tokio runtime ---
-    pub(crate) tokio_runtime: tokio::runtime::Runtime,
+    tokio_runtime: tokio::runtime::Runtime,
     // --- window ---
-    pub(crate) window: window_surface::WindowSurface,
-    pub(crate) surface_preferred_format: wgpu::TextureFormat,
+    window: window_surface::WindowSurface,
+    surface_preferred_format: wgpu::TextureFormat,
     // --- rendering context ---
-    pub(crate) any_resource: AnyResource,
+    any_resource: AnyResource,
     // --- render control ---
-    pub(crate) render_control: render_control::RenderControl,
+    render_control: render_control::RenderControl,
     // --- UI control ---
-    pub(crate) ui_control: ui_control::UiControl<Model, Message, Event, InnerEvent>,
+    ui_control: ui_control::UiControl<Model, Message, Event, InnerEvent>,
     // --- backend ---
-    pub(crate) backend: B,
+    backend: B,
     // --- benchmark / monitoring ---
-    pub(crate) benchmarker: benchmark::Benchmark,
+    benchmarker: benchmark::Benchmark,
+    frame: u128,
     // --- ticker ---
-    pub(crate) ticker: ticker::Ticker,
+    ticker: ticker::Ticker,
 }
 
 impl<
@@ -163,12 +164,18 @@ impl<
                 Ok(())
             })?;
 
-        println!(
-            "Render time: {}, Average: {}, Max: {}",
+        // clear terminal line and print benchmark info
+        print!(
+            "\r({:.3}) | (frame: {}) | Render time: {}, Avr: {}, Max: {}",
+            self.ticker.current_time().as_secs_f32(),
+            self.frame,
             self.benchmarker.last_time(),
             self.benchmarker.average_time(),
             self.benchmarker.max_time()
         );
+        std::io::Write::flush(&mut std::io::stdout()).ok();
+
+        self.frame += 1;
 
         surface_texture.present();
 

@@ -33,17 +33,17 @@ impl BackPropDirtyInner {
 
 impl Default for BackPropDirty {
     fn default() -> Self {
-        Self::new()
+        Self::new(false)
     }
 }
 
 impl BackPropDirty {
     /// Create a root dirty flag node.
     /// Initial state: clean (false). Set to true via `mark_dirty`.
-    pub fn new() -> Self {
+    pub fn new(init: bool) -> Self {
         Self {
             inner: Arc::new(BackPropDirtyInner {
-                flag: AtomicBool::new(false),
+                flag: AtomicBool::new(init),
                 parent: None,
             }),
         }

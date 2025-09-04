@@ -112,8 +112,8 @@ impl RowNode {
             return (0.0, 0.0);
         }
 
-        let mut gap: f32 = 0.0;
-        let mut offset: f32 = 0.0;
+        let mut gap: f32;
+        let mut offset: f32;
 
         // Provide representative ChildSize containing total child width and max height,
         // as requested: "gap 計算時、子要素の値として横幅の総和および最大縦幅を渡す"
@@ -206,9 +206,26 @@ where
         dom: &'a Row<T>,
         cache_invalidator: Option<InvalidationHandle>,
     ) -> Vec<(&'a dyn Dom<T>, (), u128)> {
-        // Check if justify_content or align_items changed
-        if self.justify_content != dom.justify_content || self.align_items != dom.align_items {
-            cache_invalidator.map(|h| h.relayout_next_frame());
+        // Use the same conservative change-detection as Column: treat certain
+        // JustifyContent variants as equivalent to avoid unnecessary relayouts.
+        let justify_content_changed = !matches!(
+            (&self.justify_content, &dom.justify_content),
+            (
+                JustifyContent::FlexStart { .. },
+                JustifyContent::FlexStart { .. }
+            ) | (
+                JustifyContent::FlexEnd { .. },
+                JustifyContent::FlexEnd { .. }
+            ) | (JustifyContent::Center { .. }, JustifyContent::Center { .. })
+                | (JustifyContent::SpaceBetween, JustifyContent::SpaceBetween)
+                | (JustifyContent::SpaceAround, JustifyContent::SpaceAround)
+                | (JustifyContent::SpaceEvenly, JustifyContent::SpaceEvenly)
+        );
+
+        if justify_content_changed || self.align_items != dom.align_items {
+            if let Some(h) = cache_invalidator {
+                h.relayout_next_frame()
+            }
         }
 
         self.justify_content = dom.justify_content.clone();
@@ -229,7 +246,14 @@ where
         _cache_invalidator: InvalidationHandle,
         ctx: &WidgetContext,
     ) -> Option<T> {
-        todo!()
+        // Iterate children in reverse order so top-most (last) child receives events first.
+        for (child, _, arrangement) in children.iter_mut().rev() {
+            let child_event = event.transform(arrangement.affine);
+            if let Some(result) = child.device_event(&child_event, ctx) {
+                return Some(result);
+            }
+        }
+        None
     }
 
     fn is_inside(
@@ -255,41 +279,33 @@ where
             return [0.0, 0.0];
         }
 
-        // Measure children with available constraints
-        let child_constraints = Constraints::new(
-            [0.0, constraints.max_width()],
-            [0.0, constraints.max_height()],
-        );
         let mut total_child_width = 0.0f32;
         let mut max_child_height = 0.0f32;
 
+        // Measure all children using final constraints (same approach as Column)
         for (child, _) in children {
-            let child_size = child.measure(&child_constraints, ctx);
+            let child_size = child.measure(constraints, ctx);
             total_child_width += child_size[0];
             max_child_height = max_child_height.max(child_size[1]);
         }
 
-        let child_count = children.len();
-
-        // Use helper to compute gap (and offset, though measure only needs gap)
+        // Compute gap using helper (accounts for Grow and space distribution)
         let (gap, _offset) = self.calc_gap_and_offset(
             &self.justify_content,
             constraints.max_width(),
             total_child_width,
             max_child_height,
-            child_count,
+            children.len(),
             ctx,
         );
 
-        let total_width = total_child_width + gap * (child_count - 1) as f32;
+        if children.len() > 1 {
+            total_child_width += gap * (children.len() - 1) as f32;
+        }
 
         [
-            total_width
-                .min(constraints.max_width())
-                .max(constraints.min_width()),
-            max_child_height
-                .min(constraints.max_height())
-                .max(constraints.min_height()),
+            total_child_width.min(constraints.max_width()),
+            max_child_height.min(constraints.max_height()),
         ]
     }
 

@@ -5,7 +5,7 @@ use utils::back_prop_dirty::BackPropDirty;
 /// Basic single-thread propagation.
 #[test]
 fn test_single_thread_propagation() {
-    let root = BackPropDirty::new();
+    let root = BackPropDirty::new(false);
     let child = BackPropDirty::with_parent(&root);
 
     assert!(!root.is_dirty());
@@ -31,7 +31,7 @@ fn test_single_thread_propagation() {
 /// and subsequent take_dirty() should return false until another mark.
 #[test]
 fn test_multithread_propagation() {
-    let root = BackPropDirty::new();
+    let root = BackPropDirty::new(false);
 
     // Create several child nodes that point to the same parent.
     let mut children = Vec::new();
@@ -73,7 +73,7 @@ fn test_deep_chain_propagation() {
     let depth = 1000usize;
     let mut nodes = Vec::with_capacity(depth + 1);
 
-    nodes.push(BackPropDirty::new()); // root at index 0
+    nodes.push(BackPropDirty::new(false)); // root at index 0
     for _ in 0..depth {
         let parent = nodes.last().unwrap();
         nodes.push(BackPropDirty::with_parent(parent));
