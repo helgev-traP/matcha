@@ -5,14 +5,14 @@ use crate::{
     texture_allocator::TextureAllocator,
 };
 use renderer::{
-    core_renderer::{Renderer, TextureValidationError},
+    core_renderer::{CoreRenderer, TextureValidationError},
     render_node::RenderNode,
 };
 
 pub struct RenderControl {
     gpu: Gpu,
     base_color: wgpu::Color,
-    renderer: Renderer,
+    renderer: CoreRenderer,
     texture_allocator: TextureAllocator,
 }
 
@@ -24,7 +24,7 @@ impl RenderControl {
         stencil_format: wgpu::TextureFormat,
     ) -> Result<Self, GpuError> {
         let gpu = Gpu::new(power_preferences).await?;
-        let renderer = Renderer::new(gpu.device());
+        let renderer = CoreRenderer::new(gpu.device());
 
         let texture_allocator = TextureAllocator::new(&gpu, color_format, stencil_format);
 

@@ -1,4 +1,4 @@
-use utils::RwOption;
+use utils::rwoption::RwOption;
 
 #[test]
 fn test_get_set_take() {

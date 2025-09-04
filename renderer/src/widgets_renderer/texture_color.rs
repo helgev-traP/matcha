@@ -1,3 +1,4 @@
+use utils::rwoption::RwOption;
 use wgpu::util::DeviceExt;
 
 use crate::vertex::uv_vertex::UvVertex;
@@ -14,7 +15,7 @@ rendering (e.g. use 1.0 - v). */
 const PIPELINE_CACHE_SIZE: u64 = 4;
 
 pub struct TextureColor {
-    inner: utils::RwOption<TextureColorImpl>,
+    inner: RwOption<TextureColorImpl>,
 }
 
 struct TextureColorImpl {
@@ -96,7 +97,7 @@ pub struct RenderData<'a> {
 impl Default for TextureColor {
     fn default() -> Self {
         Self {
-            inner: utils::RwOption::new(),
+            inner: RwOption::new(),
         }
     }
 }

@@ -4,10 +4,11 @@ push constants:
 */
 
 use crate::vertex::colored_vertex::ColorVertex;
+use utils::rwoption::RwOption;
 use wgpu::{PipelineCompilationOptions, util::DeviceExt};
 
 pub struct VertexColor {
-    inner: utils::RwOption<VertexColorImpl>,
+    inner: RwOption<VertexColorImpl>,
 }
 
 const PIPELINE_CACHE_SIZE: u64 = 4;
@@ -52,7 +53,7 @@ pub struct RenderData<'a> {
 impl Default for VertexColor {
     fn default() -> Self {
         Self {
-            inner: utils::RwOption::new(),
+            inner: RwOption::new(),
         }
     }
 }

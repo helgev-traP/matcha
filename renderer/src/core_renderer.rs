@@ -109,7 +109,7 @@ struct CullingPushConstants {
     _pad: [u32; 3],
 }
 
-pub struct Renderer {
+pub struct CoreRenderer {
     // Bind Group Layouts
     texture_sampler: wgpu::Sampler,
     texture_bind_group_layout: wgpu::BindGroupLayout,
@@ -133,7 +133,7 @@ pub struct Renderer {
     draw_command_storage: wgpu::Buffer,
 }
 
-impl Renderer {
+impl CoreRenderer {
     pub fn new(device: &wgpu::Device) -> Self {
         // Sampler
         let texture_sampler = device.create_sampler(&wgpu::SamplerDescriptor {

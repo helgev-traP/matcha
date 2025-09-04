@@ -1,4 +1,5 @@
 use nalgebra::Matrix4;
+use utils::rwoption::RwOption;
 use wgpu::PipelineCompilationOptions;
 
 /*
@@ -40,7 +41,7 @@ const PUSH_CONSTANTS_SIZE: u32 = std::mem::size_of::<PushConstant>() as u32;
 /// with offset and size parameters.
 #[derive(Default)]
 pub struct TextureCopy {
-    inner: utils::RwOption<TextureCopyImpl>,
+    inner: RwOption<TextureCopyImpl>,
 }
 
 const PIPELINE_CACHE_SIZE: u64 = 4;

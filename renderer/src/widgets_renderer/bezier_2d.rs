@@ -1,5 +1,5 @@
+use utils::rwoption::RwOption;
 use gpu_utils::texture_atlas;
-use moka::ops::compute;
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
 
@@ -43,7 +43,7 @@ struct BezierInfo {
 
 #[derive(Default)]
 pub struct Bezier2d {
-    inner: utils::RwOption<Arc<Bezier2dImpl>>,
+    inner: RwOption<Arc<Bezier2dImpl>>,
 }
 
 struct Bezier2dImpl {
@@ -182,7 +182,6 @@ impl Bezier2d {
             color,
         }: RenderData,
         device: &wgpu::Device,
-        queue: &wgpu::Queue,
     ) {
         if anchors.len() < 2 || div == 0 {
             // Not enough anchors or divisions to compute Bezier curve
@@ -259,10 +258,6 @@ impl Bezier2d {
             ],
         });
 
-        let mut command_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("bezier_2d_command_encoder"),
-        });
-
         // Compute Pass
         {
             let mut compute_pass =
@@ -299,7 +294,7 @@ impl Bezier2d {
             std::mem::size_of::<wgpu::util::DrawIndirectArgs>() as u64,
         );
 
-        let Ok(mut render_pass) = atlas_region.begin_render_pass(&mut command_encoder) else {
+        let Ok(mut render_pass) = atlas_region.begin_render_pass(command_encoder) else {
             return;
         };
 

@@ -4,11 +4,12 @@ push constants:
 */
 
 use crate::vertex::colored_vertex::ColorVertex;
+use utils::rwoption::RwOption;
 use wgpu::{PipelineCompilationOptions, util::DeviceExt};
 
 #[derive(Default)]
 pub struct LineStripColor {
-    inner: utils::RwOption<LineStripColorImpl>,
+    inner: RwOption<LineStripColorImpl>,
 }
 
 const PIPELINE_CACHE_SIZE: u64 = 4;

@@ -33,3 +33,15 @@ pub use ui::{
     Widget, WidgetContext, WidgetFrame, component,
 };
 pub use update_flag::UpdateNotifier;
+
+pub mod prelude {
+    pub use super::App;
+    pub use super::DeviceInput;
+    pub use super::UpdateNotifier;
+    pub use super::types::*;
+    pub use super::ui::{
+        AnyWidget, AnyWidgetFrame, Arrangement, Background, Component, ComponentDom, ComponentWidget,
+        Constraints, Dom, InvalidationHandle, LayoutSizeKey, ModelAccessor, Style, UpdateWidgetError,
+        Widget, WidgetContext, WidgetFrame,
+    };
+}
