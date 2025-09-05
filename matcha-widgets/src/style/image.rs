@@ -104,65 +104,65 @@ pub enum VAlign {
 #[derive(Clone, PartialEq)]
 pub struct Image {
     image: ImageSource,
-    size: Arc<[Size; 2]>,
-    offset: Arc<[Size; 2]>,
+    size: [Size; 2],
+    offset: [Size; 2],
 }
 
 impl Image {
     pub fn new(source: impl Into<ImageSource>) -> Self {
         Self {
             image: source.into(),
-            size: Arc::new([Size::child_w(1.0), Size::child_h(1.0)]),
-            offset: Arc::new([Size::px(0.0), Size::px(0.0)]),
+            size: [Size::child_w(1.0), Size::child_h(1.0)],
+            offset: [Size::px(0.0), Size::px(0.0)],
         }
     }
 
     pub fn stretch_to_boundary(mut self) -> Self {
-        self.size = Arc::new([Size::parent_w(1.0), Size::parent_h(1.0)]);
+        self.size = [Size::parent_w(1.0), Size::parent_h(1.0)];
         self
     }
 
     /// Set absolute size in pixels.
     pub fn size_px(mut self, w: f32, h: f32) -> Self {
-        self.size = Arc::new([Size::px(w), Size::px(h)]);
+        self.size = [Size::px(w), Size::px(h)];
         self
     }
 
     /// Set width in pixels, keep height as is.
     pub fn size_px_w(mut self, w: f32) -> Self {
         let h = self.size[1].clone();
-        self.size = Arc::new([Size::px(w), h]);
+        self.size = [Size::px(w), h];
         self
     }
 
     /// Set height in pixels, keep width as is.
     pub fn size_px_h(mut self, h: f32) -> Self {
         let w = self.size[0].clone();
-        self.size = Arc::new([w, Size::px(h)]);
+        self.size = [w, Size::px(h)];
         self
     }
 
     /// Set size as percentage of parent (percent values, e.g. 50.0 == 50%).
     pub fn size_percent(mut self, w_percent: f32, h_percent: f32) -> Self {
-        self.size = Arc::new([
+        self.size = [
             Size::parent_w(w_percent / 100.0),
             Size::parent_h(h_percent / 100.0),
-        ]);
+        ];
         self
     }
 
     /// Set absolute offset in pixels.
     pub fn offset_px(mut self, x: f32, y: f32) -> Self {
-        self.offset = Arc::new([Size::px(x), Size::px(y)]);
+        self.offset = [Size::px(x), Size::px(y)];
         self
     }
 
     /// Set offset as percentage of parent (percent values).
     pub fn offset_percent(mut self, x_percent: f32, y_percent: f32) -> Self {
-        self.offset = Arc::new([
+        self.offset = [
             Size::parent_w(x_percent / 100.0),
             Size::parent_h(y_percent / 100.0),
-        ]);
+        ];
         self
     }
 
@@ -177,7 +177,7 @@ impl Image {
             let parent_h = parent[1].unwrap_or(child.get()[1]);
             (parent_h - child.get()[1]) * 0.5
         });
-        self.offset = Arc::new([ox, oy]);
+        self.offset = [ox, oy];
         self
     }
 
@@ -200,7 +200,7 @@ impl Image {
             }),
         };
         let oy = self.offset[1].clone();
-        self.offset = Arc::new([ox, oy]);
+        self.offset = [ox, oy];
         self
     }
 
@@ -223,7 +223,7 @@ impl Image {
             }),
         };
         let ox = self.offset[0].clone();
-        self.offset = Arc::new([ox, oy]);
+        self.offset = [ox, oy];
         self
     }
 
@@ -236,12 +236,12 @@ impl Image {
 
     // Existing simple setters kept below (they will overwrite)
     pub fn size(mut self, size: [Size; 2]) -> Self {
-        self.size = Arc::new(size);
+        self.size = size;
         self
     }
 
     pub fn offset(mut self, offset: [Size; 2]) -> Self {
-        self.offset = Arc::new(offset);
+        self.offset = offset;
         self
     }
 }
