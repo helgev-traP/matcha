@@ -10,9 +10,10 @@ use gpu_utils::texture_atlas;
 /// The RenderNode stores textures, stencil information, and child elements along with
 /// per-node transform matrices. Transforms are applied by the renderer when generating GPU
 /// draw calls.
+#[derive(Debug)]
 pub struct RenderNode {
-    pub texture_and_position: Option<(texture_atlas::AtlasRegion, nalgebra::Matrix4<f32>)>,
-    pub stencil_and_position: Option<(texture_atlas::AtlasRegion, nalgebra::Matrix4<f32>)>,
+    texture_and_position: Option<(texture_atlas::AtlasRegion, nalgebra::Matrix4<f32>)>,
+    stencil_and_position: Option<(texture_atlas::AtlasRegion, nalgebra::Matrix4<f32>)>,
 
     child_elements: Vec<(RenderNode, nalgebra::Matrix4<f32>)>,
 }
@@ -32,21 +33,45 @@ impl RenderNode {
         }
     }
 
+    pub(crate) fn texture(&self) -> Option<&(texture_atlas::AtlasRegion, nalgebra::Matrix4<f32>)> {
+        self.texture_and_position.as_ref()
+    }
+
+    pub(crate) fn stencil(&self) -> Option<&(texture_atlas::AtlasRegion, nalgebra::Matrix4<f32>)> {
+        self.stencil_and_position.as_ref()
+    }
+
+    pub(crate) fn child_elements(&self) -> &[(RenderNode, nalgebra::Matrix4<f32>)] {
+        &self.child_elements
+    }
+
     pub fn with_texture(
         mut self,
         texture: texture_atlas::AtlasRegion,
+        texture_size: [f32; 2],
         texture_position: nalgebra::Matrix4<f32>,
     ) -> Self {
-        self.texture_and_position = Some((texture, texture_position));
+        let scale_matrix = nalgebra::Matrix4::new_nonuniform_scaling(&nalgebra::Vector3::new(
+            texture_size[0],
+            texture_size[1],
+            1.0,
+        ));
+        self.texture_and_position = Some((texture, texture_position * scale_matrix));
         self
     }
 
     pub fn with_stencil(
         mut self,
         stencil: texture_atlas::AtlasRegion,
+        stencil_size: [f32; 2],
         stencil_position: nalgebra::Matrix4<f32>,
     ) -> Self {
-        self.stencil_and_position = Some((stencil, stencil_position));
+        let scale_matrix = nalgebra::Matrix4::new_nonuniform_scaling(&nalgebra::Vector3::new(
+            stencil_size[0],
+            stencil_size[1],
+            1.0,
+        ));
+        self.stencil_and_position = Some((stencil, stencil_position * scale_matrix));
         self
     }
 
@@ -58,8 +83,14 @@ impl RenderNode {
         self.child_elements.push((child, transform));
         self
     }
+}
 
-    pub fn child_elements(&self) -> &[(RenderNode, nalgebra::Matrix4<f32>)] {
-        &self.child_elements
+impl RenderNode {
+    pub fn count(&self) -> usize {
+        let mut count = 1; // Count this node
+        for (child, _) in &self.child_elements {
+            count += child.count();
+        }
+        count
     }
 }

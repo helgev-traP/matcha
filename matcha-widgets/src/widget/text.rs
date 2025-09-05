@@ -194,8 +194,8 @@ impl<'a: 'static, T: Send + Sync + 'static> Widget<Text<'a>, T, ()> for TextNode
                     .draw(&mut encoder, &style_region, size, [0.0, 0.0], ctx);
 
                 ctx.queue().submit(Some(encoder.finish()));
-                render_node.texture_and_position =
-                    Some((style_region, nalgebra::Matrix4::identity()));
+                render_node =
+                    render_node.with_texture(style_region, size, nalgebra::Matrix4::identity());
             }
         }
 

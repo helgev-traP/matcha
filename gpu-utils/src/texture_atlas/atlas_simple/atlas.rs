@@ -7,7 +7,7 @@ use parking_lot::Mutex;
 use thiserror::Error;
 use uuid::Uuid;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct AtlasRegion {
     inner: Arc<RegionData>,
 }
@@ -15,15 +15,27 @@ pub struct AtlasRegion {
 // We only store the texture id and reference to the atlas,
 // to make `Texture` remain valid after `TextureAtlas` resizes or changes,
 // except for data loss when the atlas shrinks.
+#[derive()]
 struct RegionData {
     // allocation info
-    texture_id: RegionId,
+    region_id: RegionId,
     atlas_id: TextureAtlasId,
     // interaction with the atlas
     atlas: Weak<Mutex<TextureAtlas>>,
     // It may be useful to store some information about the texture that will not change during atlas resizing
     size: [u32; 2],              // size of the texture in pixels
     format: wgpu::TextureFormat, // format of the texture
+}
+
+impl std::fmt::Debug for RegionData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RegionData")
+            .field("region_id", &self.region_id)
+            .field("atlas_id", &self.atlas_id)
+            .field("size", &self.size)
+            .field("format", &self.format)
+            .finish()
+    }
 }
 
 /// Public API to interact with a texture.
@@ -39,7 +51,7 @@ impl AtlasRegion {
             return Err(TextureError::AtlasGone);
         };
         let atlas = atlas.lock();
-        let Some(location) = atlas.get_location(self.inner.texture_id) else {
+        let Some(location) = atlas.get_location(self.inner.region_id) else {
             return Err(TextureError::TextureNotFoundInAtlas);
         };
 
@@ -71,7 +83,7 @@ impl AtlasRegion {
             return Err(TextureError::AtlasGone);
         };
         let atlas = atlas.lock();
-        let Some(location) = atlas.get_location(self.inner.texture_id) else {
+        let Some(location) = atlas.get_location(self.inner.region_id) else {
             return Err(TextureError::TextureNotFoundInAtlas);
         };
         let x_max = location.uv.max_x();
@@ -114,7 +126,7 @@ impl AtlasRegion {
         let atlas = atlas.lock();
 
         let texture = atlas.texture();
-        let Some(location) = atlas.get_location(self.inner.texture_id) else {
+        let Some(location) = atlas.get_location(self.inner.region_id) else {
             return Err(TextureError::TextureNotFoundInAtlas);
         };
 
@@ -175,7 +187,7 @@ impl AtlasRegion {
             return Err(TextureError::AtlasGone);
         };
         let atlas = atlas.lock();
-        let Some(location) = atlas.get_location(self.inner.texture_id) else {
+        let Some(location) = atlas.get_location(self.inner.region_id) else {
             return Err(TextureError::TextureNotFoundInAtlas);
         };
 
@@ -183,8 +195,8 @@ impl AtlasRegion {
         render_pass.set_viewport(
             location.bounds.min_x() as f32,
             location.bounds.min_y() as f32,
-            location.size()[0] as f32,
-            location.size()[1] as f32,
+            location.bounds.width() as f32,
+            location.bounds.height() as f32,
             0.0,
             1.0,
         );
@@ -201,7 +213,7 @@ impl AtlasRegion {
             return Err(TextureError::AtlasGone);
         };
         let atlas = atlas.lock();
-        let Some(location) = atlas.get_location(self.inner.texture_id) else {
+        let Some(location) = atlas.get_location(self.inner.region_id) else {
             return Err(TextureError::TextureNotFoundInAtlas);
         };
 
@@ -226,8 +238,8 @@ impl AtlasRegion {
         render_pass.set_viewport(
             location.bounds.min_x() as f32,
             location.bounds.min_y() as f32,
-            location.size()[0] as f32,
-            location.size()[1] as f32,
+            location.bounds.width() as f32,
+            location.bounds.height() as f32,
             0.0,
             1.0,
         );
@@ -241,7 +253,7 @@ impl AtlasRegion {
             return Err(TextureError::AtlasGone);
         };
         let atlas = atlas.lock();
-        let Some(location) = atlas.get_location(self.inner.texture_id) else {
+        let Some(location) = atlas.get_location(self.inner.region_id) else {
             return Err(TextureError::TextureNotFoundInAtlas);
         };
 
@@ -261,7 +273,7 @@ impl AtlasRegion {
 impl Drop for RegionData {
     fn drop(&mut self) {
         if let Some(atlas) = self.atlas.upgrade() {
-            match atlas.lock().deallocate(self.texture_id) {
+            match atlas.lock().deallocate(self.region_id) {
                 Ok(_) => {
                     // Successfully deallocated
                 }
@@ -446,7 +458,7 @@ impl TextureAtlas {
                     texture_uuid: Uuid::new_v4(),
                 };
                 let texture_inner = RegionData {
-                    texture_id,
+                    region_id: texture_id,
                     atlas_id: self.id,
                     atlas: self.weak_self.clone(),
                     size: [size.width as u32, size.height as u32],
@@ -505,7 +517,7 @@ impl TextureAtlas {
             texture_uuid: Uuid::new_v4(),
         };
         let texture_inner = RegionData {
-            texture_id,
+            region_id: texture_id,
             atlas_id: self.id,
             atlas: self.weak_self.clone(),
             size: [size.width as u32, size.height as u32],
@@ -742,7 +754,7 @@ mod tests {
         fn location(&self) -> Option<RegionLocation> {
             let atlas = self.inner.atlas.upgrade()?;
             let atlas = atlas.lock();
-            atlas.get_location(self.inner.texture_id)
+            atlas.get_location(self.inner.region_id)
         }
     }
 

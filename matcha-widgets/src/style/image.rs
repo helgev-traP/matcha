@@ -12,7 +12,7 @@ struct ImageCache {
     map: DashMap<ImageSourceKey, Option<ImageCacheData>, fxhash::FxBuildHasher>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub enum ImageSource {
     Path(String),
     StaticSlice { data: &'static [u8] },
@@ -101,7 +101,7 @@ pub enum VAlign {
     Bottom,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Image {
     image: ImageSource,
     size: Arc<[Size; 2]>,
@@ -339,6 +339,11 @@ impl Style for Image {
                 Err(_) => return,
             };
 
+            println!(
+                "Drawing image at offset {:?} with size [{}, {}] boundary {:?} image_size {:?}",
+                draw_offset, size_x, size_y, boundary, image_size
+            );
+
             let texture_copy = TextureCopy::default();
             texture_copy.render(
                 &mut render_pass,
@@ -392,7 +397,7 @@ fn prepare_image_and_format(
     // Normalize all incoming images to RGBA8 to simplify bytes_per_row handling.
     // This avoids format-dependent byte-per-pixel calculations and prevents copy overruns.
     let image_rgba8: image::ImageBuffer<image::Rgba<u8>, Vec<u8>> = dynamic_image.to_rgba8();
-    (image_rgba8, wgpu::TextureFormat::Rgba8Unorm)
+    (image_rgba8, wgpu::TextureFormat::Rgba8UnormSrgb)
 }
 
 fn make_cache(

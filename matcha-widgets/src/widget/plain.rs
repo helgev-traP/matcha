@@ -201,8 +201,8 @@ impl<T: Send + Sync + 'static> Widget<Plain<T>, T, ()> for PlainNode<T> {
                 }
 
                 ctx.queue().submit(Some(encoder.finish()));
-                render_node.texture_and_position =
-                    Some((style_region, nalgebra::Matrix4::identity()));
+                render_node =
+                    render_node.with_texture(style_region, size, nalgebra::Matrix4::identity());
             }
         }
 

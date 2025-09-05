@@ -16,16 +16,14 @@ use crate::{style, types::size::Size};
 pub struct Image {
     label: Option<String>,
     image_style: style::image::Image,
-    size: [Size; 2],
 }
 
 impl Image {
-    pub fn new(image: impl Into<style::image::ImageSource>) -> Box<Self> {
-        Box::new(Self {
+    pub fn new(image: impl Into<style::image::ImageSource>) -> Self {
+        Self {
             label: None,
             image_style: style::image::Image::new(image),
-            size: [Size::child_w(1.0), Size::child_h(1.0)],
-        })
+        }
     }
 
     pub fn label(mut self, label: &str) -> Self {
@@ -34,7 +32,7 @@ impl Image {
     }
 
     pub fn size(mut self, size: [Size; 2]) -> Self {
-        self.size = size;
+        self.image_style = self.image_style.size(size);
         self
     }
 }
@@ -48,7 +46,6 @@ impl<T: Send + Sync + 'static> Dom<T> for Image {
             vec![],
             ImageNode {
                 image_style: self.image_style.clone(),
-                size: self.size.clone(),
             },
         ))
     }
@@ -63,7 +60,6 @@ impl<T: Send + Sync + 'static> Dom<T> for Image {
 #[derive(Clone)]
 pub struct ImageNode {
     image_style: style::image::Image,
-    size: [Size; 2],
 }
 
 impl<T: Send + Sync + 'static> Widget<Image, T, ()> for ImageNode {
@@ -73,13 +69,12 @@ impl<T: Send + Sync + 'static> Widget<Image, T, ()> for ImageNode {
         cache_invalidator: Option<InvalidationHandle>,
     ) -> Vec<(&'a dyn Dom<T>, (), u128)> {
         // A proper implementation would require making the key public or implementing PartialEq.
-        if self.size != dom.size {
+        if self.image_style != dom.image_style {
             if let Some(handle) = cache_invalidator {
                 handle.relayout_next_frame();
             }
         }
         self.image_style = dom.image_style.clone();
-        self.size = dom.size.clone();
         vec![]
     }
 
@@ -89,18 +84,9 @@ impl<T: Send + Sync + 'static> Widget<Image, T, ()> for ImageNode {
         _children: &[(&dyn AnyWidget<T>, &())],
         ctx: &WidgetContext,
     ) -> [f32; 2] {
-        let intrinsic_size = self.image_style.required_size(ctx).unwrap_or([0.0, 0.0]);
+        let size = self.image_style.required_size(ctx).unwrap_or([0.0, 0.0]);
 
-        let mut child_size = crate::types::size::ChildSize::new(|| intrinsic_size);
-        let parent_size = [
-            Some(constraints.max_width()),
-            Some(constraints.max_height()),
-        ];
-
-        let w = self.size[0].size(parent_size, &mut child_size, ctx);
-        let h = self.size[1].size(parent_size, &mut child_size, ctx);
-
-        [w, h]
+        [size[0], size[1]]
     }
 
     fn arrange(
@@ -166,8 +152,8 @@ impl<T: Send + Sync + 'static> Widget<Image, T, ()> for ImageNode {
                     .draw(&mut encoder, &style_region, size, [0.0, 0.0], ctx);
 
                 ctx.queue().submit(Some(encoder.finish()));
-                render_node.texture_and_position =
-                    Some((style_region, nalgebra::Matrix4::identity()));
+                render_node =
+                    render_node.with_texture(style_region, size, nalgebra::Matrix4::identity())
             }
         }
 

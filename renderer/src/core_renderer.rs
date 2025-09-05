@@ -434,12 +434,40 @@ impl CoreRenderer {
         destination_view: &wgpu::TextureView,
         destination_size: [f32; 2],
         // objects
-        objects: &RenderNode,
+        render_node: &RenderNode,
         load_color: wgpu::Color,
         // texture atlas
         texture_atlas: &wgpu::Texture,
         stencil_atlas: &wgpu::Texture,
     ) -> Result<(), TextureValidationError> {
+        // #[cfg(debug_assertions)]
+        // {
+        //     println!(
+        //         "[CoreRenderer] render: {} objects, destination_size={:?}, surface_format={:?}",
+        //         render_node.count(),
+        //         destination_size,
+        //         surface_format,
+        //     );
+
+        //     println!("[CoreRenderer] render_node: {render_node:#?}",);
+        // }
+
+        // integrate objects into a instance array
+        let (instances, stencils) = create_instance_and_stencil_data(
+            render_node,
+            texture_atlas.format(),
+            stencil_atlas.format(),
+        )?;
+
+        // #[cfg(debug_assertions)]
+        // {
+        //     println!("[CoreRenderer] instances: {instances:?}",);
+        // }
+
+        if instances.is_empty() {
+            return Ok(());
+        }
+
         // get or create render pipeline that matches given surface format
         let render_pipeline = self.render_pipeline.get_with(surface_format, || {
             Arc::new(Self::create_render_pipeline(
@@ -449,17 +477,6 @@ impl CoreRenderer {
                 surface_format,
             ))
         });
-
-        // integrate objects into a instance array
-        let (instances, stencils) = create_instance_and_stencil_data(
-            objects,
-            texture_atlas.format(),
-            stencil_atlas.format(),
-        )?;
-
-        if instances.is_empty() {
-            return Ok(());
-        }
 
         // Create buffers
         let all_instance_data_buffer = device.create_buffer(&wgpu::BufferDescriptor {
@@ -668,7 +685,7 @@ fn create_instance_and_stencil_data(
     create_instance_and_stencil_data_recursive(
         texture_format,
         stencil_format,
-        &objects,
+        objects,
         nalgebra::Matrix4::identity(),
         &mut instances,
         &mut stencils,
@@ -694,7 +711,7 @@ fn create_instance_and_stencil_data_recursive(
     // 0 if no stencil is used.
     mut current_stencil: u32,
 ) -> Result<(), TextureValidationError> {
-    if let Some((stencil, stencil_position)) = &object.stencil_and_position {
+    if let Some((stencil, stencil_position)) = &object.stencil() {
         if stencil.format() != stencil_format {
             return Err(TextureValidationError::FormatMismatch);
         }
@@ -728,7 +745,7 @@ fn create_instance_and_stencil_data_recursive(
         current_stencil = stencils.len() as u32;
     }
 
-    if let Some((texture, texture_position)) = &object.texture_and_position {
+    if let Some((texture, texture_position)) = &object.texture() {
         if texture.format() != texture_format {
             return Err(TextureValidationError::FormatMismatch);
         }
