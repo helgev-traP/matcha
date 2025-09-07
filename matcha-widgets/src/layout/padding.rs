@@ -1,3 +1,4 @@
+use matcha_core::ui::ApplicationHandler;
 use nalgebra::Matrix4;
 
 use matcha_core::ui::widget::InvalidationHandle;
@@ -140,10 +141,11 @@ where
         children: &mut [(&mut dyn AnyWidget<T>, &mut (), &Arrangement)],
         _cache_invalidator: InvalidationHandle,
         ctx: &WidgetContext,
+        _app_handler: &ApplicationHandler,
     ) -> Option<T> {
         if let Some((child, _, arrangement)) = children.first_mut() {
             let child_event = event.transform(arrangement.affine);
-            return child.device_event(&child_event, ctx);
+            return child.device_input(&child_event, ctx, _app_handler);
         } else {
             None
         }

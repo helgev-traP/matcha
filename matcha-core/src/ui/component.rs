@@ -9,11 +9,21 @@ use utils::back_prop_dirty::BackPropDirty;
 use crate::{
     device_input::DeviceInput,
     ui::{
-        AnyWidget, AnyWidgetFrame, Background, Constraints, Dom, UpdateWidgetError, WidgetContext,
-        widget::AnyWidgetFramePrivate,
+        AnyWidget, AnyWidgetFrame, ApplicationHandler, Background, Constraints, Dom,
+        UpdateWidgetError, WidgetContext, widget::AnyWidgetFramePrivate,
     },
     update_flag::UpdateNotifier,
 };
+
+fn default_input_function<Model: Send + Sync + 'static>(
+    input: &DeviceInput,
+    _model_accessor: &ModelAccessor<Model>,
+    app_handler: &ApplicationHandler,
+) {
+    if input.event() == &crate::device_input::DeviceInputData::CloseRequested {
+        app_handler.quit();
+    }
+}
 
 pub struct Component<
     Model: Send + Sync + 'static,
@@ -28,13 +38,13 @@ pub struct Component<
     model_update_flag: Arc<UpdateFlag>,
 
     // setup function
-    setup: fn(&ModelAccessor<Model>),
+    setup: fn(&ModelAccessor<Model>, &ApplicationHandler),
     // update model with message
-    update: fn(&Message, &ModelAccessor<Model>),
+    update: fn(&Message, &ModelAccessor<Model>, &ApplicationHandler),
     // update model with device event
-    input: fn(&DeviceInput, &ModelAccessor<Model>),
+    input: fn(&DeviceInput, &ModelAccessor<Model>, &ApplicationHandler),
     // update model with inner event and can emit new event
-    event: fn(InnerEvent, &ModelAccessor<Model>) -> Option<Event>,
+    event: fn(InnerEvent, &ModelAccessor<Model>, &ApplicationHandler) -> Option<Event>,
     // view function
     view: fn(&Model) -> Box<dyn Dom<InnerEvent>>,
 }
@@ -52,32 +62,38 @@ impl<Model: Send + Sync + 'static, Message, Event: 'static, InnerEvent: 'static>
             label: label.map(|s| s.to_string()),
             model: Arc::new(RwLock::new(model)),
             model_update_flag: Arc::new(UpdateFlag::new(false)),
-            setup: |_: &ModelAccessor<Model>| {},
-            update: |_: &Message, _: &ModelAccessor<Model>| {},
-            input: |_: &DeviceInput, _: &ModelAccessor<Model>| {},
-            event: |_: InnerEvent, _: &ModelAccessor<Model>| None,
+            setup: |_: &ModelAccessor<Model>, _: &ApplicationHandler| {},
+            update: |_: &Message, _: &ModelAccessor<Model>, _: &ApplicationHandler| {},
+            input: default_input_function,
+            event: |_: InnerEvent, _: &ModelAccessor<Model>, _: &ApplicationHandler| None,
             view,
         }
     }
 
-    pub fn setup_fn(mut self, f: fn(&ModelAccessor<Model>)) -> Self {
+    pub fn setup_fn(mut self, f: fn(&ModelAccessor<Model>, &ApplicationHandler)) -> Self {
         self.setup = f;
         self
     }
 
-    pub fn update_fn(mut self, f: fn(&Message, &ModelAccessor<Model>)) -> Self {
+    pub fn update_fn(
+        mut self,
+        f: fn(&Message, &ModelAccessor<Model>, &ApplicationHandler),
+    ) -> Self {
         self.update = f;
         self
     }
 
-    pub fn input_fn(mut self, f: fn(&DeviceInput, &ModelAccessor<Model>)) -> Self {
+    pub fn input_fn(
+        mut self,
+        f: fn(&DeviceInput, &ModelAccessor<Model>, &ApplicationHandler),
+    ) -> Self {
         self.input = f;
         self
     }
 
     pub fn event_fn<NewEventType: 'static>(
         self,
-        f: fn(InnerEvent, &ModelAccessor<Model>) -> Option<NewEventType>,
+        f: fn(InnerEvent, &ModelAccessor<Model>, &ApplicationHandler) -> Option<NewEventType>,
     ) -> Component<Model, Message, NewEventType, InnerEvent> {
         Component {
             label: self.label,
@@ -99,13 +115,13 @@ impl<Model: Send + Sync + 'static, Message, Event: 'static, InnerEvent: 'static>
         self.label.as_deref()
     }
 
-    pub fn update(&self, message: &Message) {
+    pub fn update(&self, message: &Message, app_handler: &ApplicationHandler) {
         let model_accessor = ModelAccessor {
             model: Arc::clone(&self.model),
             update_flag: Arc::clone(&self.model_update_flag),
         };
 
-        (self.update)(message, &model_accessor);
+        (self.update)(message, &model_accessor, app_handler);
     }
 
     pub async fn view(&self) -> Box<dyn Dom<Event>> {
@@ -206,8 +222,8 @@ pub struct ComponentDom<Model: Send + Sync + 'static, Event: 'static, InnerEvent
     label: Option<String>,
 
     model_access: ModelAccessor<Model>,
-    input: fn(&DeviceInput, &ModelAccessor<Model>),
-    event: fn(InnerEvent, &ModelAccessor<Model>) -> Option<Event>,
+    input: fn(&DeviceInput, &ModelAccessor<Model>, &ApplicationHandler),
+    event: fn(InnerEvent, &ModelAccessor<Model>, &ApplicationHandler) -> Option<Event>,
 
     dom_tree: Box<dyn Dom<InnerEvent>>,
 }
@@ -253,8 +269,8 @@ pub struct ComponentWidget<
     label: Option<String>,
 
     model_access: ModelAccessor<Model>,
-    input: fn(&DeviceInput, &ModelAccessor<Model>),
-    event: fn(InnerEvent, &ModelAccessor<Model>) -> Option<Event>,
+    input: fn(&DeviceInput, &ModelAccessor<Model>, &ApplicationHandler),
+    event: fn(InnerEvent, &ModelAccessor<Model>, &ApplicationHandler) -> Option<Event>,
 
     widget_tree: Box<dyn AnyWidgetFrame<InnerEvent>>,
 }
@@ -262,11 +278,16 @@ pub struct ComponentWidget<
 impl<Model: Send + Sync + 'static, Event: 'static, InnerEvent: 'static> AnyWidget<Event>
     for ComponentWidget<Model, Event, InnerEvent>
 {
-    fn device_event(&mut self, event: &DeviceInput, ctx: &WidgetContext) -> Option<Event> {
-        (self.input)(event, &self.model_access);
+    fn device_input(
+        &mut self,
+        event: &DeviceInput,
+        ctx: &WidgetContext,
+        app_handler: &ApplicationHandler,
+    ) -> Option<Event> {
+        (self.input)(event, &self.model_access, app_handler);
 
-        let inner_event = self.widget_tree.device_event(event, ctx);
-        inner_event.and_then(|e| (self.event)(e, &self.model_access))
+        let inner_event = self.widget_tree.device_input(event, ctx, app_handler);
+        inner_event.and_then(|e| (self.event)(e, &self.model_access, app_handler))
     }
 
     fn is_inside(&self, position: [f32; 2], ctx: &WidgetContext) -> bool {

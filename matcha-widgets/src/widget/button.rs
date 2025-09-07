@@ -1,7 +1,6 @@
-use std::any::Any;
-use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
+use matcha_core::ui::ApplicationHandler;
 use matcha_core::{
     device_input::{DeviceInput, DeviceInputData, ElementState, MouseInput, MouseLogicalButton},
     types::color::Color,
@@ -119,6 +118,7 @@ impl<T: Send + Sync + 'static> Widget<Button<T>, T, ()> for ButtonNode<T> {
         children: &mut [(&mut dyn AnyWidget<T>, &mut (), &Arrangement)],
         cache_invalidator: InvalidationHandle,
         ctx: &WidgetContext,
+        app_handler: &ApplicationHandler,
     ) -> Option<T> {
         let mut msg = None;
         let mut new_state = self.state;
@@ -191,7 +191,7 @@ impl<T: Send + Sync + 'static> Widget<Button<T>, T, ()> for ButtonNode<T> {
 
         if let Some((content, _, arrangement)) = children.first_mut() {
             let content_event = event.transform(arrangement.affine);
-            return content.device_event(&content_event, ctx);
+            return content.device_input(&content_event, ctx, app_handler);
         }
 
         None

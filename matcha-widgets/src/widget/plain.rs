@@ -1,8 +1,8 @@
 use matcha_core::{
     device_input::DeviceInput,
     ui::{
-        AnyWidgetFrame, Arrangement, Background, Constraints, Dom, Style, Widget, WidgetContext,
-        WidgetFrame,
+        AnyWidgetFrame, ApplicationHandler, Arrangement, Background, Constraints, Dom, Style,
+        Widget, WidgetContext, WidgetFrame,
         widget::{AnyWidget, InvalidationHandle},
     },
     update_flag::UpdateNotifier,
@@ -148,10 +148,11 @@ impl<T: Send + Sync + 'static> Widget<Plain<T>, T, ()> for PlainNode<T> {
         children: &mut [(&mut dyn AnyWidget<T>, &mut (), &Arrangement)],
         _cache_invalidator: InvalidationHandle,
         ctx: &WidgetContext,
+        app_handler: &ApplicationHandler,
     ) -> Option<T> {
         if let Some((child, _, arrangement)) = children.first_mut() {
             let child_event = event.transform(arrangement.affine);
-            return child.device_event(&child_event, ctx);
+            return child.device_input(&child_event, ctx, app_handler);
         }
         None
     }

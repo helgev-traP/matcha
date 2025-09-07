@@ -1,8 +1,8 @@
 use matcha_core::{
     device_input::DeviceInput,
-    ui::Background,
     ui::{
-        AnyWidgetFrame, Arrangement, Constraints, Dom, Widget, WidgetContext, WidgetFrame,
+        AnyWidgetFrame, ApplicationHandler, Arrangement, Background, Constraints, Dom, Widget,
+        WidgetContext, WidgetFrame,
         widget::{AnyWidget, InvalidationHandle},
     },
     update_flag::UpdateNotifier,
@@ -72,6 +72,7 @@ impl<E: Send + 'static> Widget<Template, E, ()> for TemplateNode {
         _children: &mut [(&mut dyn AnyWidget<E>, &mut (), &Arrangement)],
         _cache_invalidator: InvalidationHandle,
         _ctx: &WidgetContext,
+        _app_handler: &ApplicationHandler,
     ) -> Option<E> {
         // Handle device events here.
         None

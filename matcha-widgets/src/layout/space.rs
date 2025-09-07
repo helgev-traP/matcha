@@ -1,3 +1,4 @@
+use matcha_core::ui::ApplicationHandler;
 use matcha_core::ui::widget::InvalidationHandle;
 use matcha_core::{
     device_input::DeviceInput,
@@ -90,6 +91,7 @@ impl<T: Send + 'static> Widget<Space, T, ()> for SpaceNode {
         _children: &mut [(&mut dyn AnyWidget<T>, &mut (), &Arrangement)],
         _cache_invalidator: InvalidationHandle,
         _ctx: &WidgetContext,
+        _app_handler: &ApplicationHandler,
     ) -> Option<T> {
         None
     }

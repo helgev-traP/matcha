@@ -339,11 +339,6 @@ impl Style for Image {
                 Err(_) => return,
             };
 
-            println!(
-                "Drawing image at offset {:?} with size [{}, {}] boundary {:?} image_size {:?}",
-                draw_offset, size_x, size_y, boundary, image_size
-            );
-
             let texture_copy = TextureCopy::default();
             texture_copy.render(
                 &mut render_pass,

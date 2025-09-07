@@ -11,8 +11,10 @@ use crate::{
         mouse_state::{MousePrimaryButton, MouseState},
         window_state::WindowState,
     },
-    ui::component::Component,
-    ui::{AnyWidgetFrame, Background, Constraints, WidgetContext},
+    ui::{
+        AnyWidgetFrame, ApplicationHandler, Background, Constraints, WidgetContext,
+        component::Component,
+    },
     update_flag::UpdateFlag,
 };
 use renderer::render_node::RenderNode;
@@ -245,18 +247,19 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
         get_window_size: impl Fn() -> (PhysicalSize<u32>, PhysicalSize<u32>),
         get_window_position: impl Fn() -> (PhysicalPosition<i32>, PhysicalPosition<i32>),
         ctx: &WidgetContext,
+        app_handler: &ApplicationHandler,
     ) -> Option<Event> {
         let event =
             self.convert_winit_to_window_event(window_event, get_window_size, get_window_position);
 
         if let (Some(widget), Some(event)) = (&mut self.widget, event) {
-            widget.device_event(&event, ctx)
+            widget.device_input(&event, ctx, app_handler)
         } else {
             None
         }
     }
 
-    pub fn user_event(&self, user_event: &Message) {
-        self.component.update(user_event);
+    pub fn user_event(&self, user_event: &Message, app_handler: &ApplicationHandler) {
+        self.component.update(user_event, app_handler);
     }
 }

@@ -3,10 +3,11 @@ use std::time::Duration;
 use winit::dpi::PhysicalSize;
 
 use crate::{
+    Component,
     backend::Backend,
     device_input::mouse_state::MousePrimaryButton,
     types::color::Color,
-    ui::component::Component,
+    ui,
     winit_instance::{
         AnyResource, WinitInstance, error, render_control, ticker, ui_control, window_surface,
     },
@@ -230,6 +231,7 @@ impl<
             any_resource: AnyResource::new(),
             render_control,
             ui_control,
+            app_handler: ui::ApplicationHandler::new(),
             backend: self.backend,
             benchmarker: super::benchmark::Benchmark::new(60),
             frame: 0,

@@ -1,3 +1,4 @@
+use matcha_core::ui::ApplicationHandler;
 use matcha_core::ui::widget::InvalidationHandle;
 use matcha_core::{
     device_input::DeviceInput,
@@ -245,11 +246,12 @@ where
         children: &mut [(&mut dyn AnyWidget<T>, &mut (), &Arrangement)],
         _cache_invalidator: InvalidationHandle,
         ctx: &WidgetContext,
+        app_handler: &ApplicationHandler,
     ) -> Option<T> {
         // Iterate children in reverse order so top-most (last) child receives events first.
         for (child, _, arrangement) in children.iter_mut().rev() {
             let child_event = event.transform(arrangement.affine);
-            if let Some(result) = child.device_event(&child_event, ctx) {
+            if let Some(result) = child.device_input(&child_event, ctx, app_handler) {
                 return Some(result);
             }
         }

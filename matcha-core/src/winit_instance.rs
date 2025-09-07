@@ -1,11 +1,6 @@
 use std::fmt::Debug;
 
-use crate::{
-    any_resource::AnyResource,
-    backend::Backend,
-    ui::component::Component,
-    ui::{Background, WidgetContext},
-};
+use crate::{any_resource::AnyResource, backend::Backend, ui};
 
 // MARK: modules
 
@@ -40,6 +35,7 @@ pub struct WinitInstance<
     render_control: render_control::RenderControl,
     // --- UI control ---
     ui_control: ui_control::UiControl<Model, Message, Event, InnerEvent>,
+    app_handler: ui::ApplicationHandler,
     // --- backend ---
     backend: B,
     // --- benchmark / monitoring ---
@@ -58,7 +54,7 @@ impl<
 > WinitInstance<Model, Message, B, Event, InnerEvent>
 {
     pub fn builder(
-        component: Component<Model, Message, Event, InnerEvent>,
+        component: ui::Component<Model, Message, Event, InnerEvent>,
         backend: B,
     ) -> WinitInstanceBuilder<Model, Message, B, Event, InnerEvent> {
         WinitInstanceBuilder::new(component, backend)
@@ -79,14 +75,14 @@ fn create_widget_context<
     ui_control: &ui_control::UiControl<Model, Message, Event, InnerEvent>,
     any_resource: &'a AnyResource,
     current_time: std::time::Duration,
-) -> Option<WidgetContext<'a>> {
+) -> Option<ui::WidgetContext<'a>> {
     let size = window.inner_size()?;
     let size = [size.width as f32, size.height as f32];
     let dpi = window.dpi()?;
 
     let format = window.format()?;
 
-    Some(WidgetContext::new(
+    Some(ui::WidgetContext::new(
         render_control.device_queue(),
         format,
         size,
@@ -137,7 +133,7 @@ impl<
                 );
 
                 let object = {
-                    let background = Background::new(&target_view, [0.0, 0.0]);
+                    let background = ui::Background::new(&target_view, [0.0, 0.0]);
                     self.tokio_runtime.block_on(self.ui_control.render(
                         ctx.viewport_size(),
                         background,
@@ -204,6 +200,16 @@ impl<
             }
         }
     }
+
+    fn handle_commands(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        for command in self.app_handler.drain_commands() {
+            match command {
+                ui::ApplicationHandlerCommand::Quit => {
+                    event_loop.exit();
+                }
+            }
+        }
+    }
 }
 
 // MARK: Winit Event Loop
@@ -243,6 +249,8 @@ impl<
         window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
+        self.ticker.tick();
+
         // events which are to be handled by render system
         match event {
             winit::event::WindowEvent::RedrawRequested => {
@@ -284,6 +292,7 @@ impl<
                 )
             },
             &ctx,
+            &self.app_handler,
         );
 
         if let Some(event) = event {
@@ -292,7 +301,7 @@ impl<
                 .spawn(async move { backend.send_event(event).await });
         }
 
-        self.window.request_redraw();
+        self.handle_commands(event_loop);
     }
 
     // MARK: new_events
@@ -302,8 +311,6 @@ impl<
         _: &winit::event_loop::ActiveEventLoop,
         cause: winit::event::StartCause,
     ) {
-        self.ticker.tick();
-
         match cause {
             winit::event::StartCause::Init => {}
             winit::event::StartCause::WaitCancelled { .. } => {}
@@ -315,9 +322,11 @@ impl<
 
     // MARK: user_event
 
-    fn user_event(&mut self, _: &winit::event_loop::ActiveEventLoop, event: Message) {
-        self.ui_control.user_event(&event);
+    fn user_event(&mut self, event_loop: &winit::event_loop::ActiveEventLoop, event: Message) {
+        self.ui_control.user_event(&event, &self.app_handler);
         self.window.request_redraw();
+
+        self.handle_commands(event_loop);
     }
 
     // MARK: other

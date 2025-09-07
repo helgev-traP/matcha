@@ -1,8 +1,8 @@
 use matcha_core::{
     device_input::DeviceInput,
     ui::{
-        AnyWidgetFrame, Arrangement, Background, Constraints, Dom, Style, Widget, WidgetContext,
-        WidgetFrame,
+        AnyWidgetFrame, ApplicationHandler, Arrangement, Background, Constraints, Dom, Style,
+        Widget, WidgetContext, WidgetFrame,
         widget::{AnyWidget, InvalidationHandle},
     },
     update_flag::UpdateNotifier,
@@ -105,6 +105,7 @@ impl<T: Send + Sync + 'static> Widget<Image, T, ()> for ImageNode {
         _children: &mut [(&mut dyn AnyWidget<T>, &mut (), &Arrangement)],
         _cache_invalidator: InvalidationHandle,
         _ctx: &WidgetContext,
+        _app_handler: &ApplicationHandler,
     ) -> Option<T> {
         None
     }

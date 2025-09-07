@@ -4,7 +4,7 @@ use parking_lot::Mutex;
 use renderer::render_node::RenderNode;
 use utils::{back_prop_dirty::BackPropDirty, cache::Cache};
 
-use crate::{device_input::DeviceInput, update_flag::UpdateNotifier};
+use crate::{app, device_input::DeviceInput, ui::ApplicationHandler, update_flag::UpdateNotifier};
 
 use super::{Arrangement, Background, Constraints, WidgetContext, metrics::LayoutSizeKey};
 
@@ -75,6 +75,7 @@ pub trait Widget<D: Dom<E>, E: 'static = (), ChildSetting: PartialEq + 'static =
         children: &mut [(&mut dyn AnyWidget<E>, &mut ChildSetting, &Arrangement)],
         cache_invalidator: InvalidationHandle,
         ctx: &WidgetContext,
+        app_handler: &ApplicationHandler,
     ) -> Option<E>;
 
     fn is_inside(
@@ -84,6 +85,8 @@ pub trait Widget<D: Dom<E>, E: 'static = (), ChildSetting: PartialEq + 'static =
         children: &[(&dyn AnyWidget<E>, &ChildSetting, &Arrangement)],
         ctx: &WidgetContext,
     ) -> bool {
+        let _ = (children, ctx);
+
         0.0 <= position[0]
             && position[0] <= bounds[0]
             && 0.0 <= position[1]
@@ -116,7 +119,12 @@ pub trait Widget<D: Dom<E>, E: 'static = (), ChildSetting: PartialEq + 'static =
 
 /// Make trait object that can be used from widget implement.
 pub trait AnyWidget<E: 'static> {
-    fn device_event(&mut self, event: &DeviceInput, ctx: &WidgetContext) -> Option<E>;
+    fn device_input(
+        &mut self,
+        event: &DeviceInput,
+        ctx: &WidgetContext,
+        app_handler: &ApplicationHandler,
+    ) -> Option<E>;
 
     fn is_inside(&self, position: [f32; 2], ctx: &WidgetContext) -> bool;
 
@@ -236,7 +244,12 @@ where
     T: 'static,
     ChildSetting: Send + Sync + PartialEq + Clone + 'static,
 {
-    fn device_event(&mut self, event: &DeviceInput, ctx: &WidgetContext) -> Option<T> {
+    fn device_input(
+        &mut self,
+        event: &DeviceInput,
+        ctx: &WidgetContext,
+        app_handler: &ApplicationHandler,
+    ) -> Option<T> {
         let Some(dirty_flags) = &self.dirty_flags else {
             return None;
         };
@@ -285,6 +298,7 @@ where
                 need_redraw: &dirty_flags.need_redraw,
             },
             ctx,
+            app_handler,
         )
     }
 
@@ -631,6 +645,7 @@ mod tests {
             _children: &mut [(&mut dyn AnyWidget<String>, &mut MockSetting, &Arrangement)],
             _cache_invalidator: InvalidationHandle,
             _ctx: &WidgetContext,
+            _app_handler: &ApplicationHandler,
         ) -> Option<String> {
             None
         }
@@ -1044,6 +1059,7 @@ mod tests {
             _children: &mut [(&mut dyn AnyWidget<String>, &mut MockSetting, &Arrangement)],
             _cache_invalidator: InvalidationHandle,
             _ctx: &WidgetContext,
+            _app_handler: &ApplicationHandler,
         ) -> Option<String> {
             None
         }
@@ -1160,6 +1176,7 @@ mod tests {
             _: &mut [(&mut dyn AnyWidget<String>, &mut MockSetting, &Arrangement)],
             _: InvalidationHandle,
             _: &WidgetContext,
+            _: &ApplicationHandler,
         ) -> Option<String> {
             None
         }
