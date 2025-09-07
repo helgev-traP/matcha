@@ -699,7 +699,7 @@ mod tests {
         };
 
         let mut widget_frame: Box<dyn AnyWidgetFrame<String>> = initial_dom.build_widget_tree();
-        widget_frame.update_dirty_flags(BackPropDirty::new(true), BackPropDirty::new(true));
+        widget_frame.update_dirty_flags(BackPropDirty::new(false), BackPropDirty::new(false));
 
         let widget_frame_concrete = (&mut *widget_frame as &mut dyn Any)
             .downcast_mut::<MockWidgetFrame>()
@@ -768,7 +768,7 @@ mod tests {
         };
 
         let mut widget_frame: Box<dyn AnyWidgetFrame<String>> = initial_dom.build_widget_tree();
-        widget_frame.update_dirty_flags(BackPropDirty::new(true), BackPropDirty::new(true));
+        widget_frame.update_dirty_flags(BackPropDirty::new(false), BackPropDirty::new(false));
 
         // Update with a new child added
         let updated_dom = MockDom {
@@ -831,7 +831,7 @@ mod tests {
         };
 
         let mut widget_frame: Box<dyn AnyWidgetFrame<String>> = initial_dom.build_widget_tree();
-        widget_frame.update_dirty_flags(BackPropDirty::new(true), BackPropDirty::new(true));
+        widget_frame.update_dirty_flags(BackPropDirty::new(false), BackPropDirty::new(false));
 
         // Update with a child removed
         let updated_dom = MockDom {
@@ -885,7 +885,7 @@ mod tests {
         };
 
         let mut widget_frame: Box<dyn AnyWidgetFrame<String>> = initial_dom.build_widget_tree();
-        widget_frame.update_dirty_flags(BackPropDirty::new(true), BackPropDirty::new(true));
+        widget_frame.update_dirty_flags(BackPropDirty::new(false), BackPropDirty::new(false));
 
         // Update with children reordered
         let updated_dom = MockDom {
@@ -939,7 +939,7 @@ mod tests {
         };
 
         let mut widget_frame: Box<dyn AnyWidgetFrame<String>> = initial_dom.build_widget_tree();
-        widget_frame.update_dirty_flags(BackPropDirty::new(true), BackPropDirty::new(true));
+        widget_frame.update_dirty_flags(BackPropDirty::new(false), BackPropDirty::new(false));
         let widget_frame_concrete = (&mut *widget_frame as &mut dyn Any)
             .downcast_mut::<MockWidgetFrame>()
             .unwrap();
@@ -1211,7 +1211,7 @@ mod tests {
             vec![],
             WidgetRequestingRearrange,
         ));
-        widget_frame.update_dirty_flags(BackPropDirty::new(true), BackPropDirty::new(true));
+        widget_frame.update_dirty_flags(BackPropDirty::new(false), BackPropDirty::new(false));
 
         let frame_impl_before = (&*widget_frame as &dyn Any)
             .downcast_ref::<WidgetFrame<MockDom, WidgetRequestingRearrange, String, MockSetting>>()
@@ -1240,5 +1240,51 @@ mod tests {
                 .is_dirty()
         );
         assert!(widget_frame.need_redraw());
+    }
+
+    #[test]
+    fn test_redraw_flag_cleared_after_render() {
+        // This test must be non-async due to the use of `MaybeUninit` for mock context.
+        let device = MaybeUninit::<wgpu::Device>::uninit();
+        let queue = MaybeUninit::<wgpu::Queue>::uninit();
+        let device_queue = DeviceQueue {
+            device: unsafe { device.assume_init_ref() },
+            queue: unsafe { queue.assume_init_ref() },
+        };
+        let texture_allocator = MaybeUninit::<TextureAllocator>::uninit();
+        let any_resource = AnyResource::new();
+        let ctx = create_mock_widget_context(
+            &device_queue,
+            unsafe { texture_allocator.assume_init_ref() },
+            &any_resource,
+        );
+
+        let dom = MockDom {
+            id: 0,
+            children: vec![],
+        };
+        let mut widget_frame: Box<dyn AnyWidgetFrame<String>> = dom.build_widget_tree();
+
+        // 1. Initialize with dirty flags set to true, simulating initial state.
+        widget_frame.update_dirty_flags(BackPropDirty::new(true), BackPropDirty::new(true));
+        assert!(widget_frame.need_redraw(), "Should need redraw initially");
+
+        // 2. Call render, which should consume the dirty flags.
+        let texture_view = MaybeUninit::<wgpu::TextureView>::uninit();
+        let background = Background::new(unsafe { texture_view.assume_init_ref() }, [0.0, 0.0]);
+        let _ = widget_frame.render([100.0, 100.0], background, &ctx);
+
+        // 3. Verify that the redraw flag is now false.
+        assert!(
+            !widget_frame.need_redraw(),
+            "Redraw flag should be cleared after render"
+        );
+
+        // 4. Verify that another render call does not change the state (flag remains false).
+        let _ = widget_frame.render([100.0, 100.0], background, &ctx);
+        assert!(
+            !widget_frame.need_redraw(),
+            "Redraw flag should remain false after a second render"
+        );
     }
 }
