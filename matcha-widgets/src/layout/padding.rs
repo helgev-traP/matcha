@@ -192,7 +192,7 @@ where
 
     fn arrange(
         &self,
-        size: [f32; 2],
+        bounds: [f32; 2],
         children: &[(&dyn AnyWidget<T>, &())],
         _ctx: &WidgetContext,
     ) -> Vec<Arrangement> {
@@ -201,8 +201,8 @@ where
         }
 
         let content_final_size = [
-            (size[0] - self.left - self.right).max(0.0),
-            (size[1] - self.top - self.bottom).max(0.0),
+            (bounds[0] - self.left - self.right).max(0.0),
+            (bounds[1] - self.top - self.bottom).max(0.0),
         ];
 
         let transform = Matrix4::new_translation(&nalgebra::Vector3::new(self.left, self.top, 0.0));
@@ -212,15 +212,15 @@ where
 
     fn render(
         &self,
-        background: Background,
+        bounds: [f32; 2],
         children: &[(&dyn AnyWidget<T>, &(), &Arrangement)],
+        background: Background,
         ctx: &WidgetContext,
     ) -> RenderNode {
         if let Some((child, _, arrangement)) = children.first() {
-            let final_size = arrangement.size;
             let affine = arrangement.affine;
 
-            let child_node = child.render(final_size, background, ctx);
+            let child_node = child.render(arrangement.size, background, ctx);
 
             return RenderNode::new().add_child(child_node, affine);
         }

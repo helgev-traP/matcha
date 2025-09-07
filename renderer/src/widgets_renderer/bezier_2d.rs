@@ -1,6 +1,6 @@
-use utils::rwoption::RwOption;
 use gpu_utils::texture_atlas;
 use std::sync::Arc;
+use utils::rwoption::RwOption;
 use wgpu::util::DeviceExt;
 
 const WGSL_COMPUTE: &str = include_str!("./bezier_2d_compute.wgsl");

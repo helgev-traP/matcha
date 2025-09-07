@@ -196,7 +196,7 @@ impl<T: Send + 'static> Widget<Position<T>, T, ()> for PositionNode {
 
     fn arrange(
         &self,
-        size: [f32; 2],
+        bounds: [f32; 2],
         children: &[(&dyn AnyWidget<T>, &())],
         ctx: &WidgetContext,
     ) -> Vec<Arrangement> {
@@ -206,8 +206,8 @@ impl<T: Send + 'static> Widget<Position<T>, T, ()> for PositionNode {
 
         // available space for child (parent size minus margins)
         let available = [
-            (size[0] - self.left.unwrap_or(0.0) - self.right.unwrap_or(0.0)).max(0.0),
-            (size[1] - self.top.unwrap_or(0.0) - self.bottom.unwrap_or(0.0)).max(0.0),
+            (bounds[0] - self.left.unwrap_or(0.0) - self.right.unwrap_or(0.0)).max(0.0),
+            (bounds[1] - self.top.unwrap_or(0.0) - self.bottom.unwrap_or(0.0)).max(0.0),
         ];
 
         // give child a flexible constraint up to available space
@@ -222,12 +222,12 @@ impl<T: Send + 'static> Widget<Position<T>, T, ()> for PositionNode {
 
         let offset_x = match (self.left, self.right) {
             (Some(left), _) => left,
-            (None, Some(right)) => size[0] - right - final_child_size[0],
+            (None, Some(right)) => bounds[0] - right - final_child_size[0],
             (None, None) => 0.0,
         };
         let offset_y = match (self.top, self.bottom) {
             (Some(top), _) => top,
-            (None, Some(bottom)) => size[1] - bottom - final_child_size[1],
+            (None, Some(bottom)) => bounds[1] - bottom - final_child_size[1],
             (None, None) => 0.0,
         };
 
@@ -239,15 +239,15 @@ impl<T: Send + 'static> Widget<Position<T>, T, ()> for PositionNode {
 
     fn render(
         &self,
-        background: Background,
+        _bounds: [f32; 2],
         children: &[(&dyn AnyWidget<T>, &(), &Arrangement)],
+        background: Background,
         ctx: &WidgetContext,
     ) -> RenderNode {
         if let Some((child, _, arrangement)) = children.first() {
-            let final_size = arrangement.size;
             let affine = arrangement.affine;
 
-            let child_node = child.render(final_size, background, ctx);
+            let child_node = child.render(arrangement.size, background, ctx);
 
             return RenderNode::new().add_child(child_node, affine);
         }

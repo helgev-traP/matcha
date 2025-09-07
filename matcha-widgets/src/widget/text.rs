@@ -136,7 +136,7 @@ impl<'a: 'static, T: Send + Sync + 'static> Widget<Text<'a>, T, ()> for TextNode
 
     fn arrange(
         &self,
-        _final_size: [f32; 2],
+        _bounds: [f32; 2],
         _children: &[(&dyn AnyWidget<T>, &())],
         _ctx: &WidgetContext,
     ) -> Vec<Arrangement> {
@@ -166,8 +166,9 @@ impl<'a: 'static, T: Send + Sync + 'static> Widget<Text<'a>, T, ()> for TextNode
 
     fn render(
         &self,
-        _background: Background,
+        _bounds: [f32; 2],
         _children: &[(&dyn AnyWidget<T>, &(), &Arrangement)],
+        _background: Background,
         ctx: &WidgetContext,
     ) -> RenderNode {
         let mut render_node = RenderNode::new();

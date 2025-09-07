@@ -253,11 +253,11 @@ where
 
     fn arrange(
         &self,
-        size: [f32; 2],
+        bounds: [f32; 2],
         children: &[(&dyn AnyWidget<T>, &GridChildSetting)],
         ctx: &WidgetContext,
     ) -> Vec<Arrangement> {
-        let parent_size = [Some(size[0]), Some(size[1])];
+        let parent_size = [Some(bounds[0]), Some(bounds[1])];
         let (column_ranges, row_ranges) = self.calc_grid_layout(parent_size, ctx);
 
         children
@@ -292,8 +292,9 @@ where
 
     fn render(
         &self,
-        background: Background,
+        _bounds: [f32; 2],
         children: &[(&dyn AnyWidget<T>, &GridChildSetting, &Arrangement)],
+        background: Background,
         ctx: &WidgetContext,
     ) -> RenderNode {
         let mut render_node = RenderNode::new();

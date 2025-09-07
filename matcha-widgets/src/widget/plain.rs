@@ -134,11 +134,11 @@ impl<T: Send + Sync + 'static> Widget<Plain<T>, T, ()> for PlainNode<T> {
 
     fn arrange(
         &self,
-        final_size: [f32; 2],
+        bounds: [f32; 2],
         _children: &[(&dyn AnyWidget<T>, &())],
         _ctx: &WidgetContext,
     ) -> Vec<Arrangement> {
-        vec![Arrangement::new(final_size, nalgebra::Matrix4::identity())]
+        vec![Arrangement::new(bounds, nalgebra::Matrix4::identity())]
     }
 
     fn device_input(
@@ -171,8 +171,9 @@ impl<T: Send + Sync + 'static> Widget<Plain<T>, T, ()> for PlainNode<T> {
 
     fn render(
         &self,
-        background: Background,
+        _bounds: [f32; 2],
         children: &[(&dyn AnyWidget<T>, &(), &Arrangement)],
+        background: Background,
         ctx: &WidgetContext,
     ) -> RenderNode {
         let mut render_node = RenderNode::new();

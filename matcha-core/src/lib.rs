@@ -40,8 +40,8 @@ pub mod prelude {
     pub use super::UpdateNotifier;
     pub use super::types::*;
     pub use super::ui::{
-        AnyWidget, AnyWidgetFrame, Arrangement, Background, Component, ComponentDom, ComponentWidget,
-        Constraints, Dom, InvalidationHandle, LayoutSizeKey, ModelAccessor, Style, UpdateWidgetError,
-        Widget, WidgetContext, WidgetFrame,
+        AnyWidget, AnyWidgetFrame, Arrangement, Background, Component, ComponentDom,
+        ComponentWidget, Constraints, Dom, InvalidationHandle, LayoutSizeKey, ModelAccessor, Style,
+        UpdateWidgetError, Widget, WidgetContext, WidgetFrame,
     };
 }

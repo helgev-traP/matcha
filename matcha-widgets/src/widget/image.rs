@@ -91,7 +91,7 @@ impl<T: Send + Sync + 'static> Widget<Image, T, ()> for ImageNode {
 
     fn arrange(
         &self,
-        _final_size: [f32; 2],
+        _bounds: [f32; 2],
         _children: &[(&dyn AnyWidget<T>, &())],
         _ctx: &WidgetContext,
     ) -> Vec<Arrangement> {
@@ -124,8 +124,9 @@ impl<T: Send + Sync + 'static> Widget<Image, T, ()> for ImageNode {
 
     fn render(
         &self,
-        _background: Background,
+        _bounds: [f32; 2],
         _children: &[(&dyn AnyWidget<T>, &(), &Arrangement)],
+        _background: Background,
         ctx: &WidgetContext,
     ) -> RenderNode {
         let mut render_node = RenderNode::new();

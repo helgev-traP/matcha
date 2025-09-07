@@ -279,19 +279,19 @@ impl<Model: Send + Sync + 'static, Event: 'static, InnerEvent: 'static> AnyWidge
 
     fn render(
         &self,
-        final_size: [f32; 2],
+        bounds: [f32; 2],
         background: Background,
         ctx: &WidgetContext,
     ) -> renderer::render_node::RenderNode {
-        self.widget_tree.render(final_size, background, ctx)
+        self.widget_tree.render(bounds, background, ctx)
     }
 }
 
 impl<Model: Send + Sync + 'static, Event: 'static, InnerEvent: 'static> AnyWidgetFramePrivate
     for ComponentWidget<Model, Event, InnerEvent>
 {
-    fn arrange(&self, final_size: [f32; 2], ctx: &WidgetContext) {
-        self.widget_tree.arrange(final_size, ctx)
+    fn arrange(&self, bounds: [f32; 2], ctx: &WidgetContext) {
+        self.widget_tree.arrange(bounds, ctx)
     }
 }
 

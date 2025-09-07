@@ -311,7 +311,7 @@ where
 
     fn arrange(
         &self,
-        size: [f32; 2],
+        bounds: [f32; 2],
         children: &[(&dyn AnyWidget<T>, &())],
         ctx: &WidgetContext,
     ) -> Vec<Arrangement> {
@@ -320,7 +320,7 @@ where
         }
 
         // Measure children to get their preferred sizes
-        let child_constraints = Constraints::new([0.0, size[0]], [0.0, size[1]]);
+        let child_constraints = Constraints::new([0.0, bounds[0]], [0.0, bounds[1]]);
         let child_sizes: Vec<[f32; 2]> = children
             .iter()
             .map(|(child, _)| child.measure(&child_constraints, ctx))
@@ -339,7 +339,7 @@ where
         // Use helper to compute gap and offset. Per user's instruction, pass total width and max height.
         let (gap, offset) = self.calc_gap_and_offset(
             &self.justify_content,
-            size[0],
+            bounds[0],
             total_child_width,
             child_max_height,
             child_count,
@@ -356,8 +356,8 @@ where
             // Vertical alignment
             let y = match self.align_items {
                 AlignItems::Start => 0.0,
-                AlignItems::End => (size[1] - child_height).max(0.0),
-                AlignItems::Center => ((size[1] - child_height) / 2.0).max(0.0),
+                AlignItems::End => (bounds[1] - child_height).max(0.0),
+                AlignItems::Center => ((bounds[1] - child_height) / 2.0).max(0.0),
             };
 
             let arrangement = Arrangement::new(
@@ -378,17 +378,17 @@ where
 
     fn render(
         &self,
-        background: Background,
+        _bounds: [f32; 2],
         children: &[(&dyn AnyWidget<T>, &(), &Arrangement)],
+        background: Background,
         ctx: &WidgetContext,
     ) -> RenderNode {
         let mut render_node = RenderNode::new();
 
         for (child, _, arrangement) in children {
-            let final_size = arrangement.size;
             let affine = arrangement.affine;
 
-            let child_node = child.render(final_size, background, ctx);
+            let child_node = child.render(arrangement.size, background, ctx);
             render_node = render_node.add_child(child_node, affine);
         }
 

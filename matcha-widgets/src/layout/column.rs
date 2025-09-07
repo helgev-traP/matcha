@@ -307,7 +307,7 @@ where
 
     fn arrange(
         &self,
-        size: [f32; 2],
+        bounds: [f32; 2],
         children: &[(&dyn AnyWidget<T>, &())],
         ctx: &WidgetContext,
     ) -> Vec<Arrangement> {
@@ -316,7 +316,7 @@ where
         }
 
         // Measure children to get their preferred sizes constrained by final size
-        let child_constraints = Constraints::new([0.0, size[0]], [0.0, size[1]]);
+        let child_constraints = Constraints::new([0.0, bounds[0]], [0.0, bounds[1]]);
         let child_sizes: Vec<[f32; 2]> = children
             .iter()
             .map(|(child, _)| child.measure(&child_constraints, ctx))
@@ -332,7 +332,7 @@ where
 
         let (gap, mut y_offset) = self.calc_gap_and_offset(
             &self.justify_content,
-            size[1],
+            bounds[1],
             total_child_height,
             child_max_width,
             child_sizes.len(),
@@ -345,8 +345,8 @@ where
             // Calculate x offset based on align_items (cross-axis)
             let x_offset = match self.align_items {
                 AlignItems::Start => 0.0,
-                AlignItems::End => size[0] - child_size[0],
-                AlignItems::Center => (size[0] - child_size[0]) / 2.0,
+                AlignItems::End => bounds[0] - child_size[0],
+                AlignItems::Center => (bounds[0] - child_size[0]) / 2.0,
             };
 
             let transform =
@@ -360,21 +360,21 @@ where
                 | JustifyContent::Center { .. } => gap,
                 JustifyContent::SpaceBetween => {
                     if children.len() > 1 && index < children.len() - 1 {
-                        (size[1] - total_child_height) / (children.len() - 1) as f32
+                        (bounds[1] - total_child_height) / (children.len() - 1) as f32
                     } else {
                         0.0
                     }
                 }
                 JustifyContent::SpaceAround => {
                     if children.len() > 1 {
-                        (size[1] - total_child_height) / children.len() as f32
+                        (bounds[1] - total_child_height) / children.len() as f32
                     } else {
                         0.0
                     }
                 }
                 JustifyContent::SpaceEvenly => {
                     if children.len() > 1 {
-                        (size[1] - total_child_height) / (children.len() + 1) as f32
+                        (bounds[1] - total_child_height) / (children.len() + 1) as f32
                     } else {
                         0.0
                     }
@@ -389,17 +389,17 @@ where
 
     fn render(
         &self,
-        background: Background,
+        _bounds: [f32; 2],
         children: &[(&dyn AnyWidget<T>, &(), &Arrangement)],
+        background: Background,
         ctx: &WidgetContext,
     ) -> RenderNode {
         let mut render_node = RenderNode::new();
 
         for (child, _, arrangement) in children {
-            let final_size = arrangement.size;
             let affine = arrangement.affine;
 
-            let child_node = child.render(final_size, background, ctx);
+            let child_node = child.render(arrangement.size, background, ctx);
             render_node = render_node.add_child(child_node, affine);
         }
 

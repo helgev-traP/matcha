@@ -100,15 +100,16 @@ pub trait Widget<D: Dom<E>, E: 'static = (), ChildSetting: PartialEq + 'static =
     /// The length of returned Vector must match the number of children.
     fn arrange(
         &self,
-        final_size: [f32; 2],
+        bounds: [f32; 2],
         children: &[(&dyn AnyWidget<E>, &ChildSetting)],
         ctx: &WidgetContext,
     ) -> Vec<Arrangement>;
 
     fn render(
         &self,
-        background: Background,
+        bounds: [f32; 2],
         children: &[(&dyn AnyWidget<E>, &ChildSetting, &Arrangement)],
+        background: Background,
         ctx: &WidgetContext,
     ) -> RenderNode;
 }
@@ -121,12 +122,7 @@ pub trait AnyWidget<E: 'static> {
 
     fn measure(&self, constraints: &Constraints, ctx: &WidgetContext) -> [f32; 2];
 
-    fn render(
-        &self,
-        final_size: [f32; 2],
-        background: Background,
-        ctx: &WidgetContext,
-    ) -> RenderNode;
+    fn render(&self, bounds: [f32; 2], background: Background, ctx: &WidgetContext) -> RenderNode;
 }
 
 /// Make it impossible to call arrange from outside the widget frame.
@@ -134,7 +130,7 @@ pub trait AnyWidget<E: 'static> {
 ///
 /// Publish this trait to `super` to allow components can implement it.
 pub(super) trait AnyWidgetFramePrivate {
-    fn arrange(&self, final_size: [f32; 2], ctx: &WidgetContext);
+    fn arrange(&self, bounds: [f32; 2], ctx: &WidgetContext);
 }
 
 /// Methods that Widget implementor should not use.
@@ -352,18 +348,13 @@ where
         *size
     }
 
-    fn render(
-        &self,
-        final_size: [f32; 2],
-        background: Background,
-        ctx: &WidgetContext,
-    ) -> RenderNode {
+    fn render(&self, bounds: [f32; 2], background: Background, ctx: &WidgetContext) -> RenderNode {
         let Some(dirty_flags) = &self.dirty_flags else {
             return RenderNode::default();
         };
 
         // arrange must be called before locking the cache to avoid deadlocks.
-        self.arrange(final_size, ctx);
+        self.arrange(bounds, ctx);
 
         let cache = self.cache.lock();
         let (_, arrangement) = cache.layout.get().expect("infallible: arrange just called");
@@ -375,12 +366,13 @@ where
             .collect::<Vec<_>>();
 
         let node = self.widget_impl.render(
-            background,
+            bounds,
             &children
                 .iter()
                 .zip(arrangement)
                 .map(|((c, s), a)| (*c, *s, a))
                 .collect::<Vec<_>>(),
+            background,
             ctx,
         );
 
@@ -408,7 +400,7 @@ where
     T: 'static,
     ChildSetting: Send + Sync + PartialEq + Clone + 'static,
 {
-    fn arrange(&self, final_size: [f32; 2], ctx: &WidgetContext) {
+    fn arrange(&self, bounds: [f32; 2], ctx: &WidgetContext) {
         let Some(dirty_flags) = &self.dirty_flags else {
             return;
         };
@@ -422,14 +414,14 @@ where
         }
         cache
             .layout
-            .get_or_insert_with(LayoutSizeKey::from(final_size), || {
+            .get_or_insert_with(LayoutSizeKey::from(bounds), || {
                 // calc arrangement
                 let children = self
                     .children
                     .iter()
                     .map(|(child, setting)| (&**child as &dyn AnyWidget<T>, setting))
                     .collect::<Vec<_>>();
-                let arrangement = self.widget_impl.arrange(final_size, &children, ctx);
+                let arrangement = self.widget_impl.arrange(bounds, &children, ctx);
                 // update child arrangements
                 for ((child, _), arrangement) in self.children.iter().zip(arrangement.iter()) {
                     child.arrange(arrangement.size, ctx);
@@ -664,7 +656,7 @@ mod tests {
 
         fn arrange(
             &self,
-            _size: [f32; 2],
+            _bounds: [f32; 2],
             _children: &[(&dyn AnyWidget<String>, &MockSetting)],
             _ctx: &WidgetContext,
         ) -> Vec<Arrangement> {
@@ -673,8 +665,9 @@ mod tests {
 
         fn render(
             &self,
-            _background: Background,
+            _bounds: [f32; 2],
             _children: &[(&dyn AnyWidget<String>, &MockSetting, &Arrangement)],
+            _background: Background,
             _ctx: &WidgetContext,
         ) -> RenderNode {
             RenderNode::default()
@@ -1077,7 +1070,7 @@ mod tests {
 
         fn arrange(
             &self,
-            _size: [f32; 2],
+            _bounds: [f32; 2],
             _children: &[(&dyn AnyWidget<String>, &MockSetting)],
             _ctx: &WidgetContext,
         ) -> Vec<Arrangement> {
@@ -1086,8 +1079,9 @@ mod tests {
 
         fn render(
             &self,
-            _background: Background,
+            _bounds: [f32; 2],
             _children: &[(&dyn AnyWidget<String>, &MockSetting, &Arrangement)],
+            _background: Background,
             _ctx: &WidgetContext,
         ) -> RenderNode {
             RenderNode::default()
@@ -1196,8 +1190,9 @@ mod tests {
         }
         fn render(
             &self,
-            _: Background,
+            _: [f32; 2],
             _: &[(&dyn AnyWidget<String>, &MockSetting, &Arrangement)],
+            _: Background,
             _: &WidgetContext,
         ) -> RenderNode {
             RenderNode::default()

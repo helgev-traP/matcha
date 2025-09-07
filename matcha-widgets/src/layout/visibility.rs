@@ -192,15 +192,18 @@ where
 
     fn arrange(
         &self,
-        size: [f32; 2],
+        bounds: [f32; 2],
         children: &[(&dyn AnyWidget<T>, &())],
         ctx: &WidgetContext,
     ) -> Vec<Arrangement> {
         if let Some((child, _)) = children.first() {
             match self.visibility {
                 VisibilityState::Visible | VisibilityState::Hidden => {
-                    let measured_size = child.measure(&Constraints::from_max_size(size), ctx);
-                    let final_size = [measured_size[0].min(size[0]), measured_size[1].min(size[1])];
+                    let measured_size = child.measure(&Constraints::from_max_size(bounds), ctx);
+                    let final_size = [
+                        measured_size[0].min(bounds[0]),
+                        measured_size[1].min(bounds[1]),
+                    ];
 
                     vec![Arrangement::new(final_size, nalgebra::Matrix4::identity())]
                 }
@@ -213,16 +216,16 @@ where
 
     fn render(
         &self,
-        background: Background,
+        _bounds: [f32; 2],
         children: &[(&dyn AnyWidget<T>, &(), &Arrangement)],
+        background: Background,
         ctx: &WidgetContext,
     ) -> RenderNode {
         if self.visibility == VisibilityState::Visible {
             if let Some((child, _, arrangement)) = children.first() {
-                let final_size = arrangement.size;
                 let affine = arrangement.affine;
 
-                let child_node = child.render(final_size, background, ctx);
+                let child_node = child.render(arrangement.size, background, ctx);
 
                 return RenderNode::new().add_child(child_node, affine);
             }

@@ -101,7 +101,7 @@ impl<E: Send + 'static> Widget<Template, E, ()> for TemplateNode {
 
     fn arrange(
         &self,
-        _final_size: [f32; 2],
+        _bounds: [f32; 2],
         _children: &[(&dyn AnyWidget<E>, &())],
         _ctx: &WidgetContext,
     ) -> Vec<Arrangement> {
@@ -111,8 +111,9 @@ impl<E: Send + 'static> Widget<Template, E, ()> for TemplateNode {
 
     fn render(
         &self,
-        _background: Background,
+        _bounds: [f32; 2],
         _children: &[(&dyn AnyWidget<E>, &(), &Arrangement)],
+        _background: Background,
         _ctx: &WidgetContext,
     ) -> RenderNode {
         // This widget doesn't draw anything.

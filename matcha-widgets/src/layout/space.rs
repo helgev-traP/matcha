@@ -138,7 +138,7 @@ impl<T: Send + 'static> Widget<Space, T, ()> for SpaceNode {
 
     fn arrange(
         &self,
-        _size: [f32; 2],
+        _bounds: [f32; 2],
         _children: &[(&dyn AnyWidget<T>, &())],
         _ctx: &WidgetContext,
     ) -> Vec<Arrangement> {
@@ -148,8 +148,9 @@ impl<T: Send + 'static> Widget<Space, T, ()> for SpaceNode {
 
     fn render(
         &self,
-        _background: Background,
+        _bounds: [f32; 2],
         _children: &[(&dyn AnyWidget<T>, &(), &Arrangement)],
+        _background: Background,
         _ctx: &WidgetContext,
     ) -> RenderNode {
         RenderNode::default()
