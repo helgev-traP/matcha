@@ -1,4 +1,4 @@
-use super::{DeviceInput, DeviceInputData, KeyInput};
+use super::{DeviceInputData, KeyInput};
 use std::collections::VecDeque;
 
 #[derive(Clone, Default, Debug, PartialEq, Eq)]

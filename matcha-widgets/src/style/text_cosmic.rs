@@ -232,6 +232,52 @@ impl Style for TextCosmic<'static> {
         Box::new(self.clone())
     }
 
+    fn required_size(
+        &self,
+        constraints: &matcha_core::ui::Constraints,
+        ctx: &WidgetContext,
+    ) -> Option<[f32; 2]> {
+        let font_context = ctx.any_resource().get_or_insert_default::<FontContext>();
+        let mut font_system = font_context.font_system.lock();
+
+        let mut buffer = Buffer::new(&mut font_system, self.metrics);
+
+        let max_width = self.max_size[0].unwrap_or(constraints.max_width());
+        let max_height = self.max_size[1].unwrap_or(constraints.max_height());
+
+        let mut buffer_view = buffer.borrow_with(&mut font_system);
+
+        buffer_view.set_size(max_width, max_height);
+
+        for text in &self.texts {
+            buffer_view.set_text(&text.text, text.attrs.clone(), Shaping::Advanced);
+        }
+
+        buffer_view.shape_until_scroll(true);
+
+        let mut x_max = 0f32;
+        let mut y_min = 0f32;
+        let mut y_max = 0f32;
+
+        for line in buffer_view.layout_runs() {
+            if line.glyphs.is_empty() {
+                continue;
+            }
+            x_max = x_max.max(line.line_w);
+            y_min = y_min.min(line.line_y - line.line_top);
+            y_max = y_max.max(line.line_y);
+        }
+
+        let width = x_max;
+        let height = y_max - y_min;
+
+        if width > 0.0 && height > 0.0 {
+            Some([width, height])
+        } else {
+            None
+        }
+    }
+
     fn is_inside(&self, position: [f32; 2], boundary_size: [f32; 2], ctx: &WidgetContext) -> bool {
         let draw_range = self.draw_range(boundary_size, ctx);
         let x_range = draw_range.x_range();

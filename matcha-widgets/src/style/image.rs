@@ -298,7 +298,12 @@ impl Style for Image {
         Box::new(self.clone())
     }
 
-    fn required_size(&self, ctx: &WidgetContext) -> Option<[f32; 2]> {
+    fn required_size(
+        &self,
+        constraints: &matcha_core::ui::Constraints,
+        ctx: &WidgetContext,
+    ) -> Option<[f32; 2]> {
+        let _ = constraints;
         self.with_image(ctx, |image| [image.width as f32, image.height as f32])
     }
 

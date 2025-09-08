@@ -1,4 +1,4 @@
-use super::{ButtonState, DeviceInput, DeviceInputData, MouseInput, MouseLogicalButton};
+use super::{ButtonState, DeviceInputData, MouseInput, MouseLogicalButton};
 
 use std::time::{Duration, Instant};
 use winit::{

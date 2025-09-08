@@ -20,4 +20,4 @@ pub use component::{Component, ComponentDom, ComponentWidget, ModelAccessor};
 
 pub mod application_handler;
 pub use application_handler::ApplicationHandler;
-pub(crate) use application_handler::{ApplicationHandlerCommand, ApplicationHandlerInner};
+pub(crate) use application_handler::ApplicationHandlerCommand;

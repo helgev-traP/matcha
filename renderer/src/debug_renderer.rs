@@ -1,7 +1,5 @@
 use crate::render_node::RenderNode;
-use gpu_utils::texture_atlas;
 use std::sync::Arc;
-use texture_atlas::TextureError;
 
 /// A very small debug renderer that draws a single layer of the provided atlas
 /// as a fullscreen quad. API mirrors `CoreRenderer::render`.

@@ -4,7 +4,7 @@ use parking_lot::Mutex;
 use renderer::render_node::RenderNode;
 use utils::{back_prop_dirty::BackPropDirty, cache::Cache};
 
-use crate::{app, device_input::DeviceInput, ui::ApplicationHandler, update_flag::UpdateNotifier};
+use crate::{device_input::DeviceInput, ui::ApplicationHandler, update_flag::UpdateNotifier};
 
 use super::{Arrangement, Background, Constraints, WidgetContext, metrics::LayoutSizeKey};
 

@@ -1,8 +1,8 @@
 use std::sync::{Arc, Weak};
 
-use dashmap::{DashMap, DashSet};
+use dashmap::DashMap;
 use euclid::Box2D;
-use guillotiere::{AllocId, AtlasAllocator, Size, euclid};
+use guillotiere::{AllocId, AtlasAllocator, euclid};
 use parking_lot::{Mutex, RwLock};
 use thiserror::Error;
 use uuid::Uuid;

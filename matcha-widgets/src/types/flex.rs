@@ -1,7 +1,5 @@
 use crate::types::size::Size;
 
-use matcha_core::ui::WidgetContext;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FlexWrap {
     NoWrap,

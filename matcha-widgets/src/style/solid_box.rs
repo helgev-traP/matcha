@@ -1,6 +1,6 @@
 use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
 use matcha_core::{
-    types::{color::Color, range::Range2D},
+    types::range::Range2D,
     ui::{Style, WidgetContext},
 };
 use renderer::{

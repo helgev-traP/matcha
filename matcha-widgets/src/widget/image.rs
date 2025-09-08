@@ -84,7 +84,10 @@ impl<T: Send + Sync + 'static> Widget<Image, T, ()> for ImageNode {
         _children: &[(&dyn AnyWidget<T>, &())],
         ctx: &WidgetContext,
     ) -> [f32; 2] {
-        let size = self.image_style.required_size(ctx).unwrap_or([0.0, 0.0]);
+        let size = self
+            .image_style
+            .required_size(constraints, ctx)
+            .unwrap_or([0.0, 0.0]);
 
         [size[0], size[1]]
     }
