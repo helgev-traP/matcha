@@ -1,9 +1,13 @@
+use std::sync::Arc;
+
+use crate::style::Style;
 use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
-use matcha_core::{types::range::Range2D, ui::Style, ui::WidgetContext};
+use matcha_core::types::range::Range2D;
+use matcha_core::ui::WidgetContext;
 use utils::cache::Cache;
 
 pub struct Buffer {
-    style: Vec<Box<dyn Style>>,
+    style: Vec<Arc<dyn Style>>,
     buffer_format: wgpu::TextureFormat,
     cache: Cache<[f32; 2], BufferData>,
 }
@@ -14,7 +18,7 @@ pub struct BufferData {
 }
 
 impl Buffer {
-    pub fn new(style: Vec<Box<dyn Style>>) -> Self {
+    pub fn new(style: Vec<Arc<dyn Style>>) -> Self {
         Self {
             style,
             buffer_format: wgpu::TextureFormat::Rgba8UnormSrgb,

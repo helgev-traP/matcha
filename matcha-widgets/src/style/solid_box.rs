@@ -1,8 +1,7 @@
+use crate::style::Style;
 use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
-use matcha_core::{
-    types::range::Range2D,
-    ui::{Style, WidgetContext},
-};
+use matcha_core::types::range::Range2D;
+use matcha_core::ui::WidgetContext;
 use renderer::{
     vertex::colored_vertex::ColorVertex,
     widgets_renderer::vertex_color::{RenderData, TargetData, VertexColor},
@@ -17,10 +16,6 @@ pub struct SolidBox {
 }
 
 impl Style for SolidBox {
-    fn clone_boxed(&self) -> Box<dyn Style> {
-        Box::new(Self { color: self.color })
-    }
-
     fn is_inside(&self, position: [f32; 2], boundary_size: [f32; 2], _ctx: &WidgetContext) -> bool {
         position[0] >= 0.0
             && position[0] <= boundary_size[0]

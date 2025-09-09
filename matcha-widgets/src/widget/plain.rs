@@ -1,8 +1,11 @@
+use std::sync::Arc;
+
+use crate::style::Style;
 use matcha_core::{
     device_input::DeviceInput,
     ui::{
-        AnyWidgetFrame, ApplicationHandler, Arrangement, Background, Constraints, Dom, Style,
-        Widget, WidgetContext, WidgetFrame,
+        AnyWidgetFrame, ApplicationHandler, Arrangement, Background, Constraints, Dom, Widget,
+        WidgetContext, WidgetFrame,
         widget::{AnyWidget, InvalidationHandle},
     },
     update_flag::UpdateNotifier,
@@ -15,7 +18,7 @@ use crate::{buffer::Buffer, types::size::Size};
 
 pub struct Plain<T> {
     label: Option<String>,
-    style: Vec<Box<dyn Style>>,
+    style: Vec<Arc<dyn Style>>,
     content: Option<Box<dyn Dom<T>>>,
     size: [Size; 2],
 }
@@ -30,8 +33,8 @@ impl<T> Plain<T> {
         })
     }
 
-    pub fn style(mut self, style: Box<dyn Style>) -> Self {
-        self.style.push(style);
+    pub fn style(mut self, style: impl Into<Arc<dyn Style>>) -> Self {
+        self.style.push(style.into());
         self
     }
 
@@ -80,7 +83,7 @@ impl<T: Send + Sync + 'static> Dom<T> for Plain<T> {
 // MARK: Widget
 
 pub struct PlainNode<T> {
-    style: Vec<Box<dyn Style>>,
+    style: Vec<Arc<dyn Style>>,
     size: [Size; 2],
     buffer: Buffer,
     _phantom: std::marker::PhantomData<T>,

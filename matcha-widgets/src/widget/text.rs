@@ -1,9 +1,10 @@
+use crate::style::Style;
 use cosmic_text::{Attrs, Color, Metrics};
 use matcha_core::{
     device_input::DeviceInput,
     ui::{
-        AnyWidgetFrame, ApplicationHandler, Arrangement, Background, Constraints, Dom, Style,
-        Widget, WidgetContext, WidgetFrame,
+        AnyWidgetFrame, ApplicationHandler, Arrangement, Background, Constraints, Dom, Widget,
+        WidgetContext, WidgetFrame,
         widget::{AnyWidget, InvalidationHandle},
     },
     update_flag::UpdateNotifier,

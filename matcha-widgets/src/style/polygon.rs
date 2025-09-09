@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
+use crate::style::Style;
 use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
 use matcha_core::{
     types::{color::Color, range::Range2D},
-    ui::Style,
     ui::WidgetContext,
 };
 use parking_lot::Mutex;
@@ -94,10 +94,6 @@ impl Polygon {
 // MARK: Style
 
 impl Style for Polygon {
-    fn clone_boxed(&self) -> Box<dyn Style> {
-        Box::new(self.clone())
-    }
-
     fn is_inside(&self, position: [f32; 2], boundary_size: [f32; 2], ctx: &WidgetContext) -> bool {
         let mut cache = self.caches.lock();
 

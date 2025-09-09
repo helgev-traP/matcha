@@ -1,12 +1,13 @@
 use std::sync::Arc;
 
+use crate::style::Style;
 use matcha_core::ui::ApplicationHandler;
 use matcha_core::{
     device_input::{DeviceInput, DeviceInputData, ElementState, MouseInput, MouseLogicalButton},
     types::color::Color,
     ui::Background,
     ui::{
-        AnyWidgetFrame, Arrangement, Constraints, Dom, Style, Widget, WidgetContext, WidgetFrame,
+        AnyWidgetFrame, Arrangement, Constraints, Dom, Widget, WidgetContext, WidgetFrame,
         widget::{AnyWidget, InvalidationHandle},
     },
     update_flag::UpdateNotifier,

@@ -1,8 +1,10 @@
 use std::sync::Arc;
 
+use crate::style::Style;
 use dashmap::DashMap;
 use image::{EncodableLayout, GenericImageView};
-use matcha_core::{types::range::Range2D, ui::Style, ui::WidgetContext};
+use matcha_core::types::range::Range2D;
+use matcha_core::ui::WidgetContext;
 use renderer::widgets_renderer::texture_copy::{RenderData, TargetData, TextureCopy};
 
 use crate::types::size::{ChildSize, Size};
@@ -294,10 +296,6 @@ impl Image {
 // MARK: Style implementation
 
 impl Style for Image {
-    fn clone_boxed(&self) -> Box<dyn Style> {
-        Box::new(self.clone())
-    }
-
     fn required_size(
         &self,
         constraints: &matcha_core::ui::Constraints,

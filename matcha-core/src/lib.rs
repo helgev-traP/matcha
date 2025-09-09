@@ -29,8 +29,8 @@ pub use app::App;
 pub use device_input::DeviceInput;
 pub use ui::{
     AnyWidget, AnyWidgetFrame, Arrangement, Background, Component, ComponentDom, ComponentWidget,
-    Constraints, Dom, InvalidationHandle, LayoutSizeKey, ModelAccessor, Style, UpdateWidgetError,
-    Widget, WidgetContext, WidgetFrame, component,
+    Constraints, Dom, InvalidationHandle, LayoutSizeKey, ModelAccessor, UpdateWidgetError, Widget,
+    WidgetContext, WidgetFrame, component,
 };
 pub use update_flag::UpdateNotifier;
 
@@ -41,7 +41,7 @@ pub mod prelude {
     pub use super::types::*;
     pub use super::ui::{
         AnyWidget, AnyWidgetFrame, Arrangement, Background, Component, ComponentDom,
-        ComponentWidget, Constraints, Dom, InvalidationHandle, LayoutSizeKey, ModelAccessor, Style,
+        ComponentWidget, Constraints, Dom, InvalidationHandle, LayoutSizeKey, ModelAccessor,
         UpdateWidgetError, Widget, WidgetContext, WidgetFrame,
     };
 }

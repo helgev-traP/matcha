@@ -1,9 +1,6 @@
 pub mod background;
 pub use background::Background;
 
-pub mod style;
-pub use style::Style;
-
 pub mod metrics;
 pub use metrics::{Arrangement, Constraints, LayoutSizeKey};
 
