@@ -82,9 +82,9 @@ pub enum Time {
 impl std::fmt::Display for Time {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Time::Second(time) => write!(f, "{:>4}s ", time),
-            Time::Millisecond(time) => write!(f, "{:>4}ms", time),
-            Time::Microsecond(time) => write!(f, "{:>4}µs", time),
+            Time::Second(time) => write!(f, "{time:>4}s "),
+            Time::Millisecond(time) => write!(f, "{time:>4}ms"),
+            Time::Microsecond(time) => write!(f, "{time:>4}µs"),
         }
     }
 }

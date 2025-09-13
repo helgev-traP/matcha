@@ -12,14 +12,17 @@ use matcha_core::{
 };
 use renderer::render_node::RenderNode;
 
-use crate::types::size::{ChildSize, Size};
+use crate::types::{
+    grow_size::GrowSize,
+    size::{ChildSize, Size},
+};
 
 // MARK: Dom
 
 pub struct Grid<T: Send + 'static> {
     label: Option<String>,
-    template_columns: Vec<Size>,
-    template_rows: Vec<Size>,
+    template_columns: Vec<GrowSize>,
+    template_rows: Vec<GrowSize>,
     gap_columns: Size,
     gap_rows: Size,
     items: Vec<GridItem<T>>,
@@ -48,12 +51,12 @@ impl<T: Send + 'static> Grid<T> {
         self
     }
 
-    pub fn template_columns(mut self, columns: Vec<Size>) -> Self {
+    pub fn template_columns(mut self, columns: Vec<GrowSize>) -> Self {
         self.template_columns = columns;
         self
     }
 
-    pub fn template_rows(mut self, rows: Vec<Size>) -> Self {
+    pub fn template_rows(mut self, rows: Vec<GrowSize>) -> Self {
         self.template_rows = rows;
         self
     }
@@ -130,8 +133,8 @@ pub struct GridChildSetting {
 }
 
 pub struct GridNode {
-    template_columns: Vec<Size>,
-    template_rows: Vec<Size>,
+    template_columns: Vec<GrowSize>,
+    template_rows: Vec<GrowSize>,
     gap_columns: Size,
     gap_rows: Size,
     column_ranges: Vec<[f32; 2]>,
@@ -320,13 +323,13 @@ impl GridNode {
             self.template_columns
                 .iter()
                 .fold((0.0, 0.0), |(sum, grow_sum), size| match size {
-                    Size::Size(f) => (
-                        sum + f(parent_size, &mut ChildSize::default(), context),
+                    GrowSize::Fixed(s) => (
+                        sum + s.size(parent_size, &mut ChildSize::default(), context),
                         grow_sum,
                     ),
-                    Size::Grow(f) => (
+                    GrowSize::Grow(s) => (
                         sum,
-                        grow_sum + f(parent_size, &mut ChildSize::default(), context),
+                        grow_sum + s.size(parent_size, &mut ChildSize::default(), context),
                     ),
                 });
 
@@ -334,27 +337,25 @@ impl GridNode {
             self.template_rows
                 .iter()
                 .fold((0.0, 0.0), |(sum, grow_sum), size| match size {
-                    Size::Size(f) => (
-                        sum + f(parent_size, &mut ChildSize::default(), context),
+                    GrowSize::Fixed(s) => (
+                        sum + s.size(parent_size, &mut ChildSize::default(), context),
                         grow_sum,
                     ),
-                    Size::Grow(f) => (
+                    GrowSize::Grow(s) => (
                         sum,
-                        grow_sum + f(parent_size, &mut ChildSize::default(), context),
+                        grow_sum + s.size(parent_size, &mut ChildSize::default(), context),
                     ),
                 });
 
-        let column_gap_px = match &self.gap_columns {
-            Size::Size(f) => f(parent_size, &mut ChildSize::default(), context),
-            Size::Grow(f) => f(parent_size, &mut ChildSize::default(), context),
-        };
+        let column_gap_px = self
+            .gap_columns
+            .size(parent_size, &mut ChildSize::default(), context);
         let total_column_gap =
             column_gap_px * (self.template_columns.len().saturating_sub(1) as f32);
 
-        let row_gap_px = match &self.gap_rows {
-            Size::Size(f) => f(parent_size, &mut ChildSize::default(), context),
-            Size::Grow(f) => f(parent_size, &mut ChildSize::default(), context),
-        };
+        let row_gap_px = self
+            .gap_rows
+            .size(parent_size, &mut ChildSize::default(), context);
         let total_row_gap = row_gap_px * (self.template_rows.len().saturating_sub(1) as f32);
 
         let column_px_per_grow = if column_grow_sum > 0.0 {
@@ -375,9 +376,9 @@ impl GridNode {
         for size in &self.template_columns {
             let start = current_x;
             let width = match size {
-                Size::Size(f) => f(parent_size, &mut ChildSize::default(), context),
-                Size::Grow(f) => {
-                    column_px_per_grow * f(parent_size, &mut ChildSize::default(), context)
+                GrowSize::Fixed(s) => s.size(parent_size, &mut ChildSize::default(), context),
+                GrowSize::Grow(s) => {
+                    column_px_per_grow * s.size(parent_size, &mut ChildSize::default(), context)
                 }
             };
             let end = start + width;
@@ -390,9 +391,9 @@ impl GridNode {
         for size in &self.template_rows {
             let start = current_y;
             let height = match size {
-                Size::Size(f) => f(parent_size, &mut ChildSize::default(), context),
-                Size::Grow(f) => {
-                    row_px_per_grow * f(parent_size, &mut ChildSize::default(), context)
+                GrowSize::Fixed(s) => s.size(parent_size, &mut ChildSize::default(), context),
+                GrowSize::Grow(s) => {
+                    row_px_per_grow * s.size(parent_size, &mut ChildSize::default(), context)
                 }
             };
             let end = start + height;

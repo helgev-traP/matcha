@@ -9,8 +9,12 @@ use matcha_core::{
 };
 use renderer::render_node::RenderNode;
 
-use crate::types::flex::{AlignItems, JustifyContent};
-use crate::types::size::{ChildSize, Size};
+use crate::types::grow_size::GrowSize;
+use crate::types::size::ChildSize;
+use crate::types::{
+    flex::{AlignItems, JustifyContent},
+    size::Size,
+};
 
 // MARK: DOM
 
@@ -31,7 +35,9 @@ where
     pub fn new(label: Option<&str>) -> Self {
         Self {
             label: label.map(String::from),
-            justify_content: JustifyContent::FlexStart { gap: Size::px(0.0) },
+            justify_content: JustifyContent::FlexStart {
+                gap: GrowSize::Fixed(Size::px(0.0)),
+            },
             align_items: AlignItems::Start,
             items: Vec::new(),
         }
@@ -124,11 +130,16 @@ impl RowNode {
             | JustifyContent::FlexEnd { gap: g }
             | JustifyContent::Center { gap: g } => {
                 // If gap is Grow, distribute available space evenly across gaps.
-                match g.clone() {
-                    Size::Grow(_) => {
+                match g {
+                    GrowSize::Grow(s) => {
                         if child_count >= 2 {
                             let available_space = container_size - total_child_width;
-                            gap = (available_space / (child_count - 1) as f32).max(0.0);
+                            let grow_val = s.size(
+                                [Some(container_size), Some(child_max_height)],
+                                &mut rep_child_size,
+                                ctx,
+                            );
+                            gap = (available_space / (child_count - 1) as f32 * grow_val).max(0.0);
                             offset = 0.0;
                         } else {
                             // single child: follow existing behaviour -> gap 0, offset depends on alignment
@@ -145,8 +156,8 @@ impl RowNode {
                         }
                     }
                     // For Size::Size and other Size variants, evaluate the function.
-                    _ => {
-                        gap = g.size(
+                    GrowSize::Fixed(s) => {
+                        gap = s.size(
                             [Some(container_size), Some(child_max_height)],
                             &mut rep_child_size,
                             ctx,

@@ -294,14 +294,7 @@ impl Image {
 
 impl Style for Image {
     fn required_region(&self, constraints: &Constraints, ctx: &WidgetContext) -> Option<QRect> {
-        let boundary = Self::boundary_opt(constraints.max_size());
-        let base = [f32::INFINITY, f32::INFINITY];
-        let (size_x, size_y, offset_x, offset_y) = self.calc_layout(boundary, base, ctx);
-        if size_x > 0.0 && size_y > 0.0 {
-            Some(QRect::new([offset_x, offset_y], [size_x, size_y]))
-        } else {
-            None
-        }
+        self.with_image(ctx, |texture| todo!())
     }
 
     fn is_inside(&self, position: [f32; 2], boundary_size: [f32; 2], ctx: &WidgetContext) -> bool {
