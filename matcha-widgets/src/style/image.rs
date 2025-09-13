@@ -172,14 +172,8 @@ impl Image {
     /// Align center both axes.
     pub fn align_center(mut self) -> Self {
         // offset = (parent - child) * 0.5
-        let ox = Size::from_size(|parent, child, _ctx| {
-            let parent_w = parent[0].unwrap_or(child.get()[0]);
-            (parent_w - child.get()[0]) * 0.5
-        });
-        let oy = Size::from_size(|parent, child, _ctx| {
-            let parent_h = parent[1].unwrap_or(child.get()[1]);
-            (parent_h - child.get()[1]) * 0.5
-        });
+        let ox = Size::from_size(|parent, child, _ctx| (parent[0] - child.get()[0]) * 0.5);
+        let oy = Size::from_size(|parent, child, _ctx| (parent[1] - child.get()[1]) * 0.5);
         self.offset = [ox, oy];
         self
     }
@@ -190,16 +184,14 @@ impl Image {
         let m2 = margin.clone();
         let m3 = margin.clone();
         let ox = match align {
-            HAlign::Left => Size::from_size(move |_parent, _child, ctx| {
-                m1.size([None, None], &mut ChildSize::default(), ctx)
+            HAlign::Left => Size::from_size(move |parent, _child, ctx| {
+                m1.size(parent, &mut ChildSize::default(), ctx)
             }),
             HAlign::Center => Size::from_size(move |parent, child, ctx| {
-                let parent_w = parent[0].unwrap_or(child.get()[0]);
-                (parent_w - child.get()[0]) * 0.5 + m2.size(parent, child, ctx)
+                (parent[0] - child.get()[0]) * 0.5 + m2.size(parent, child, ctx)
             }),
             HAlign::Right => Size::from_size(move |parent, child, ctx| {
-                let parent_w = parent[0].unwrap_or(child.get()[0]);
-                parent_w - child.get()[0] - m3.size(parent, child, ctx)
+                (parent[0] - child.get()[0]) - m3.size(parent, child, ctx)
             }),
         };
         let oy = self.offset[1].clone();
@@ -213,16 +205,14 @@ impl Image {
         let m2 = margin.clone();
         let m3 = margin.clone();
         let oy = match align {
-            VAlign::Top => Size::from_size(move |_parent, _child, ctx| {
-                m1.size([None, None], &mut ChildSize::default(), ctx)
+            VAlign::Top => Size::from_size(move |parent, _child, ctx| {
+                m1.size(parent, &mut ChildSize::default(), ctx)
             }),
             VAlign::Center => Size::from_size(move |parent, child, ctx| {
-                let parent_h = parent[1].unwrap_or(child.get()[1]);
-                (parent_h - child.get()[1]) * 0.5 + m2.size(parent, child, ctx)
+                (parent[1] - child.get()[1]) * 0.5 + m2.size(parent, child, ctx)
             }),
             VAlign::Bottom => Size::from_size(move |parent, child, ctx| {
-                let parent_h = parent[1].unwrap_or(child.get()[1]);
-                parent_h - child.get()[1] - m3.size(parent, child, ctx)
+                (parent[1] - child.get()[1]) - m3.size(parent, child, ctx)
             }),
         };
         let ox = self.offset[0].clone();
@@ -257,13 +247,9 @@ impl Image {
 
 // helper methods
 impl Image {
-    fn boundary_opt(boundary_size: [f32; 2]) -> [Option<f32>; 2] {
-        [Some(boundary_size[0]), Some(boundary_size[1])]
-    }
-
     fn calc_layout(
         &self,
-        boundary: [Option<f32>; 2],
+        boundary: [f32; 2],
         base: [f32; 2],
         ctx: &WidgetContext,
     ) -> (f32, f32, f32, f32) {
@@ -318,8 +304,8 @@ impl Style for Image {
         let target_format = target.format();
         self.with_image(ctx, |texture| {
             let image_size = [texture.width() as f32, texture.height() as f32];
-            let boundary = Self::boundary_opt(boundary_size);
-            let (size_x, size_y, offset_x, offset_y) = self.calc_layout(boundary, image_size, ctx);
+            let (size_x, size_y, offset_x, offset_y) =
+                self.calc_layout(boundary_size, image_size, ctx);
             let draw_offset = [offset_x + offset[0], offset_y + offset[1]];
 
             // begin a render pass targeting the atlas region so the renderer can create its own passes if needed

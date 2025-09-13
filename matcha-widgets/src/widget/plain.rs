@@ -124,10 +124,7 @@ impl<T: Send + Sync + 'static> Widget<Plain<T>, T, ()> for PlainNode<T> {
         };
 
         let mut child_size_provider = crate::types::size::ChildSize::new(|| child_size);
-        let parent_size = [
-            Some(constraints.max_width()),
-            Some(constraints.max_height()),
-        ];
+        let parent_size = [constraints.max_width(), constraints.max_height()];
 
         let w = self.size[0].size(parent_size, &mut child_size_provider, ctx);
         let h = self.size[1].size(parent_size, &mut child_size_provider, ctx);

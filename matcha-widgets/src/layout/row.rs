@@ -135,7 +135,7 @@ impl RowNode {
                         if child_count >= 2 {
                             let available_space = container_size - total_child_width;
                             let grow_val = s.size(
-                                [Some(container_size), Some(child_max_height)],
+                                [container_size, child_max_height],
                                 &mut rep_child_size,
                                 ctx,
                             );
@@ -157,11 +157,7 @@ impl RowNode {
                     }
                     // For Size::Size and other Size variants, evaluate the function.
                     GrowSize::Fixed(s) => {
-                        gap = s.size(
-                            [Some(container_size), Some(child_max_height)],
-                            &mut rep_child_size,
-                            ctx,
-                        );
+                        gap = s.size([container_size, child_max_height], &mut rep_child_size, ctx);
                         offset = 0.0;
                     }
                 }

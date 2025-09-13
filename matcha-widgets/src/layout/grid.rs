@@ -237,10 +237,7 @@ where
             return [0.0, 0.0];
         }
 
-        let parent_size = [
-            Some(constraints.max_width()),
-            Some(constraints.max_height()),
-        ];
+        let parent_size = [constraints.max_width(), constraints.max_height()];
         let (column_ranges, row_ranges) = self.calc_grid_layout(parent_size, ctx);
 
         let total_width = column_ranges.last().map(|r| r[1]).unwrap_or(0.0);
@@ -262,7 +259,7 @@ where
         children: &[(&dyn AnyWidget<T>, &GridChildSetting)],
         ctx: &WidgetContext,
     ) -> Vec<Arrangement> {
-        let parent_size = [Some(bounds[0]), Some(bounds[1])];
+        let parent_size = [bounds[0], bounds[1]];
         let (column_ranges, row_ranges) = self.calc_grid_layout(parent_size, ctx);
 
         children
@@ -316,7 +313,7 @@ where
 impl GridNode {
     fn calc_grid_layout(
         &self,
-        parent_size: [Option<f32>; 2],
+        parent_size: [f32; 2],
         context: &WidgetContext,
     ) -> (Vec<[f32; 2]>, Vec<[f32; 2]>) {
         let (column_px_sum, column_grow_sum) =
@@ -359,14 +356,13 @@ impl GridNode {
         let total_row_gap = row_gap_px * (self.template_rows.len().saturating_sub(1) as f32);
 
         let column_px_per_grow = if column_grow_sum > 0.0 {
-            ((parent_size[0].unwrap_or(0.0) - column_px_sum - total_column_gap) / column_grow_sum)
-                .max(0.0)
+            ((parent_size[0] - column_px_sum - total_column_gap) / column_grow_sum).max(0.0)
         } else {
             0.0
         };
 
         let row_px_per_grow = if row_grow_sum > 0.0 {
-            ((parent_size[1].unwrap_or(0.0) - row_px_sum - total_row_gap) / row_grow_sum).max(0.0)
+            ((parent_size[1] - row_px_sum - total_row_gap) / row_grow_sum).max(0.0)
         } else {
             0.0
         };

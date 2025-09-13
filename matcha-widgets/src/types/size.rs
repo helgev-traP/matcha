@@ -47,8 +47,7 @@ impl ChildSize<'_> {
     }
 }
 
-type SizeFn =
-    dyn Fn([Option<f32>; 2], &mut ChildSize, &WidgetContext) -> f32 + Send + Sync + 'static;
+type SizeFn = dyn Fn([f32; 2], &mut ChildSize, &WidgetContext) -> f32 + Send + Sync + 'static;
 
 /// Calculate size from parent size child size and context.
 #[derive(Clone)]
@@ -81,21 +80,13 @@ impl Size {
     /// Specify size in magnification of parent width.
     pub fn parent_w(mag: f32) -> Self {
         Self {
-            f: Arc::new(move |parent_size, child_size, _| {
-                parent_size[0]
-                    .map(|size| size * mag)
-                    .unwrap_or_else(|| child_size.get()[0])
-            }),
+            f: Arc::new(move |parent_size, _, _| parent_size[0] * mag),
         }
     }
 
     pub fn parent_h(mag: f32) -> Self {
         Self {
-            f: Arc::new(move |parent_size, child_size, _| {
-                parent_size[1]
-                    .map(|size| size * mag)
-                    .unwrap_or_else(|| child_size.get()[1])
-            }),
+            f: Arc::new(move |parent_size, _, _| parent_size[1] * mag),
         }
     }
 
@@ -164,7 +155,7 @@ impl Size {
     /// Specify size with a custom function.
     pub fn from_size<F>(f: F) -> Self
     where
-        F: Fn([Option<f32>; 2], &mut ChildSize, &WidgetContext) -> f32 + Send + Sync + 'static,
+        F: Fn([f32; 2], &mut ChildSize, &WidgetContext) -> f32 + Send + Sync + 'static,
     {
         Self { f: Arc::new(f) }
     }
@@ -173,17 +164,21 @@ impl Size {
 impl Size {
     pub fn size(
         &self,
-        parent_size: [Option<f32>; 2],
+        parent_size: [f32; 2],
         child_size: &mut ChildSize,
         ctx: &WidgetContext,
     ) -> f32 {
         (self.f)(parent_size, child_size, ctx)
     }
 
-    /// returns `[{min_size}, {max_size}]`
-    pub fn constraints(&self, constraints: &Constraints, ctx: &WidgetContext) -> [f32; 2] {
-        todo!()
-    }
+    // pub fn constraints(
+    //     &self,
+    //     constraints: &Constraints,
+    //     child_size: &mut ChildSize,
+    //     ctx: &WidgetContext,
+    // ) -> [f32; 2] {
+    //     todo!()
+    // }
 }
 
 impl PartialEq for Size {

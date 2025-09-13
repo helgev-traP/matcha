@@ -114,17 +114,7 @@ impl<T: Send + 'static> Widget<Space, T, ()> for SpaceNode {
         _children: &[(&dyn AnyWidget<T>, &())],
         ctx: &WidgetContext,
     ) -> [f32; 2] {
-        let parent_w = if constraints.max_width().is_finite() {
-            Some(constraints.max_width())
-        } else {
-            None
-        };
-        let parent_h = if constraints.max_height().is_finite() {
-            Some(constraints.max_height())
-        } else {
-            None
-        };
-        let parent_size = [parent_w, parent_h];
+        let parent_size = [constraints.max_width(), constraints.max_height()];
 
         let mut child_size = ChildSize::with_size([0.0, 0.0]);
 

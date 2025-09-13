@@ -130,11 +130,8 @@ impl ColumnNode {
                     GrowSize::Grow(s) => {
                         if child_count >= 2 {
                             let available_space = container_size - total_child_height;
-                            let grow_val = s.size(
-                                [Some(child_max_width), Some(container_size)],
-                                &mut rep_child_size,
-                                ctx,
-                            );
+                            let grow_val =
+                                s.size([child_max_width, container_size], &mut rep_child_size, ctx);
                             gap = (available_space / (child_count - 1) as f32 * grow_val).max(0.0);
                             offset = 0.0;
                         } else {
@@ -152,11 +149,7 @@ impl ColumnNode {
                         }
                     }
                     GrowSize::Fixed(s) => {
-                        gap = s.size(
-                            [Some(child_max_width), Some(container_size)],
-                            &mut rep_child_size,
-                            ctx,
-                        );
+                        gap = s.size([child_max_width, container_size], &mut rep_child_size, ctx);
                         offset = 0.0;
                     }
                 }
