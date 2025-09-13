@@ -2,9 +2,9 @@ use crate::style::Style;
 use cosmic_text::{Attrs, Color, Metrics};
 use matcha_core::{
     device_input::DeviceInput,
+    metrics::{Arrangement, Constraints},
     ui::{
-        AnyWidgetFrame, ApplicationHandler, Arrangement, Background, Constraints, Dom, Widget,
-        WidgetContext, WidgetFrame,
+        AnyWidgetFrame, ApplicationHandler, Background, Dom, Widget, WidgetContext, WidgetFrame,
         widget::{AnyWidget, InvalidationHandle},
     },
     update_flag::UpdateNotifier,
@@ -127,12 +127,16 @@ impl<'a: 'static, T: Send + Sync + 'static> Widget<Text<'a>, T, ()> for TextNode
 
     fn measure(
         &self,
-        _constraints: &Constraints,
-        _children: &[(&dyn AnyWidget<T>, &())],
+        constraints: &Constraints,
+        _: &[(&dyn AnyWidget<T>, &())],
         ctx: &WidgetContext,
     ) -> [f32; 2] {
-        let range = self.style.draw_range([f32::MAX, f32::MAX], ctx);
-        [range.width(), range.height()]
+        let rect = self.style.required_region(constraints, ctx);
+        if let Some(rect) = rect {
+            [rect.width(), rect.height()]
+        } else {
+            [0.0, 0.0]
+        }
     }
 
     fn arrange(

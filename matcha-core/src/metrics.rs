@@ -1,29 +1,180 @@
 use nalgebra::Matrix4;
 
 /// Quantization factor for layout size keys.
-const SUB_PIXEL_QUANTIZE: f32 = 256.0;
+const SUB_PIXEL_QUANTIZE: f32 = 256_f32;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct LayoutSizeKey([u32; 2]);
+pub struct QSize([u32; 2]);
 
-impl From<[f32; 2]> for LayoutSizeKey {
+impl QSize {
+    pub const fn new(width: f32, height: f32) -> Self {
+        Self([
+            (width * SUB_PIXEL_QUANTIZE).max(0.0) as u32,
+            (height * SUB_PIXEL_QUANTIZE).max(0.0) as u32,
+        ])
+    }
+
+    pub const fn width(&self) -> f32 {
+        self.0[0] as f32 / SUB_PIXEL_QUANTIZE
+    }
+
+    pub const fn height(&self) -> f32 {
+        self.0[1] as f32 / SUB_PIXEL_QUANTIZE
+    }
+
+    pub const fn size(&self) -> [f32; 2] {
+        [self.width(), self.height()]
+    }
+
+    pub const fn area(&self) -> f32 {
+        self.width() * self.height()
+    }
+}
+
+impl From<[f32; 2]> for QSize {
     fn from(size: [f32; 2]) -> Self {
         debug_assert!(size[0] >= 0.0);
         debug_assert!(size[1] >= 0.0);
 
-        LayoutSizeKey([
+        QSize([
             (size[0] * SUB_PIXEL_QUANTIZE).max(0.0) as u32,
             (size[1] * SUB_PIXEL_QUANTIZE).max(0.0) as u32,
         ])
     }
 }
 
-impl From<LayoutSizeKey> for [f32; 2] {
-    fn from(key: LayoutSizeKey) -> Self {
+impl From<QSize> for [f32; 2] {
+    fn from(key: QSize) -> Self {
         [
             key.0[0] as f32 / SUB_PIXEL_QUANTIZE,
             key.0[1] as f32 / SUB_PIXEL_QUANTIZE,
         ]
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct QRect {
+    origin: [i32; 2],
+    size: [i32; 2],
+}
+
+impl Default for QRect {
+    fn default() -> Self {
+        Self::zero()
+    }
+}
+
+impl QRect {
+    pub const fn new(origin: [f32; 2], size: [f32; 2]) -> Self {
+        Self {
+            origin: [
+                (origin[0] * SUB_PIXEL_QUANTIZE) as i32,
+                (origin[1] * SUB_PIXEL_QUANTIZE) as i32,
+            ],
+            size: [
+                (size[0] * SUB_PIXEL_QUANTIZE) as i32,
+                (size[1] * SUB_PIXEL_QUANTIZE) as i32,
+            ],
+        }
+    }
+
+    pub const fn zero() -> Self {
+        Self {
+            origin: [0, 0],
+            size: [0, 0],
+        }
+    }
+}
+
+impl QRect {
+    pub const fn size(&self) -> [f32; 2] {
+        [
+            self.size[0] as f32 / SUB_PIXEL_QUANTIZE,
+            self.size[1] as f32 / SUB_PIXEL_QUANTIZE,
+        ]
+    }
+
+    pub const fn min(&self) -> [f32; 2] {
+        [
+            self.origin[0] as f32 / SUB_PIXEL_QUANTIZE,
+            self.origin[1] as f32 / SUB_PIXEL_QUANTIZE,
+        ]
+    }
+
+    pub const fn max(&self) -> [f32; 2] {
+        [
+            (self.origin[0] + self.size[0]) as f32 / SUB_PIXEL_QUANTIZE,
+            (self.origin[1] + self.size[1]) as f32 / SUB_PIXEL_QUANTIZE,
+        ]
+    }
+
+    pub const fn min_x(&self) -> f32 {
+        self.origin[0] as f32 / SUB_PIXEL_QUANTIZE
+    }
+
+    pub const fn max_x(&self) -> f32 {
+        (self.origin[0] + self.size[0]) as f32 / SUB_PIXEL_QUANTIZE
+    }
+
+    pub const fn min_y(&self) -> f32 {
+        self.origin[1] as f32 / SUB_PIXEL_QUANTIZE
+    }
+
+    pub const fn max_y(&self) -> f32 {
+        (self.origin[1] + self.size[1]) as f32 / SUB_PIXEL_QUANTIZE
+    }
+
+    pub const fn width(&self) -> f32 {
+        self.size[0] as f32 / SUB_PIXEL_QUANTIZE
+    }
+
+    pub const fn height(&self) -> f32 {
+        self.size[1] as f32 / SUB_PIXEL_QUANTIZE
+    }
+
+    pub const fn x(&self) -> [f32; 2] {
+        [self.min_x(), self.max_x()]
+    }
+
+    pub const fn y(&self) -> [f32; 2] {
+        [self.min_y(), self.max_y()]
+    }
+
+    pub const fn area(&self) -> f32 {
+        self.width() * self.height()
+    }
+
+    pub const fn contains(&self, p: [f32; 2]) -> bool {
+        let px = (p[0] * SUB_PIXEL_QUANTIZE) as i32;
+        let py = (p[1] * SUB_PIXEL_QUANTIZE) as i32;
+        self.origin[0] <= px
+            && px <= self.origin[0] + self.size[0]
+            && self.origin[1] <= py
+            && py <= self.origin[1] + self.size[1]
+    }
+
+    pub const fn intersects(&self, other: &QRect) -> bool {
+        let self_max_x = self.origin[0] + self.size[0];
+        let self_max_y = self.origin[1] + self.size[1];
+        let other_max_x = other.origin[0] + other.size[0];
+        let other_max_y = other.origin[1] + other.size[1];
+
+        !(self.origin[0] >= other_max_x
+            || self_max_x <= other.origin[0]
+            || self.origin[1] >= other_max_y
+            || self_max_y <= other.origin[1])
+    }
+
+    pub fn union(&self, other: &QRect) -> QRect {
+        let min_x = self.origin[0].min(other.origin[0]);
+        let min_y = self.origin[1].min(other.origin[1]);
+        let max_x = (self.origin[0] + self.size[0]).max(other.origin[0] + other.size[0]);
+        let max_y = (self.origin[1] + self.size[1]).max(other.origin[1] + other.size[1]);
+
+        QRect {
+            origin: [min_x, min_y],
+            size: [max_x - min_x, max_y - min_y],
+        }
     }
 }
 
@@ -41,7 +192,7 @@ impl Constraints {
     /// `[{min}, {max}]`
     pub fn new(width: [f32; 2], height: [f32; 2]) -> Self {
         if width[0] < 0.0 || width[0] > width[1] || height[0] < 0.0 || height[0] > height[1] {
-            panic!("Invalid constraints: {:?}", (width, height));
+            panic!("Invalid constraints: width=[{width:?}], height={height:?}");
         }
 
         Self {
@@ -54,7 +205,7 @@ impl Constraints {
 
     pub fn from_max_size(size: [f32; 2]) -> Self {
         if size[0] < 0.0 || size[1] < 0.0 {
-            panic!("Invalid constraints: {size:?}");
+            panic!("Invalid constraints: width={}, height={}", size[0], size[1]);
         }
 
         Self {
@@ -65,28 +216,54 @@ impl Constraints {
         }
     }
 
-    pub fn min_width(&self) -> f32 {
+    pub fn from_boundary(boundary: [f32; 2]) -> Self {
+        if boundary[0] < 0.0 || boundary[1] < 0.0 {
+            panic!("Invalid constraints: {boundary:?}");
+        }
+
+        let quantized = [
+            (boundary[0] * SUB_PIXEL_QUANTIZE) as u32,
+            (boundary[1] * SUB_PIXEL_QUANTIZE) as u32,
+        ];
+
+        Self {
+            min_width: quantized[0],
+            max_width: quantized[0],
+            min_height: quantized[1],
+            max_height: quantized[1],
+        }
+    }
+
+    pub const fn min_width(&self) -> f32 {
         self.min_width as f32 / SUB_PIXEL_QUANTIZE
     }
 
-    pub fn max_width(&self) -> f32 {
+    pub const fn max_width(&self) -> f32 {
         self.max_width as f32 / SUB_PIXEL_QUANTIZE
     }
 
-    pub fn width(&self) -> [f32; 2] {
+    pub const fn width(&self) -> [f32; 2] {
         [self.min_width(), self.max_width()]
     }
 
-    pub fn min_height(&self) -> f32 {
+    pub const fn min_height(&self) -> f32 {
         self.min_height as f32 / SUB_PIXEL_QUANTIZE
     }
 
-    pub fn max_height(&self) -> f32 {
+    pub const fn max_height(&self) -> f32 {
         self.max_height as f32 / SUB_PIXEL_QUANTIZE
     }
 
-    pub fn height(&self) -> [f32; 2] {
+    pub const fn height(&self) -> [f32; 2] {
         [self.min_height(), self.max_height()]
+    }
+
+    pub const fn max_size(&self) -> [f32; 2] {
+        [self.max_width(), self.max_height()]
+    }
+
+    pub const fn min_size(&self) -> [f32; 2] {
+        [self.min_width(), self.min_height()]
     }
 }
 

@@ -20,7 +20,6 @@ pub struct WidgetContext<'a> {
 }
 
 impl<'a> WidgetContext<'a> {
-    #[doc(hidden)]
     pub(crate) const fn new(
         device_queue: DeviceQueue<'a>,
         surface_format: wgpu::TextureFormat,

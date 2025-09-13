@@ -2,11 +2,15 @@ pub mod image;
 pub mod polygon;
 pub mod solid_box;
 pub mod text_cosmic;
+use std::sync::Arc;
+
 pub use text_cosmic as text;
 
 use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
-use matcha_core::types::range::Range2D;
-use matcha_core::ui::{Constraints, WidgetContext};
+use matcha_core::{
+    metrics::{Constraints, QRect},
+    ui::WidgetContext,
+};
 
 /// A trait that defines the visual appearance and drawing logic of a widget.
 ///
@@ -28,17 +32,16 @@ pub trait Style: Send + Sync {
     ///
     /// An array `[width, height]` representing the required size in pixels.
     /// If the style does not have a specific size requirement, it returns `None`.
-    fn required_size(&self, constraints: &Constraints, ctx: &WidgetContext) -> Option<[f32; 2]> {
-        let _ = (constraints, ctx);
-        None
-    }
+    fn required_region(&self, constraints: &Constraints, ctx: &WidgetContext) -> Option<QRect>;
 
     /// Checks if a given position is inside the shape defined by this style.
-    fn is_inside(&self, position: [f32; 2], bounds: [f32; 2], ctx: &WidgetContext) -> bool;
-
-    /// Calculates the drawing range of the style.
-    /// Coordinates are in pixels with the origin at the top-left and the Y axis pointing downwards.
-    fn draw_range(&self, bounds: [f32; 2], ctx: &WidgetContext) -> Range2D<f32>;
+    /// This is necessary for styles that have non-rectangular shapes.
+    fn is_inside(&self, position: [f32; 2], bounds: [f32; 2], ctx: &WidgetContext) -> bool {
+        let Some(rect) = self.required_region(&Constraints::from_boundary(bounds), ctx) else {
+            return false;
+        };
+        rect.contains(position)
+    }
 
     /// Draws the style onto the render pass.
     ///
@@ -52,4 +55,41 @@ pub trait Style: Send + Sync {
         offset: [f32; 2],
         ctx: &WidgetContext,
     );
+}
+
+impl Style for Vec<Arc<dyn Style>> {
+    fn required_region(&self, constraints: &Constraints, ctx: &WidgetContext) -> Option<QRect> {
+        let mut result: Option<QRect> = None;
+        for style in self {
+            if let Some(region) = style.required_region(constraints, ctx) {
+                result = Some(match result {
+                    Some(r) => r.union(&region),
+                    None => region,
+                });
+            }
+        }
+        result
+    }
+
+    fn is_inside(&self, position: [f32; 2], bounds: [f32; 2], ctx: &WidgetContext) -> bool {
+        for style in self {
+            if style.is_inside(position, bounds, ctx) {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn draw(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &AtlasRegion,
+        boundary_size: [f32; 2],
+        offset: [f32; 2],
+        ctx: &WidgetContext,
+    ) {
+        for style in self {
+            style.draw(encoder, target, boundary_size, offset, ctx);
+        }
+    }
 }

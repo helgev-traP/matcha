@@ -3,9 +3,9 @@ use std::sync::Arc;
 use crate::style::Style;
 use matcha_core::{
     device_input::DeviceInput,
+    metrics::{Arrangement, Constraints},
     ui::{
-        AnyWidgetFrame, ApplicationHandler, Arrangement, Background, Constraints, Dom, Widget,
-        WidgetContext, WidgetFrame,
+        AnyWidgetFrame, ApplicationHandler, Background, Dom, Widget, WidgetContext, WidgetFrame,
         widget::{AnyWidget, InvalidationHandle},
     },
     update_flag::UpdateNotifier,

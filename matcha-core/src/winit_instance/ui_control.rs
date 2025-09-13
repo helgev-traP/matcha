@@ -11,10 +11,8 @@ use crate::{
         mouse_state::{MousePrimaryButton, MouseState},
         window_state::WindowState,
     },
-    ui::{
-        AnyWidgetFrame, ApplicationHandler, Background, Constraints, WidgetContext,
-        component::Component,
-    },
+    metrics::Constraints,
+    ui::{AnyWidgetFrame, ApplicationHandler, Background, WidgetContext, component::Component},
     update_flag::UpdateFlag,
 };
 use renderer::render_node::RenderNode;

@@ -2,16 +2,18 @@ use std::sync::Arc;
 
 use crate::style::Style;
 use dashmap::DashMap;
-use image::{EncodableLayout, GenericImageView};
-use matcha_core::types::range::Range2D;
-use matcha_core::ui::WidgetContext;
+use image::EncodableLayout;
+use matcha_core::{
+    metrics::{Constraints, QRect},
+    ui::WidgetContext,
+};
 use renderer::widgets_renderer::texture_copy::{RenderData, TargetData, TextureCopy};
 
 use crate::types::size::{ChildSize, Size};
 
 #[derive(Default)]
 struct ImageCache {
-    map: DashMap<ImageSourceKey, Option<ImageCacheData>, fxhash::FxBuildHasher>,
+    map: DashMap<ImageCacheKey, ImageCacheData, fxhash::FxBuildHasher>,
 }
 
 #[derive(Clone, PartialEq)]
@@ -22,14 +24,14 @@ pub enum ImageSource {
 }
 
 impl ImageSource {
-    fn to_key(&self) -> ImageSourceKey {
+    fn to_key(&self) -> ImageCacheKey {
         match self {
-            ImageSource::Path(path) => ImageSourceKey::Path(path.clone()),
-            ImageSource::StaticSlice { data } => ImageSourceKey::StaticSlice {
+            ImageSource::Path(path) => ImageCacheKey::Path(path.clone()),
+            ImageSource::StaticSlice { data } => ImageCacheKey::StaticSlice {
                 ptr: data.as_ptr() as usize,
                 size: data.len(),
             },
-            ImageSource::Arc(data) => ImageSourceKey::Arc {
+            ImageSource::Arc(data) => ImageCacheKey::Arc {
                 ptr: Arc::as_ptr(data) as usize,
                 size: data.len(),
             },
@@ -68,7 +70,7 @@ impl From<Vec<u8>> for ImageSource {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-enum ImageSourceKey {
+enum ImageCacheKey {
     /// Full path to the image file
     Path(String),
     /// pointer address (as usize) and size of the image data
@@ -84,9 +86,8 @@ enum ImageSourceKey {
 }
 
 struct ImageCacheData {
-    width: u32,
-    height: u32,
-    texture: wgpu::Texture,
+    /// None if the image failed to load
+    texture: Option<wgpu::Texture>,
 }
 
 // MARK: Image Construct
@@ -249,7 +250,7 @@ impl Image {
 }
 
 impl Image {
-    fn key(&self) -> ImageSourceKey {
+    fn key(&self) -> ImageCacheKey {
         self.image.to_key()
     }
 }
@@ -275,18 +276,14 @@ impl Image {
         (size_x, size_y, offset_x, offset_y)
     }
 
-    fn with_image<R>(
-        &self,
-        ctx: &WidgetContext,
-        f: impl FnOnce(&ImageCacheData) -> R,
-    ) -> Option<R> {
+    fn with_image<R>(&self, ctx: &WidgetContext, f: impl FnOnce(&wgpu::Texture) -> R) -> Option<R> {
         let cache_map = ctx.any_resource().get_or_insert_default::<ImageCache>();
         let image_cache = cache_map
             .map
             .entry(self.key())
             .or_insert_with(|| load_image_to_texture(&self.image, ctx));
 
-        let Some(image) = image_cache.value() else {
+        let Some(image) = &image_cache.value().texture else {
             return None;
         };
         Some(f(image))
@@ -296,28 +293,24 @@ impl Image {
 // MARK: Style implementation
 
 impl Style for Image {
-    fn required_size(
-        &self,
-        constraints: &matcha_core::ui::Constraints,
-        ctx: &WidgetContext,
-    ) -> Option<[f32; 2]> {
-        let _ = constraints;
-        self.with_image(ctx, |image| [image.width as f32, image.height as f32])
+    fn required_region(&self, constraints: &Constraints, ctx: &WidgetContext) -> Option<QRect> {
+        let boundary = Self::boundary_opt(constraints.max_size());
+        let base = [f32::INFINITY, f32::INFINITY];
+        let (size_x, size_y, offset_x, offset_y) = self.calc_layout(boundary, base, ctx);
+        if size_x > 0.0 && size_y > 0.0 {
+            Some(QRect::new([offset_x, offset_y], [size_x, size_y]))
+        } else {
+            None
+        }
     }
 
     fn is_inside(&self, position: [f32; 2], boundary_size: [f32; 2], ctx: &WidgetContext) -> bool {
-        let draw_range = self.draw_range(boundary_size, ctx);
-        draw_range.contains(position)
-    }
-
-    fn draw_range(&self, boundary_size: [f32; 2], ctx: &WidgetContext) -> Range2D<f32> {
-        self.with_image(ctx, |image| {
-            let base = [image.width as f32, image.height as f32];
-            let boundary = Self::boundary_opt(boundary_size);
-            let (size_x, size_y, offset_x, offset_y) = self.calc_layout(boundary, base, ctx);
-            Range2D::new([offset_x, offset_x + size_x], [offset_y, offset_y + size_y])
-        })
-        .unwrap_or_default()
+        let draw_range = self.required_region(&Constraints::from_boundary(boundary_size), ctx);
+        if let Some(rect) = draw_range {
+            rect.contains(position)
+        } else {
+            false
+        }
     }
 
     fn draw(
@@ -330,8 +323,8 @@ impl Style for Image {
     ) {
         let target_size = target.size();
         let target_format = target.format();
-        self.with_image(ctx, |image| {
-            let image_size = [image.width as f32, image.height as f32];
+        self.with_image(ctx, |texture| {
+            let image_size = [texture.width() as f32, texture.height() as f32];
             let boundary = Self::boundary_opt(boundary_size);
             let (size_x, size_y, offset_x, offset_y) = self.calc_layout(boundary, image_size, ctx);
             let draw_offset = [offset_x + offset[0], offset_y + offset[1]];
@@ -350,8 +343,7 @@ impl Style for Image {
                     target_format,
                 },
                 RenderData {
-                    source_texture_view: &image
-                        .texture
+                    source_texture_view: &texture
                         .create_view(&wgpu::TextureViewDescriptor::default()),
                     source_texture_position_min: [draw_offset[0], draw_offset[1]],
                     source_texture_position_max: [draw_offset[0] + size_x, draw_offset[1] + size_y],
@@ -364,10 +356,7 @@ impl Style for Image {
     }
 }
 
-fn load_image_to_texture(
-    image_source: &ImageSource,
-    ctx: &WidgetContext,
-) -> Option<ImageCacheData> {
+fn load_image_to_texture(image_source: &ImageSource, ctx: &WidgetContext) -> ImageCacheData {
     // load the image from the source
 
     let dynamic_image = match image_source {
@@ -378,12 +367,14 @@ fn load_image_to_texture(
 
     let Some(dynamic_image) = dynamic_image else {
         // If the image could not be loaded, return an empty cache entry
-        return None;
+        return ImageCacheData { texture: None };
     };
 
     // Create a texture and upload image data
     let (image, format) = prepare_image_and_format(dynamic_image);
-    make_cache(image, format, ctx).into()
+    ImageCacheData {
+        texture: Some(make_cache(image, format, ctx)),
+    }
 }
 
 fn prepare_image_and_format(
@@ -402,7 +393,7 @@ fn make_cache(
     image: image::ImageBuffer<image::Rgba<u8>, Vec<u8>>,
     format: wgpu::TextureFormat,
     ctx: &WidgetContext,
-) -> ImageCacheData {
+) -> wgpu::Texture {
     let (width, height) = image.dimensions();
     let data = image.as_bytes();
 
@@ -447,11 +438,7 @@ fn make_cache(
         },
     );
 
-    ImageCacheData {
-        width,
-        height,
-        texture,
-    }
+    texture
 }
 
 #[rustfmt::skip]

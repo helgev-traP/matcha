@@ -2,33 +2,25 @@ use std::sync::Arc;
 
 use crate::style::Style;
 use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
-use matcha_core::types::range::Range2D;
-use matcha_core::ui::WidgetContext;
+use matcha_core::{metrics::QRect, ui::WidgetContext};
 use utils::cache::Cache;
 
 pub struct Buffer {
     style: Vec<Arc<dyn Style>>,
-    buffer_format: wgpu::TextureFormat,
-    cache: Cache<[f32; 2], BufferData>,
+    cache: Cache<[f32; 2], Option<BufferData>>,
 }
 
 pub struct BufferData {
     pub texture: AtlasRegion,
-    pub texture_position: Range2D<f32>,
+    pub texture_position: QRect,
 }
 
 impl Buffer {
     pub fn new(style: Vec<Arc<dyn Style>>) -> Self {
         Self {
             style,
-            buffer_format: wgpu::TextureFormat::Rgba8UnormSrgb,
             cache: Cache::new(),
         }
-    }
-
-    pub fn format(mut self, format: wgpu::TextureFormat) -> Self {
-        self.buffer_format = format;
-        self
     }
 
     pub fn is_inside(
@@ -50,7 +42,7 @@ impl Buffer {
         boundary: [f32; 2],
         encoder: &mut wgpu::CommandEncoder,
         ctx: &WidgetContext,
-    ) -> &BufferData {
+    ) -> Option<&BufferData> {
         let (_, cache) = self.cache.get_or_insert_with(boundary, || {
             // calculate necessary size for the texture
             let mut x_min = f32::MAX;
@@ -59,14 +51,25 @@ impl Buffer {
             let mut y_max = f32::MIN;
 
             for style in &self.style {
-                let range = style.draw_range(boundary, ctx);
-                x_min = x_min.min(range.left());
-                x_max = x_max.max(range.right());
-                y_min = y_min.min(range.bottom());
-                y_max = y_max.max(range.top());
+                let range = style.required_region(
+                    &matcha_core::metrics::Constraints::from_boundary(boundary),
+                    ctx,
+                );
+                let Some(range) = range else {
+                    continue;
+                };
+                x_min = x_min.min(range.min_x());
+                x_max = x_max.max(range.max_x());
+                y_min = y_min.min(range.min_y());
+                y_max = y_max.max(range.max_y());
             }
 
-            let texture_position = Range2D::new([x_min, x_max], [y_min, y_max]);
+            if x_min >= x_max || y_min >= y_max {
+                // No styles required any space.
+                return None;
+            }
+
+            let texture_position = QRect::new([x_min, y_min], [x_max - x_min, y_max - y_min]);
 
             let x_min_int = x_min.floor() as i32;
             let x_max_int = x_max.ceil() as i32;
@@ -97,12 +100,12 @@ impl Buffer {
                 );
             }
 
-            BufferData {
+            Some(BufferData {
                 texture: atlas_region,
                 texture_position,
-            }
+            })
         });
 
-        cache
+        cache.as_ref()
     }
 }

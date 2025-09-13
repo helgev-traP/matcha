@@ -1,9 +1,6 @@
 pub mod background;
 pub use background::Background;
 
-pub mod metrics;
-pub use metrics::{Arrangement, Constraints, LayoutSizeKey};
-
 pub mod widget;
 pub use widget::{
     AnyWidget, AnyWidgetFrame, Dom, InvalidationHandle, UpdateWidgetError, Widget, WidgetFrame,

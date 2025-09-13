@@ -4,9 +4,12 @@ use parking_lot::Mutex;
 use renderer::render_node::RenderNode;
 use utils::{back_prop_dirty::BackPropDirty, cache::Cache};
 
-use crate::{device_input::DeviceInput, ui::ApplicationHandler, update_flag::UpdateNotifier};
-
-use super::{Arrangement, Background, Constraints, WidgetContext, metrics::LayoutSizeKey};
+use crate::{
+    device_input::DeviceInput,
+    metrics::{Arrangement, Constraints, QSize},
+    ui::{ApplicationHandler, Background, WidgetContext},
+    update_flag::UpdateNotifier,
+};
 
 /// Lightweight handle passed into widget update / event handlers allowing them
 /// to request layout or visual invalidation without touching internal caches.
@@ -206,7 +209,7 @@ struct WidgetFrameCache {
     /// cache the output of measure method.
     measure: Cache<Constraints, [f32; 2]>,
     /// cache the output of layout method.
-    layout: Cache<LayoutSizeKey, Vec<Arrangement>>,
+    layout: Cache<QSize, Vec<Arrangement>>,
 }
 
 impl<D, W, E, ChildSetting> WidgetFrame<D, W, E, ChildSetting>
@@ -426,22 +429,20 @@ where
             cache.measure.clear();
             cache.layout.clear();
         }
-        cache
-            .layout
-            .get_or_insert_with(LayoutSizeKey::from(bounds), || {
-                // calc arrangement
-                let children = self
-                    .children
-                    .iter()
-                    .map(|(child, setting)| (&**child as &dyn AnyWidget<T>, setting))
-                    .collect::<Vec<_>>();
-                let arrangement = self.widget_impl.arrange(bounds, &children, ctx);
-                // update child arrangements
-                for ((child, _), arrangement) in self.children.iter().zip(arrangement.iter()) {
-                    child.arrange(arrangement.size, ctx);
-                }
-                arrangement
-            });
+        cache.layout.get_or_insert_with(QSize::from(bounds), || {
+            // calc arrangement
+            let children = self
+                .children
+                .iter()
+                .map(|(child, setting)| (&**child as &dyn AnyWidget<T>, setting))
+                .collect::<Vec<_>>();
+            let arrangement = self.widget_impl.arrange(bounds, &children, ctx);
+            // update child arrangements
+            for ((child, _), arrangement) in self.children.iter().zip(arrangement.iter()) {
+                child.arrange(arrangement.size, ctx);
+            }
+            arrangement
+        });
     }
 }
 

@@ -8,9 +8,10 @@ use utils::back_prop_dirty::BackPropDirty;
 
 use crate::{
     device_input::DeviceInput,
+    metrics::Constraints,
     ui::{
-        AnyWidget, AnyWidgetFrame, ApplicationHandler, Background, Constraints, Dom,
-        UpdateWidgetError, WidgetContext, widget::AnyWidgetFramePrivate,
+        AnyWidget, AnyWidgetFrame, ApplicationHandler, Background, Dom, UpdateWidgetError,
+        WidgetContext, widget::AnyWidgetFramePrivate,
     },
     update_flag::UpdateNotifier,
 };

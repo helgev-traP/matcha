@@ -13,7 +13,7 @@ mod ticker;
 mod ui_control;
 mod window_surface;
 
-pub use builder::WinitInstanceBuilder;
+pub(crate) use builder::WinitInstanceBuilder;
 
 // MARK: Winit
 

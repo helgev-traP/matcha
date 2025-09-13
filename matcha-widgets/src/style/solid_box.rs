@@ -1,7 +1,9 @@
 use crate::style::Style;
 use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
-use matcha_core::types::range::Range2D;
-use matcha_core::ui::WidgetContext;
+use matcha_core::{
+    metrics::{Constraints, QRect},
+    ui::WidgetContext,
+};
 use renderer::{
     vertex::colored_vertex::ColorVertex,
     widgets_renderer::vertex_color::{RenderData, TargetData, VertexColor},
@@ -16,15 +18,20 @@ pub struct SolidBox {
 }
 
 impl Style for SolidBox {
+    fn required_region(&self, constraints: &Constraints, _ctx: &WidgetContext) -> Option<QRect> {
+        let max = constraints.max_size();
+        if max[0] > 0.0 && max[1] > 0.0 {
+            Some(QRect::new([0.0, 0.0], max))
+        } else {
+            None
+        }
+    }
+
     fn is_inside(&self, position: [f32; 2], boundary_size: [f32; 2], _ctx: &WidgetContext) -> bool {
         position[0] >= 0.0
             && position[0] <= boundary_size[0]
             && position[1] >= 0.0
             && position[1] <= boundary_size[1]
-    }
-
-    fn draw_range(&self, boundary_size: [f32; 2], _ctx: &WidgetContext) -> Range2D<f32> {
-        Range2D::new([0.0, boundary_size[0]], [0.0, boundary_size[1]])
     }
 
     fn draw(

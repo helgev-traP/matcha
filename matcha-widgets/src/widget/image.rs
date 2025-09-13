@@ -1,9 +1,9 @@
 use crate::style::Style;
 use matcha_core::{
     device_input::DeviceInput,
+    metrics::{Arrangement, Constraints},
     ui::{
-        AnyWidgetFrame, ApplicationHandler, Arrangement, Background, Constraints, Dom, Widget,
-        WidgetContext, WidgetFrame,
+        AnyWidgetFrame, ApplicationHandler, Background, Dom, Widget, WidgetContext, WidgetFrame,
         widget::{AnyWidget, InvalidationHandle},
     },
     update_flag::UpdateNotifier,
@@ -87,10 +87,10 @@ impl<T: Send + Sync + 'static> Widget<Image, T, ()> for ImageNode {
     ) -> [f32; 2] {
         let size = self
             .image_style
-            .required_size(constraints, ctx)
-            .unwrap_or([0.0, 0.0]);
+            .required_region(constraints, ctx)
+            .unwrap_or_default();
 
-        [size[0], size[1]]
+        [size.max_x(), size.max_y()]
     }
 
     fn arrange(

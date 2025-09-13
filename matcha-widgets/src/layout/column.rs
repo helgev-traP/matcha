@@ -1,13 +1,11 @@
+use matcha_core::metrics::{Arrangement, Constraints};
 use matcha_core::ui::ApplicationHandler;
 use nalgebra::Matrix4;
 
 use matcha_core::ui::widget::InvalidationHandle;
 use matcha_core::{
     device_input::DeviceInput,
-    ui::{
-        AnyWidget, AnyWidgetFrame, Arrangement, Background, Constraints, Dom, Widget,
-        WidgetContext, WidgetFrame,
-    },
+    ui::{AnyWidget, AnyWidgetFrame, Background, Dom, Widget, WidgetContext, WidgetFrame},
     update_flag::UpdateNotifier,
 };
 use renderer::render_node::RenderNode;

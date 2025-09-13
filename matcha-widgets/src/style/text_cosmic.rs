@@ -226,21 +226,20 @@ impl TextCosmic<'_> {
 
         texture
     }
-}
 
-impl Style for TextCosmic<'static> {
-    fn required_size(
+    fn draw_range(
         &self,
-        constraints: &matcha_core::ui::Constraints,
+        boundary_size: [f32; 2],
         ctx: &WidgetContext,
-    ) -> Option<[f32; 2]> {
+    ) -> matcha_core::metrics::QRect {
+        // compute layout similarly to required_region but returning QRect
         let font_context = ctx.any_resource().get_or_insert_default::<FontContext>();
         let mut font_system = font_context.font_system.lock();
 
         let mut buffer = Buffer::new(&mut font_system, self.metrics);
 
-        let max_width = self.max_size[0].unwrap_or(constraints.max_width());
-        let max_height = self.max_size[1].unwrap_or(constraints.max_height());
+        let max_width = self.max_size[0].unwrap_or(boundary_size[0]);
+        let max_height = self.max_size[1].unwrap_or(boundary_size[1]);
 
         let mut buffer_view = buffer.borrow_with(&mut font_system);
 
@@ -268,64 +267,32 @@ impl Style for TextCosmic<'static> {
         let width = x_max;
         let height = y_max - y_min;
 
-        if width > 0.0 && height > 0.0 {
-            Some([width, height])
-        } else {
-            None
+        match (width > 0.0, height > 0.0) {
+            (true, true) => matcha_core::metrics::QRect::new([0.0, -y_min], [width, height]),
+            _ => matcha_core::metrics::QRect::zero(),
         }
+    }
+}
+
+impl Style for TextCosmic<'static> {
+    fn required_region(
+        &self,
+        constraints: &matcha_core::metrics::Constraints,
+        ctx: &WidgetContext,
+    ) -> Option<matcha_core::metrics::QRect> {
+        let rect = self.draw_range(constraints.max_size(), ctx);
+        if rect.area() > 0.0 { Some(rect) } else { None }
     }
 
     fn is_inside(&self, position: [f32; 2], boundary_size: [f32; 2], ctx: &WidgetContext) -> bool {
         let draw_range = self.draw_range(boundary_size, ctx);
-        let x_range = draw_range.x_range();
-        let y_range = draw_range.y_range();
+        let x_range = draw_range.x();
+        let y_range = draw_range.y();
 
         x_range[0] <= position[0]
             && position[0] <= x_range[1]
             && y_range[0] <= position[1]
             && position[1] <= y_range[1]
-    }
-
-    fn draw_range(
-        &self,
-        boundary_size: [f32; 2],
-        ctx: &WidgetContext,
-    ) -> matcha_core::types::range::Range2D<f32> {
-        let font_context = ctx.any_resource().get_or_insert_default::<FontContext>();
-
-        let font_system = &font_context.font_system;
-        let swash_cache = &font_context.swash_cache;
-
-        let buffer = &mut *self.buffer.lock();
-        let cache_in_memory = &mut *self.cache_in_memory.lock();
-
-        if buffer.is_none() {
-            *buffer = Some(Self::set_buffer(&mut font_system.lock(), self.metrics));
-        }
-        let buffer = buffer.as_mut().unwrap();
-
-        if cache_in_memory.is_none() {
-            *cache_in_memory = Some(Self::render_to_memory(
-                &self.texts,
-                self.color,
-                buffer,
-                &mut font_system.lock(),
-                &mut swash_cache.lock(),
-                self.max_size,
-            ));
-        }
-        let cache_in_memory = cache_in_memory.as_ref().unwrap();
-
-        matcha_core::types::range::Range2D::new(
-            [
-                cache_in_memory.text_offset[0] as f32,
-                cache_in_memory.text_offset[1] as f32,
-            ],
-            [
-                cache_in_memory.size[0] as f32 + cache_in_memory.text_offset[0] as f32,
-                cache_in_memory.size[1] as f32 + cache_in_memory.text_offset[1] as f32,
-            ],
-        )
     }
 
     fn draw(

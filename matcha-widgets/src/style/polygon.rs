@@ -2,10 +2,7 @@ use std::sync::Arc;
 
 use crate::style::Style;
 use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
-use matcha_core::{
-    types::{color::Color, range::Range2D},
-    ui::WidgetContext,
-};
+use matcha_core::{color::Color, metrics::QRect, ui::WidgetContext};
 use parking_lot::Mutex;
 use renderer::{
     vertex::colored_vertex::ColorVertex,
@@ -48,7 +45,7 @@ pub struct Vertex {
 
 struct Caches {
     mesh: Mesh,
-    draw_range: Option<Range2D<f32>>,
+    rect: Option<QRect>,
 }
 
 // constructor
@@ -94,6 +91,114 @@ impl Polygon {
 // MARK: Style
 
 impl Style for Polygon {
+    fn required_region(
+        &self,
+        constraints: &matcha_core::metrics::Constraints,
+        ctx: &WidgetContext,
+    ) -> Option<matcha_core::metrics::QRect> {
+        let mut cache = self.caches.lock();
+        let key = constraints.max_size();
+
+        if self.cache_the_mesh {
+            let (_k, v) = cache.get_or_insert_with(key, || Caches {
+                mesh: (self.polygon)(key, ctx),
+                rect: None,
+            });
+
+            if let Some(rect) = v.rect {
+                if rect.area() > 0.0 {
+                    return Some(rect);
+                } else {
+                    return None;
+                }
+            }
+
+            // compute bounding rect from mesh
+            let (min_x, min_y, max_x, max_y) = {
+                let mut min_x = f32::INFINITY;
+                let mut min_y = f32::INFINITY;
+                let mut max_x = f32::NEG_INFINITY;
+                let mut max_y = f32::NEG_INFINITY;
+
+                match &v.mesh {
+                    Mesh::TriangleStrip { vertices }
+                    | Mesh::TriangleList { vertices }
+                    | Mesh::TriangleFan { vertices } => {
+                        for vert in vertices {
+                            min_x = min_x.min(vert.position[0]);
+                            min_y = min_y.min(vert.position[1]);
+                            max_x = max_x.max(vert.position[0]);
+                            max_y = max_y.max(vert.position[1]);
+                        }
+                    }
+                    Mesh::TriangleIndexed { indices, vertices } => {
+                        for &i in indices {
+                            let vert = &vertices[i as usize];
+                            min_x = min_x.min(vert.position[0]);
+                            min_y = min_y.min(vert.position[1]);
+                            max_x = max_x.max(vert.position[0]);
+                            max_y = max_y.max(vert.position[1]);
+                        }
+                    }
+                }
+                (min_x, min_y, max_x, max_y)
+            };
+
+            let rect = if min_x.is_finite() && min_y.is_finite() && max_x > min_x && max_y > min_y {
+                matcha_core::metrics::QRect::new([min_x, min_y], [max_x - min_x, max_y - min_y])
+            } else {
+                matcha_core::metrics::QRect::zero()
+            };
+
+            v.rect = Some(rect);
+            if v.rect.unwrap().area() > 0.0 {
+                Some(v.rect.unwrap())
+            } else {
+                None
+            }
+        } else {
+            let mesh = (self.polygon)(key, ctx);
+
+            let (min_x, min_y, max_x, max_y) = {
+                let mut min_x = f32::INFINITY;
+                let mut min_y = f32::INFINITY;
+                let mut max_x = f32::NEG_INFINITY;
+                let mut max_y = f32::NEG_INFINITY;
+
+                match &mesh {
+                    Mesh::TriangleStrip { vertices }
+                    | Mesh::TriangleList { vertices }
+                    | Mesh::TriangleFan { vertices } => {
+                        for vert in vertices {
+                            min_x = min_x.min(vert.position[0]);
+                            min_y = min_y.min(vert.position[1]);
+                            max_x = max_x.max(vert.position[0]);
+                            max_y = max_y.max(vert.position[1]);
+                        }
+                    }
+                    Mesh::TriangleIndexed { indices, vertices } => {
+                        for &i in indices {
+                            let vert = &vertices[i as usize];
+                            min_x = min_x.min(vert.position[0]);
+                            min_y = min_y.min(vert.position[1]);
+                            max_x = max_x.max(vert.position[0]);
+                            max_y = max_y.max(vert.position[1]);
+                        }
+                    }
+                }
+                (min_x, min_y, max_x, max_y)
+            };
+
+            let rect = if min_x.is_finite() && min_y.is_finite() && max_x > min_x && max_y > min_y {
+                matcha_core::metrics::QRect::new([min_x, min_y], [max_x - min_x, max_y - min_y])
+            } else {
+                matcha_core::metrics::QRect::zero()
+            };
+
+            if rect.area() > 0.0 { Some(rect) } else { None }
+        }
+    }
+
     fn is_inside(&self, position: [f32; 2], boundary_size: [f32; 2], ctx: &WidgetContext) -> bool {
         let mut cache = self.caches.lock();
 
@@ -101,7 +206,7 @@ impl Style for Polygon {
             &cache
                 .get_or_insert_with(boundary_size, || Caches {
                     mesh: (self.polygon)(boundary_size, ctx),
-                    draw_range: None,
+                    rect: None,
                 })
                 .1
                 .mesh
@@ -148,40 +253,6 @@ impl Style for Polygon {
         }
     }
 
-    fn draw_range(&self, boundary_size: [f32; 2], ctx: &WidgetContext) -> Range2D<f32> {
-        let mut caches = self.caches.lock();
-
-        let caches = caches
-            .get_or_insert_with(boundary_size, || Caches {
-                mesh: (self.polygon)(boundary_size, ctx),
-                draw_range: None,
-            })
-            .1;
-
-        *caches.draw_range.get_or_insert_with(|| {
-            let mesh = &caches.mesh;
-            match mesh {
-                Mesh::TriangleStrip { vertices }
-                | Mesh::TriangleList { vertices }
-                | Mesh::TriangleFan { vertices }
-                | Mesh::TriangleIndexed { vertices, .. } => {
-                    let x_min_max = vertices
-                        .iter()
-                        .fold((f32::INFINITY, f32::NEG_INFINITY), |(min, max), v| {
-                            (min.min(v.position[0]), max.max(v.position[0]))
-                        });
-                    let y_min_max = vertices
-                        .iter()
-                        .fold((f32::INFINITY, f32::NEG_INFINITY), |(min, max), v| {
-                            (min.min(v.position[1]), max.max(v.position[1]))
-                        });
-
-                    Range2D::new([x_min_max.0, y_min_max.0], [x_min_max.1, y_min_max.1])
-                }
-            }
-        })
-    }
-
     fn draw(
         &self,
         encoder: &mut wgpu::CommandEncoder,
@@ -201,7 +272,7 @@ impl Style for Polygon {
             &cache
                 .get_or_insert_with(boundary_size, || Caches {
                     mesh: (self.polygon)(boundary_size, ctx),
-                    draw_range: None,
+                    rect: None,
                 })
                 .1
                 .mesh
