@@ -115,7 +115,9 @@ impl AtlasRegion {
         let expected_size = self.inner.size[0] * self.inner.size[1] * bytes_per_pixel;
         if data.len() as u32 != expected_size {
             return Err(TextureError::DataConsistencyError(format!(
-                "Data size does not match expected size"
+                "Data size({}byte) does not match expected size({}byte)",
+                data.len(),
+                expected_size
             )));
         }
 
@@ -225,7 +227,7 @@ impl AtlasRegion {
                 view,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    load: wgpu::LoadOp::Load,
                     store: wgpu::StoreOp::Store,
                 },
             })],
@@ -590,6 +592,7 @@ impl TextureAtlas {
             label: Some("TextureAtlas Resize Encoder"),
         });
 
+        // Copy existing pages into the new texture
         encoder.copy_texture_to_texture(
             wgpu::TexelCopyTextureInfo {
                 texture: &self.texture,
@@ -609,6 +612,26 @@ impl TextureAtlas {
                 depth_or_array_layers: self.size.depth_or_array_layers,
             },
         );
+
+        // Clear only the newly added layer to ensure it is initialized and transparent.
+        // This prevents uninitialized memory in the new layer and keeps existing pages intact.
+        let new_layer_index = new_size.depth_or_array_layers - 1;
+        if let Some(view) = new_layer_texture_views.get(new_layer_index as usize) {
+            let _clear_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("TextureAtlas Init New Layer Clear"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+        }
 
         queue.submit(Some(encoder.finish()));
 

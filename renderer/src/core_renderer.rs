@@ -461,7 +461,7 @@ impl CoreRenderer {
 
         // #[cfg(debug_assertions)]
         // {
-        //     println!("[CoreRenderer] instances: {instances:?}",);
+        //     println!("[CoreRenderer] instances: {instances:#?}",);
         // }
 
         if instances.is_empty() {

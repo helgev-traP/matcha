@@ -247,21 +247,6 @@ impl Image {
 
 // helper methods
 impl Image {
-    fn calc_layout(
-        &self,
-        boundary: [f32; 2],
-        base: [f32; 2],
-        ctx: &WidgetContext,
-    ) -> (f32, f32, f32, f32) {
-        let mut child_size = ChildSize::new(|| base);
-
-        let size_x = self.size[0].size(boundary, &mut child_size, ctx);
-        let size_y = self.size[1].size(boundary, &mut child_size, ctx);
-        let offset_x = self.offset[0].size(boundary, &mut child_size, ctx);
-        let offset_y = self.offset[1].size(boundary, &mut child_size, ctx);
-        (size_x, size_y, offset_x, offset_y)
-    }
-
     fn with_image<R>(&self, ctx: &WidgetContext, f: impl FnOnce(&wgpu::Texture) -> R) -> Option<R> {
         let cache_map = ctx.any_resource().get_or_insert_default::<ImageCache>();
         let image_cache = cache_map
@@ -274,13 +259,31 @@ impl Image {
         };
         Some(f(image))
     }
+
+    fn calc_layout(
+        &self,
+        boundary: [f32; 2],
+        pic_texture: &wgpu::Texture,
+        ctx: &WidgetContext,
+    ) -> QRect {
+        let image_size = [pic_texture.width() as f32, pic_texture.height() as f32];
+
+        let size_x = self.size[0].size(boundary, &mut ChildSize::new(|| image_size), ctx);
+        let size_y = self.size[1].size(boundary, &mut ChildSize::new(|| image_size), ctx);
+        let offset_x = self.offset[0].size(boundary, &mut ChildSize::new(|| image_size), ctx);
+        let offset_y = self.offset[1].size(boundary, &mut ChildSize::new(|| image_size), ctx);
+
+        QRect::new([offset_x, offset_y], [size_x, size_y])
+    }
 }
 
 // MARK: Style implementation
 
 impl Style for Image {
     fn required_region(&self, constraints: &Constraints, ctx: &WidgetContext) -> Option<QRect> {
-        self.with_image(ctx, |texture| todo!())
+        let boundary_size = constraints.max_size();
+
+        self.with_image(ctx, |texture| self.calc_layout(boundary_size, texture, ctx))
     }
 
     fn is_inside(&self, position: [f32; 2], boundary_size: [f32; 2], ctx: &WidgetContext) -> bool {
@@ -303,10 +306,10 @@ impl Style for Image {
         let target_size = target.size();
         let target_format = target.format();
         self.with_image(ctx, |texture| {
-            let image_size = [texture.width() as f32, texture.height() as f32];
-            let (size_x, size_y, offset_x, offset_y) =
-                self.calc_layout(boundary_size, image_size, ctx);
-            let draw_offset = [offset_x + offset[0], offset_y + offset[1]];
+            let rect: QRect = self.calc_layout(boundary_size, texture, ctx);
+
+            let draw_offset = [rect.min_x() - offset[0], rect.min_y() - offset[1]];
+            let draw_size = [rect.width(), rect.height()];
 
             // begin a render pass targeting the atlas region so the renderer can create its own passes if needed
             let mut render_pass = match target.begin_render_pass(encoder) {
@@ -325,7 +328,10 @@ impl Style for Image {
                     source_texture_view: &texture
                         .create_view(&wgpu::TextureViewDescriptor::default()),
                     source_texture_position_min: [draw_offset[0], draw_offset[1]],
-                    source_texture_position_max: [draw_offset[0] + size_x, draw_offset[1] + size_y],
+                    source_texture_position_max: [
+                        draw_offset[0] + draw_size[0],
+                        draw_offset[1] + draw_size[1],
+                    ],
                     color_transformation: None,
                     color_offset: None,
                 },
