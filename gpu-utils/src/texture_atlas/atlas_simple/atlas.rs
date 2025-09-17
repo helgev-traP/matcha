@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 
 use euclid::Rect;
+use guillotiere::euclid::Box2D;
 use guillotiere::{AllocId, AtlasAllocator, Size, euclid};
 use parking_lot::Mutex;
 use thiserror::Error;
@@ -45,7 +46,7 @@ impl AtlasRegion {
         self.inner.atlas_id
     }
 
-    pub fn position_in_atlas(&self) -> Result<(u32, Rect<f32, euclid::UnknownUnit>), TextureError> {
+    pub fn position_in_atlas(&self) -> Result<(u32, Box2D<f32, euclid::UnknownUnit>), TextureError> {
         // Get the texture location in the atlas
         let Some(atlas) = self.inner.atlas.upgrade() else {
             return Err(TextureError::AtlasGone);
@@ -86,10 +87,10 @@ impl AtlasRegion {
         let Some(location) = atlas.get_location(self.inner.region_id) else {
             return Err(TextureError::TextureNotFoundInAtlas);
         };
-        let x_max = location.uv.max_x();
-        let y_max = location.uv.max_y();
-        let x_min = location.uv.min_x();
-        let y_min = location.uv.min_y();
+        let x_max = location.uv.max.x;
+        let y_max = location.uv.max.y;
+        let x_min = location.uv.min.x;
+        let y_min = location.uv.min.y;
 
         // Translate the vertices to the texture area
         let translated_vertices = uvs
@@ -135,8 +136,8 @@ impl AtlasRegion {
         let bytes_per_row = self.inner.size[0] * bytes_per_pixel;
 
         let origin = wgpu::Origin3d {
-            x: location.bounds.min_x() as u32,
-            y: location.bounds.min_y() as u32,
+            x: location.bounds.min.x as u32,
+            y: location.bounds.min.y as u32,
             z: location.page_index,
         };
 
@@ -195,8 +196,8 @@ impl AtlasRegion {
 
         // Set the viewport to the texture area
         render_pass.set_viewport(
-            location.bounds.min_x() as f32,
-            location.bounds.min_y() as f32,
+            location.bounds.min.x as f32,
+            location.bounds.min.y as f32,
             location.bounds.width() as f32,
             location.bounds.height() as f32,
             0.0,
@@ -238,8 +239,8 @@ impl AtlasRegion {
 
         // Set the viewport to the texture area
         render_pass.set_viewport(
-            location.bounds.min_x() as f32,
-            location.bounds.min_y() as f32,
+            location.bounds.min.x as f32,
+            location.bounds.min.y as f32,
             location.bounds.width() as f32,
             location.bounds.height() as f32,
             0.0,
@@ -249,7 +250,7 @@ impl AtlasRegion {
         Ok(render_pass)
     }
 
-    pub fn uv(&self) -> Result<Rect<f32, euclid::UnknownUnit>, TextureError> {
+    pub fn uv(&self) -> Result<Box2D<f32, euclid::UnknownUnit>, TextureError> {
         // Get the texture location in the atlas
         let Some(atlas) = self.inner.atlas.upgrade() else {
             return Err(TextureError::AtlasGone);
@@ -295,21 +296,45 @@ struct RegionId {
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct RegionLocation {
     page_index: u32,
-    /// The bounds in pixels within the atlas.
-    bounds: euclid::Rect<i32, euclid::UnknownUnit>,
-    /// The bounding UV coordinates in the atlas.
-    uv: euclid::Rect<f32, euclid::UnknownUnit>,
+    /// The inclusive bounds in pixels within the atlas.
+    bounds: euclid::Box2D<i32, euclid::UnknownUnit>,
+    /// The inclusive bounding UV coordinates in the atlas.
+    uv: euclid::Box2D<f32, euclid::UnknownUnit>,
 }
 
 impl RegionLocation {
+    fn new(rec: Box2D<i32, euclid::UnknownUnit>, atlas_size: [u32; 2], page_index: usize) -> Self {
+        // rectangle from guillotiere is half-open, we want inclusive bounds
+
+        let bounds = euclid::Box2D::new(
+            euclid::Point2D::new(rec.min.x, rec.min.y),
+            euclid::Point2D::new(rec.max.x - 1, rec.max.y - 1),
+        );
+        let uv = euclid::Box2D::new(
+            euclid::Point2D::new(
+                bounds.min.x as f32 / atlas_size[0] as f32,
+                bounds.min.y as f32 / atlas_size[1] as f32,
+            ),
+            euclid::Point2D::new(
+                bounds.max.x as f32 / atlas_size[0] as f32,
+                bounds.max.y as f32 / atlas_size[1] as f32,
+            ),
+        );
+        Self {
+            page_index: page_index as u32,
+            bounds,
+            uv,
+        }
+    }
+
     fn area(&self) -> u32 {
         self.bounds.area() as u32
     }
 
     fn size(&self) -> [u32; 2] {
         [
-            (self.bounds.max_x() - self.bounds.min_x()) as u32,
-            (self.bounds.max_y() - self.bounds.min_y()) as u32,
+            (self.bounds.max.x - self.bounds.min.x) as u32,
+            (self.bounds.max.y - self.bounds.min.y) as u32,
         ]
     }
 }
@@ -438,22 +463,11 @@ impl TextureAtlas {
 
         for (page_index, allocator) in self.state.allocators.iter_mut().enumerate() {
             if let Some(alloc) = allocator.allocate(size) {
-                let bounds = alloc.rectangle.to_rect();
-                let uvs = euclid::Rect::new(
-                    euclid::Point2D::new(
-                        (bounds.min_x() as f32) / (self.size.width as f32),
-                        (bounds.min_y() as f32) / (self.size.height as f32),
-                    ),
-                    euclid::Size2D::new(
-                        (bounds.width() as f32) / (self.size.width as f32),
-                        (bounds.height() as f32) / (self.size.height as f32),
-                    ),
+                let location = RegionLocation::new(
+                    alloc.rectangle,
+                    [self.size.width, self.size.height],
+                    page_index,
                 );
-                let location = RegionLocation {
-                    page_index: page_index as u32,
-                    bounds,
-                    uv: uvs,
-                };
 
                 // Create a new TextureId and Texture
                 let texture_id = RegionId {
@@ -497,22 +511,11 @@ impl TextureAtlas {
                 return Err(TextureAtlasError::AllocationFailedNotEnoughSpace);
             }
         };
-        let bounds = alloc.rectangle.to_rect();
-        let uvs = euclid::Rect::new(
-            euclid::Point2D::new(
-                (bounds.min_x() as f32) / (self.size.width as f32),
-                (bounds.min_y() as f32) / (self.size.height as f32),
-            ),
-            euclid::Size2D::new(
-                (bounds.width() as f32) / (self.size.width as f32),
-                (bounds.height() as f32) / (self.size.height as f32),
-            ),
+        let location = RegionLocation::new(
+            alloc.rectangle,
+            [self.size.width, self.size.height],
+            page_index,
         );
-        let location = RegionLocation {
-            page_index: page_index as u32,
-            bounds,
-            uv: uvs,
-        };
 
         // Create a new TextureId and Texture
         let texture_id = RegionId {
@@ -913,10 +916,10 @@ mod tests {
             let texture = atlas.lock().allocate(&device, &queue, [32, 64]).unwrap();
             let uv = texture.uv().unwrap();
 
-            assert!(uv.min_x() >= 0.0 && uv.min_x() < 1.0);
-            assert!(uv.min_y() >= 0.0 && uv.min_y() < 1.0);
-            assert!(uv.max_x() > uv.min_x() && uv.max_x() <= 1.0);
-            assert!(uv.max_y() > uv.min_y() && uv.max_y() <= 1.0);
+            assert!(uv.min.x >= 0.0 && uv.min.x < 1.0);
+            assert!(uv.min.y >= 0.0 && uv.min.y < 1.0);
+            assert!(uv.max.x > uv.min.x && uv.max.x <= 1.0);
+            assert!(uv.max.y > uv.min.y && uv.max.y <= 1.0);
 
             let expected_uv_width = 32.0 / 128.0;
             let expected_uv_height = 64.0 / 128.0;
@@ -1001,8 +1004,8 @@ mod tests {
                     texture: atlas.lock().texture(),
                     mip_level: 0,
                     origin: wgpu::Origin3d {
-                        x: location.bounds.min_x() as u32,
-                        y: location.bounds.min_y() as u32,
+                        x: location.bounds.min.x as u32,
+                        y: location.bounds.min.y as u32,
                         z: location.page_index,
                     },
                     aspect: wgpu::TextureAspect::All,
