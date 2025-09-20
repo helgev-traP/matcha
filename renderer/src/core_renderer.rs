@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::render_node::RenderNode;
 use gpu_utils::texture_atlas;
-use texture_atlas::TextureError;
+use texture_atlas::RegionError;
 use thiserror::Error;
 
 const WGSL_CULL: &str = include_str!("core_renderer/renderer_cull.wgsl");
@@ -141,9 +141,10 @@ impl CoreRenderer {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
+            border_color: Some(wgpu::SamplerBorderColor::TransparentBlack),
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,
-            mipmap_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
 
@@ -735,7 +736,7 @@ fn create_instance_and_stencil_data_recursive(
             viewport_position_inverse_exists: if inverse_exists { 1 } else { 0 },
             viewport_position_inverse: stencil_position_inverse,
             atlas_page: page,
-            in_atlas_offset: [position_in_atlas.min_x(), position_in_atlas.min_y()],
+            in_atlas_offset: [position_in_atlas.min.x, position_in_atlas.min.y],
             in_atlas_size: [position_in_atlas.width(), position_in_atlas.height()],
             _padding1: [0; 3],
             _padding2: 0,
@@ -761,7 +762,7 @@ fn create_instance_and_stencil_data_recursive(
         instances.push(InstanceData {
             viewport_position: transform * texture_position,
             atlas_page: page,
-            in_atlas_offset: [position_in_atlas.min_x(), position_in_atlas.min_y()],
+            in_atlas_offset: [position_in_atlas.min.x, position_in_atlas.min.y],
             in_atlas_size: [position_in_atlas.width(), position_in_atlas.height()],
             stencil_index: current_stencil,
             _padding1: 0,
@@ -793,7 +794,7 @@ pub enum TextureValidationError {
     #[error("texture atlas id mismatch")]
     AtlasIdMismatch,
     #[error("texture atlas error: {0}")]
-    AtlasError(#[from] TextureError),
+    AtlasError(#[from] RegionError),
 }
 
 #[rustfmt::skip]

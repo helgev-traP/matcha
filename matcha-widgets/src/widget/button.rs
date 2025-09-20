@@ -26,12 +26,12 @@ pub struct Button<T> {
 }
 
 impl<T: 'static> Button<T> {
-    pub fn new(content: Box<dyn Dom<T>>) -> Box<Self> {
-        Box::new(Self {
+    pub fn new(content: impl Dom<T>) -> Self {
+        Self {
             label: None,
-            content,
+            content: Box::new(content),
             on_click: None,
-        })
+        }
     }
 
     pub fn label(mut self, label: &str) -> Self {
@@ -247,9 +247,7 @@ impl<T: Send + Sync + 'static> Widget<Button<T>, T, ()> for ButtonNode<T> {
                                 label: Some("Button BG Render Encoder"),
                             });
 
-                    let bg_style = SolidBox {
-                        color: bg_color.to_rgba_f32(),
-                    };
+                    let bg_style = SolidBox { color: bg_color };
                     bg_style.draw(
                         &mut encoder,
                         &style_region,

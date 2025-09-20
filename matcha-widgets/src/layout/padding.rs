@@ -58,8 +58,8 @@ where
         self
     }
 
-    pub fn content(mut self, content: Box<dyn Dom<T>>) -> Self {
-        self.content = Some(content);
+    pub fn content(mut self, content: impl Dom<T>) -> Self {
+        self.content = Some(Box::new(content));
         self
     }
 }

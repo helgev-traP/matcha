@@ -2,7 +2,11 @@ use std::sync::Arc;
 
 use crate::style::Style;
 use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
-use matcha_core::{color::Color, metrics::QRect, ui::WidgetContext};
+use matcha_core::{
+    color::Color,
+    metrics::{QRect, QSize},
+    ui::WidgetContext,
+};
 use parking_lot::Mutex;
 use renderer::{
     vertex::colored_vertex::ColorVertex,
@@ -13,14 +17,18 @@ type PolygonFn = dyn for<'a> Fn([f32; 2], &'a WidgetContext) -> Mesh + Send + Sy
 type AdaptFn =
     dyn for<'a> Fn([f32; 2], &'a WidgetContext) -> nalgebra::Matrix4<f32> + Send + Sync + 'static;
 
+/// Quantize factor used for cache keying of matrices.
+/// Matches metrics SUB_PIXEL_QUANTIZE used for QSize / QRect quantization.
+const MATRIX_QUANTIZE: f32 = 256_f32;
+
 pub struct Polygon {
     polygon: Arc<PolygonFn>,
     adaptive_affine: Arc<AdaptFn>,
     cache_the_mesh: bool,
-    caches: Mutex<utils::cache::Cache<[f32; 2], Caches>>,
+    caches: Mutex<utils::cache::Cache<CacheKey, Caches>>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Mesh {
     TriangleStrip {
         vertices: Vec<Vertex>,
@@ -37,15 +45,32 @@ pub enum Mesh {
     },
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Vertex {
-    position: [f32; 2],
-    color: Color,
+    pub position: [f32; 2],
+    pub color: Color,
 }
 
+#[derive(Clone)]
 struct Caches {
     mesh: Mesh,
     rect: Option<QRect>,
+}
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct CacheKey(QSize, [i32; 16]);
+
+impl CacheKey {
+    fn new(boundary: [f32; 2], adaptive_affine: &nalgebra::Matrix4<f32>) -> Self {
+        let qsize = QSize::from(boundary);
+        let mut arr = [0i32; 16];
+        let slice = adaptive_affine.as_slice();
+        for i in 0..16 {
+            // quantize matrix entries to avoid floating point precision issues in keys
+            arr[i] = (slice[i] * MATRIX_QUANTIZE) as i32;
+        }
+        CacheKey(qsize, arr)
+    }
 }
 
 // constructor
@@ -62,16 +87,25 @@ impl Clone for Polygon {
 }
 
 impl Polygon {
-    pub fn new<F>(polygon: F) -> Box<Self>
+    pub fn new(mesh: Mesh) -> Self {
+        Self {
+            polygon: Arc::new(move |_, _| mesh.clone()),
+            adaptive_affine: Arc::new(|_, _| nalgebra::Matrix4::identity()),
+            cache_the_mesh: true,
+            caches: Mutex::new(utils::cache::Cache::default()),
+        }
+    }
+
+    pub fn new_adaptive<F>(polygon: F) -> Self
     where
         F: Fn([f32; 2], &WidgetContext) -> Mesh + Send + Sync + 'static,
     {
-        Box::new(Self {
+        Self {
             polygon: Arc::new(polygon),
             adaptive_affine: Arc::new(|_, _| nalgebra::Matrix4::identity()),
             cache_the_mesh: true,
             caches: Mutex::new(utils::cache::Cache::default()),
-        })
+        }
     }
 
     pub fn adaptive_affine<F>(mut self, affine: F) -> Self
@@ -96,12 +130,16 @@ impl Style for Polygon {
         constraints: &matcha_core::metrics::Constraints,
         ctx: &WidgetContext,
     ) -> Option<matcha_core::metrics::QRect> {
+        let boundary = constraints.max_size();
+        // compute adaptive_affine (it may affect bounding rect)
+        let adaptive_affine = (self.adaptive_affine)(boundary, ctx);
+        let key = CacheKey::new(boundary, &adaptive_affine);
+
         let mut cache = self.caches.lock();
-        let key = constraints.max_size();
 
         if self.cache_the_mesh {
-            let (_k, v) = cache.get_or_insert_with(key, || Caches {
-                mesh: (self.polygon)(key, ctx),
+            let (_k, v) = cache.get_or_insert_with(key.clone(), || Caches {
+                mesh: (self.polygon)(boundary, ctx),
                 rect: None,
             });
 
@@ -113,31 +151,39 @@ impl Style for Polygon {
                 }
             }
 
-            // compute bounding rect from mesh
+            // compute bounding rect from mesh, applying adaptive_affine
             let (min_x, min_y, max_x, max_y) = {
                 let mut min_x = f32::INFINITY;
                 let mut min_y = f32::INFINITY;
                 let mut max_x = f32::NEG_INFINITY;
                 let mut max_y = f32::NEG_INFINITY;
 
+                let apply = |pos: [f32; 2]| -> [f32; 2] {
+                    let v = nalgebra::Vector4::new(pos[0], pos[1], 0.0, 1.0);
+                    let r = adaptive_affine * v;
+                    [r.x, r.y]
+                };
+
                 match &v.mesh {
                     Mesh::TriangleStrip { vertices }
                     | Mesh::TriangleList { vertices }
                     | Mesh::TriangleFan { vertices } => {
                         for vert in vertices {
-                            min_x = min_x.min(vert.position[0]);
-                            min_y = min_y.min(vert.position[1]);
-                            max_x = max_x.max(vert.position[0]);
-                            max_y = max_y.max(vert.position[1]);
+                            let p = apply(vert.position);
+                            min_x = min_x.min(p[0]);
+                            min_y = min_y.min(p[1]);
+                            max_x = max_x.max(p[0]);
+                            max_y = max_y.max(p[1]);
                         }
                     }
                     Mesh::TriangleIndexed { indices, vertices } => {
                         for &i in indices {
                             let vert = &vertices[i as usize];
-                            min_x = min_x.min(vert.position[0]);
-                            min_y = min_y.min(vert.position[1]);
-                            max_x = max_x.max(vert.position[0]);
-                            max_y = max_y.max(vert.position[1]);
+                            let p = apply(vert.position);
+                            min_x = min_x.min(p[0]);
+                            min_y = min_y.min(p[1]);
+                            max_x = max_x.max(p[0]);
+                            max_y = max_y.max(p[1]);
                         }
                     }
                 }
@@ -145,9 +191,9 @@ impl Style for Polygon {
             };
 
             let rect = if min_x.is_finite() && min_y.is_finite() && max_x > min_x && max_y > min_y {
-                matcha_core::metrics::QRect::new([min_x, min_y], [max_x - min_x, max_y - min_y])
+                QRect::new([min_x, min_y], [max_x - min_x, max_y - min_y])
             } else {
-                matcha_core::metrics::QRect::zero()
+                QRect::zero()
             };
 
             v.rect = Some(rect);
@@ -157,7 +203,7 @@ impl Style for Polygon {
                 None
             }
         } else {
-            let mesh = (self.polygon)(key, ctx);
+            let mesh = (self.polygon)(boundary, ctx);
 
             let (min_x, min_y, max_x, max_y) = {
                 let mut min_x = f32::INFINITY;
@@ -165,24 +211,32 @@ impl Style for Polygon {
                 let mut max_x = f32::NEG_INFINITY;
                 let mut max_y = f32::NEG_INFINITY;
 
+                let apply = |pos: [f32; 2]| -> [f32; 2] {
+                    let v = nalgebra::Vector4::new(pos[0], pos[1], 0.0, 1.0);
+                    let r = adaptive_affine * v;
+                    [r.x, r.y]
+                };
+
                 match &mesh {
                     Mesh::TriangleStrip { vertices }
                     | Mesh::TriangleList { vertices }
                     | Mesh::TriangleFan { vertices } => {
                         for vert in vertices {
-                            min_x = min_x.min(vert.position[0]);
-                            min_y = min_y.min(vert.position[1]);
-                            max_x = max_x.max(vert.position[0]);
-                            max_y = max_y.max(vert.position[1]);
+                            let p = apply(vert.position);
+                            min_x = min_x.min(p[0]);
+                            min_y = min_y.min(p[1]);
+                            max_x = max_x.max(p[0]);
+                            max_y = max_y.max(p[1]);
                         }
                     }
                     Mesh::TriangleIndexed { indices, vertices } => {
                         for &i in indices {
                             let vert = &vertices[i as usize];
-                            min_x = min_x.min(vert.position[0]);
-                            min_y = min_y.min(vert.position[1]);
-                            max_x = max_x.max(vert.position[0]);
-                            max_y = max_y.max(vert.position[1]);
+                            let p = apply(vert.position);
+                            min_x = min_x.min(p[0]);
+                            min_y = min_y.min(p[1]);
+                            max_x = max_x.max(p[0]);
+                            max_y = max_y.max(p[1]);
                         }
                     }
                 }
@@ -190,9 +244,9 @@ impl Style for Polygon {
             };
 
             let rect = if min_x.is_finite() && min_y.is_finite() && max_x > min_x && max_y > min_y {
-                matcha_core::metrics::QRect::new([min_x, min_y], [max_x - min_x, max_y - min_y])
+                QRect::new([min_x, min_y], [max_x - min_x, max_y - min_y])
             } else {
-                matcha_core::metrics::QRect::zero()
+                QRect::zero()
             };
 
             if rect.area() > 0.0 { Some(rect) } else { None }
@@ -200,56 +254,91 @@ impl Style for Polygon {
     }
 
     fn is_inside(&self, position: [f32; 2], boundary_size: [f32; 2], ctx: &WidgetContext) -> bool {
+        // include adaptive_affine in key so hit-test matches rendering/rect
+        let adaptive_affine = (self.adaptive_affine)(boundary_size, ctx);
+        let key = CacheKey::new(boundary_size, &adaptive_affine);
+
         let mut cache = self.caches.lock();
 
+        // obtain mesh either from cache or freshly computed
         let mesh = if self.cache_the_mesh {
-            &cache
-                .get_or_insert_with(boundary_size, || Caches {
+            cache
+                .get_or_insert_with(key.clone(), || Caches {
                     mesh: (self.polygon)(boundary_size, ctx),
                     rect: None,
                 })
                 .1
                 .mesh
+                .clone()
         } else {
-            &(self.polygon)(boundary_size, ctx)
+            (self.polygon)(boundary_size, ctx)
+        };
+
+        // helper: apply adaptive_affine to vertex
+        let apply = |pos: [f32; 2]| -> [f32; 2] {
+            let v = nalgebra::Vector4::new(pos[0], pos[1], 0.0, 1.0);
+            let r = adaptive_affine * v;
+            [r.x, r.y]
         };
 
         match mesh {
-            Mesh::TriangleStrip { vertices } => vertices.windows(3).any(|window| {
-                let triangle = [window[0].position, window[1].position, window[2].position];
-                is_inside_of_triangle(position, triangle)
-            }),
-            Mesh::TriangleList { vertices } => vertices.chunks(3).any(|chunk| {
-                if chunk.len() == 3 {
-                    let triangle = [chunk[0].position, chunk[1].position, chunk[2].position];
-                    is_inside_of_triangle(position, triangle)
-                } else {
-                    false
+            Mesh::TriangleStrip { vertices } => {
+                if vertices.len() < 3 {
+                    return false;
                 }
-            }),
-            Mesh::TriangleFan { vertices } => {
-                if vertices.len() >= 3 {
-                    let center = vertices[0].position;
-                    vertices[1..].windows(2).any(|window| {
-                        let triangle = [center, window[0].position, window[1].position];
-                        is_inside_of_triangle(position, triangle)
-                    })
-                } else {
-                    false
-                }
-            }
-            Mesh::TriangleIndexed { indices, vertices } => indices.chunks(3).any(|chunk| {
-                if chunk.len() == 3 {
+                vertices.windows(3).any(|window| {
                     let triangle = [
-                        vertices[chunk[0] as usize].position,
-                        vertices[chunk[1] as usize].position,
-                        vertices[chunk[2] as usize].position,
+                        apply(window[0].position),
+                        apply(window[1].position),
+                        apply(window[2].position),
                     ];
                     is_inside_of_triangle(position, triangle)
-                } else {
-                    false
+                })
+            }
+            Mesh::TriangleList { vertices } => {
+                if vertices.len() < 3 {
+                    return false;
                 }
-            }),
+                vertices.chunks(3).any(|chunk| {
+                    if chunk.len() == 3 {
+                        let triangle = [
+                            apply(chunk[0].position),
+                            apply(chunk[1].position),
+                            apply(chunk[2].position),
+                        ];
+                        is_inside_of_triangle(position, triangle)
+                    } else {
+                        false
+                    }
+                })
+            }
+            Mesh::TriangleFan { vertices } => {
+                if vertices.len() < 3 {
+                    return false;
+                }
+                let center = apply(vertices[0].position);
+                vertices[1..].windows(2).any(|window| {
+                    let triangle = [center, apply(window[0].position), apply(window[1].position)];
+                    is_inside_of_triangle(position, triangle)
+                })
+            }
+            Mesh::TriangleIndexed { indices, vertices } => {
+                if indices.len() < 3 {
+                    return false;
+                }
+                indices.chunks(3).any(|chunk| {
+                    if chunk.len() == 3 {
+                        let triangle = [
+                            apply(vertices[chunk[0] as usize].position),
+                            apply(vertices[chunk[1] as usize].position),
+                            apply(vertices[chunk[2] as usize].position),
+                        ];
+                        is_inside_of_triangle(position, triangle)
+                    } else {
+                        false
+                    }
+                })
+            }
         }
     }
 
@@ -268,22 +357,32 @@ impl Style for Polygon {
             Err(_) => return,
         };
         let mut cache = self.caches.lock();
+
+        // compute adaptive affine and include in cache key
+        let adaptive_affine = (self.adaptive_affine)(boundary_size, ctx);
+        let key = CacheKey::new(boundary_size, &adaptive_affine);
+
         let mesh = if self.cache_the_mesh {
-            &cache
-                .get_or_insert_with(boundary_size, || Caches {
+            cache
+                .get_or_insert_with(key.clone(), || Caches {
                     mesh: (self.polygon)(boundary_size, ctx),
                     rect: None,
                 })
                 .1
                 .mesh
+                .clone()
         } else {
-            &(self.polygon)(boundary_size, ctx)
+            (self.polygon)(boundary_size, ctx)
         };
 
         let renderer = ctx.any_resource().get_or_insert_default::<VertexColor>();
 
-        let (vertices, indices): (Vec<ColorVertex>, Vec<u16>) = match mesh {
+        // build ColorVertex list and indices safely
+        let (vertices, indices): (Vec<ColorVertex>, Vec<u16>) = match &mesh {
             Mesh::TriangleStrip { vertices } => {
+                if vertices.len() < 3 {
+                    return;
+                }
                 let color_vertices = vertices
                     .iter()
                     .map(|v| ColorVertex {
@@ -291,12 +390,15 @@ impl Style for Polygon {
                         color: v.color.to_rgba_f32(),
                     })
                     .collect();
-                let indices = (0..vertices.len() as u16 - 2)
-                    .flat_map(|i| [i, i + 1, i + 2])
+                let indices = (0..vertices.len() - 2)
+                    .flat_map(|i| [i as u16, (i + 1) as u16, (i + 2) as u16])
                     .collect();
                 (color_vertices, indices)
             }
             Mesh::TriangleList { vertices } => {
+                if vertices.len() < 3 {
+                    return;
+                }
                 let color_vertices = vertices
                     .iter()
                     .map(|v| ColorVertex {
@@ -308,6 +410,9 @@ impl Style for Polygon {
                 (color_vertices, indices)
             }
             Mesh::TriangleFan { vertices } => {
+                if vertices.len() < 3 {
+                    return;
+                }
                 let color_vertices = vertices
                     .iter()
                     .map(|v| ColorVertex {
@@ -315,12 +420,15 @@ impl Style for Polygon {
                         color: v.color.to_rgba_f32(),
                     })
                     .collect();
-                let indices = (1..vertices.len() as u16 - 1)
-                    .flat_map(|i| [0, i, i + 1])
+                let indices = (1..vertices.len() - 1)
+                    .flat_map(|i| [0u16, i as u16, (i + 1) as u16])
                     .collect();
                 (color_vertices, indices)
             }
             Mesh::TriangleIndexed { indices, vertices } => {
+                if indices.len() < 3 || vertices.is_empty() {
+                    return;
+                }
                 let color_vertices = vertices
                     .iter()
                     .map(|v| ColorVertex {
@@ -332,24 +440,15 @@ impl Style for Polygon {
             }
         };
 
-        if vertices.is_empty() {
+        if vertices.is_empty() || indices.is_empty() {
             return;
         }
 
-        let screen_to_clip =
-            nalgebra::Matrix4::new_nonuniform_scaling(&nalgebra::Vector3::new(
-                2.0 / target_size[0] as f32,
-                -2.0 / target_size[1] as f32,
-                1.0,
-            )) * nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(-1.0, 1.0, 0.0));
+        let transform =
+            nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(offset[0], offset[1], 0.0))
+                * adaptive_affine;
 
-        let local_to_screen =
-            nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(offset[0], offset[1], 0.0));
-
-        let adaptive_affine = (self.adaptive_affine)(boundary_size, ctx);
-
-        let transform_matrix = screen_to_clip * local_to_screen * adaptive_affine;
-
+        // Pass adaptive_affine through RenderData so renderer can compose final push-constant matrix.
         renderer.render(
             &mut render_pass,
             TargetData {
@@ -357,9 +456,9 @@ impl Style for Polygon {
                 target_format,
             },
             RenderData {
-                position: offset,
                 vertices: &vertices,
                 indices: &indices,
+                transform,
             },
             ctx.device(),
         );

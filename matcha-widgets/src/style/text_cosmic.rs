@@ -1,8 +1,14 @@
 use crate::style::Style;
 use cosmic_text::{Attrs, Buffer, Color, FontSystem, Metrics, Shaping, SwashCache};
+use fxhash::FxHasher;
 use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
 use matcha_core::ui::WidgetContext;
 use parking_lot::Mutex;
+use renderer::widgets_renderer::texture_copy::{
+    RenderData as TexRenderData, TargetData as TexTargetData, TextureCopy,
+};
+
+use std::hash::{Hash, Hasher};
 
 struct FontContext {
     font_system: Mutex<FontSystem>,
@@ -24,7 +30,9 @@ pub struct TextCosmic<'a> {
     pub metrics: Metrics,
     pub max_size: [Option<f32>; 2],
     pub buffer: Mutex<Option<Buffer>>,
+    // cache in memory stores rendered RGBA bytes and a key used to detect invalidation
     pub cache_in_memory: Mutex<Option<CacheInMemory>>,
+    // optional cached GPU texture for reuse (staging -> atlas fallback)
     pub cache_in_texture: Mutex<Option<wgpu::Texture>>,
 }
 
@@ -35,6 +43,7 @@ pub struct TextElement<'a> {
 }
 
 pub struct CacheInMemory {
+    pub key: u64,
     pub size: [u32; 2],
     /// ! y-axis heads up
     pub text_offset: [i32; 2],
@@ -79,6 +88,30 @@ impl TextCosmic<'_> {
         Buffer::new(font_system, metrics)
     }
 
+    fn make_cache_key(&self) -> u64 {
+        // Compute a hash over texts, metrics, max_size and color.
+        // Note: Attrs isn't hashed in detail here; if attribute changes must be detected,
+        // include attributes serialization into the key (left as an improvement).
+        let mut hasher = FxHasher::default();
+        for t in &self.texts {
+            t.text.hash(&mut hasher);
+            // include a crude fingerprint of attrs by Debug formatting (safe fallback)
+            format!("{:?}", t.attrs).hash(&mut hasher);
+        }
+        // Hash metrics via Debug (Metrics doesn't implement Hash)
+        format!("{:?}", self.metrics).hash(&mut hasher);
+        // max_size
+        (self.max_size[0].unwrap_or(f32::NAN).to_bits()).hash(&mut hasher);
+        (self.max_size[1].unwrap_or(f32::NAN).to_bits()).hash(&mut hasher);
+        // color
+        self.color.r().hash(&mut hasher);
+        self.color.g().hash(&mut hasher);
+        self.color.b().hash(&mut hasher);
+        self.color.a().hash(&mut hasher);
+
+        hasher.finish()
+    }
+
     fn render_to_memory(
         texts: &[TextElement],
         color: Color,
@@ -86,6 +119,7 @@ impl TextCosmic<'_> {
         font_system: &mut FontSystem,
         swash_cache: &mut SwashCache,
         max_size: [Option<f32>; 2],
+        key: u64,
     ) -> CacheInMemory {
         // ! y-axis heads down
 
@@ -127,6 +161,7 @@ impl TextCosmic<'_> {
 
         if size[0] == 0 || size[1] == 0 {
             return CacheInMemory {
+                key,
                 size: [0, 0],
                 text_offset: [0, 0],
                 data: Vec::new(),
@@ -154,6 +189,7 @@ impl TextCosmic<'_> {
         let data_offset = [data_offset[0], -data_offset[1]];
 
         CacheInMemory {
+            key,
             size: [size[0] as u32, size[1] as u32],
             text_offset: [data_offset[0], data_offset[1]],
             data: data_rgba,
@@ -297,7 +333,7 @@ impl Style for TextCosmic<'static> {
 
     fn draw(
         &self,
-        _encoder: &mut wgpu::CommandEncoder,
+        encoder: &mut wgpu::CommandEncoder,
         target: &AtlasRegion,
         _boundary_size: [f32; 2],
         _offset: [f32; 2],
@@ -309,15 +345,28 @@ impl Style for TextCosmic<'static> {
         let font_system = &font_context.font_system;
         let swash_cache = &font_context.swash_cache;
 
+        // compute key for current state
+        let current_key = self.make_cache_key();
+
         let mut buffer_lock = self.buffer.lock();
         let mut cache_in_memory_lock = self.cache_in_memory.lock();
+        let mut cache_in_texture_lock = self.cache_in_texture.lock();
 
         if buffer_lock.is_none() {
             *buffer_lock = Some(Self::set_buffer(&mut font_system.lock(), self.metrics));
         }
         let buffer = buffer_lock.as_mut().unwrap();
 
-        if cache_in_memory_lock.is_none() {
+        // regenerate in-memory cache if missing or key mismatch
+        let need_regen = match cache_in_memory_lock.as_ref() {
+            Some(c) => c.key != current_key,
+            None => true,
+        };
+
+        if need_regen {
+            // invalidate cached GPU texture if we re-render in memory
+            *cache_in_texture_lock = None;
+
             *cache_in_memory_lock = Some(Self::render_to_memory(
                 &self.texts,
                 self.color,
@@ -325,8 +374,10 @@ impl Style for TextCosmic<'static> {
                 &mut font_system.lock(),
                 &mut swash_cache.lock(),
                 self.max_size,
+                current_key,
             ));
         }
+
         let cache_in_memory = cache_in_memory_lock.as_ref().unwrap();
 
         // Nothing to draw
@@ -334,20 +385,49 @@ impl Style for TextCosmic<'static> {
             return;
         }
 
-        // Attempt to write raw RGBA data into the atlas region using the queue.
-        // AtlasRegion::write_data performs a queue.write_texture internally.
-        // We pass the raw bytes for the first (and typically only) format.
+        // Try to write raw RGBA data into the atlas region using the queue (preferred, cheaper).
         let data = &cache_in_memory.data;
         let write_result = target.write_data(ctx.queue(), data.as_slice());
 
-        if let Err(_err) = write_result {
-            // If writing directly failed, bail out silently.
-            // A more advanced fallback could render the text into a temporary texture
-            // and then copy it into the atlas via encoder.copy_texture_to_texture, but
-            // that requires access to atlas internal textures which is intentionally hidden.
+        if write_result.is_ok() {
+            // success, atlas now contains the bitmap
             return;
         }
 
-        // At this point the atlas contains the text bitmap. No further render-pass work is required here.
+        // Fallback: if write_data failed, try to create or reuse a GPU texture and sample-draw it into the atlas
+        // This uses the TextureCopy renderer to blit the temporary texture into the atlas via a render pass.
+        // Create or reuse cached GPU texture for the rendered bitmap
+        let tex = match cache_in_texture_lock.as_ref() {
+            Some(t) => t.clone(),
+            None => {
+                let t = self.render_to_texture(cache_in_memory.size, &cache_in_memory.data, ctx);
+                *cache_in_texture_lock = Some(t.clone());
+                t
+            }
+        };
+
+        // begin a render pass targeting the atlas region so the renderer can create its own passes if needed
+        let mut render_pass = match target.begin_render_pass(encoder) {
+            Ok(rp) => rp,
+            Err(_) => return,
+        };
+
+        // Use TextureCopy to render the temporary texture into the atlas region.
+        let texture_copy = TextureCopy::default();
+        texture_copy.render(
+            &mut render_pass,
+            TexTargetData {
+                target_size: target.size(),
+                target_format: target.format(),
+            },
+            TexRenderData {
+                source_texture_view: &tex.create_view(&wgpu::TextureViewDescriptor::default()),
+                source_texture_position_min: [0.0, 0.0],
+                source_texture_position_max: [cache_in_memory.size[0] as f32, cache_in_memory.size[1] as f32],
+                color_transformation: None,
+                color_offset: None,
+            },
+            ctx.device(),
+        );
     }
 }

@@ -45,7 +45,7 @@ pub struct TargetData {
 }
 
 pub struct RenderData<'a> {
-    pub position: [f32; 2],
+    pub transform: nalgebra::Matrix4<f32>,
     pub vertices: &'a [ColorVertex],
     pub indices: &'a [u16],
 }
@@ -67,7 +67,7 @@ impl VertexColor {
             target_format,
         }: TargetData,
         RenderData {
-            position,
+            transform,
             vertices,
             indices,
         }: RenderData,
@@ -85,7 +85,7 @@ impl VertexColor {
         });
 
         let view_port_affine_transform =
-            affine_transform([target_size[0] as f32, target_size[1] as f32], position);
+            viewport_transform([target_size[0] as f32, target_size[1] as f32]) * transform; // compose adaptive affine (style-provided) after viewport transform
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("vertex_color_vertex_buffer"),
@@ -111,10 +111,7 @@ impl VertexColor {
     }
 }
 
-fn affine_transform(viewport_size: [f32; 2], position: [f32; 2]) -> nalgebra::Matrix4<f32> {
-    let position =
-        nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(position[0], position[1], 0.0));
-
+fn viewport_transform(viewport_size: [f32; 2]) -> nalgebra::Matrix4<f32> {
     let scale = nalgebra::Matrix4::new_nonuniform_scaling(&nalgebra::Vector3::new(
         2.0 / viewport_size[0],
         -2.0 / viewport_size[1],
@@ -123,7 +120,7 @@ fn affine_transform(viewport_size: [f32; 2], position: [f32; 2]) -> nalgebra::Ma
 
     let transform = nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(-1.0, 1.0, 0.0));
 
-    transform * scale * position
+    transform * scale
 }
 
 fn make_pipeline(

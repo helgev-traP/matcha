@@ -1,6 +1,7 @@
 use crate::style::Style;
 use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
 use matcha_core::{
+    color::Color,
     metrics::{Constraints, QRect},
     ui::WidgetContext,
 };
@@ -14,7 +15,7 @@ use renderer::{
 // MARK: Style
 
 pub struct SolidBox {
-    pub color: [f32; 4],
+    pub color: Color,
 }
 
 impl Style for SolidBox {
@@ -55,35 +56,23 @@ impl Style for SolidBox {
         let vertices = [
             ColorVertex {
                 position: nalgebra::Point3::new(0.0, 0.0, 0.0),
-                color: self.color,
+                color: self.color.to_rgba_f32(),
             },
             ColorVertex {
                 position: nalgebra::Point3::new(boundary_size[0], 0.0, 0.0),
-                color: self.color,
+                color: self.color.to_rgba_f32(),
             },
             ColorVertex {
                 position: nalgebra::Point3::new(boundary_size[0], boundary_size[1], 0.0),
-                color: self.color,
+                color: self.color.to_rgba_f32(),
             },
             ColorVertex {
                 position: nalgebra::Point3::new(0.0, boundary_size[1], 0.0),
-                color: self.color,
+                color: self.color.to_rgba_f32(),
             },
         ];
 
         let indices: [u16; 6] = [0, 1, 2, 0, 2, 3];
-
-        let screen_to_clip =
-            nalgebra::Matrix4::new_nonuniform_scaling(&nalgebra::Vector3::new(
-                2.0 / target_size[0] as f32,
-                -2.0 / target_size[1] as f32,
-                1.0,
-            )) * nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(-1.0, 1.0, 0.0));
-
-        let local_to_screen =
-            nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(offset[0], offset[1], 0.0));
-
-        let transform_matrix = screen_to_clip * local_to_screen;
 
         renderer.render(
             &mut render_pass,
@@ -92,9 +81,11 @@ impl Style for SolidBox {
                 target_format,
             },
             RenderData {
-                position: offset,
                 vertices: &vertices,
                 indices: &indices,
+                transform: nalgebra::Matrix4::new_translation(&nalgebra::Vector3::new(
+                    offset[0], offset[1], 0.0,
+                )),
             },
             ctx.device(),
         );

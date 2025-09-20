@@ -1,5 +1,3 @@
-use nalgebra::Matrix4;
-
 use matcha_core::{
     device_input::DeviceInput,
     metrics::{Arrangement, Constraints},
@@ -67,8 +65,8 @@ where
         self
     }
 
-    pub fn content(mut self, content: Box<dyn Dom<T>>) -> Self {
-        self.content = Some(content);
+    pub fn content(mut self, content: impl Dom<T>) -> Self {
+        self.content = Some(Box::new(content));
         self
     }
 }
@@ -106,12 +104,6 @@ where
 
 pub struct VisibilityNode {
     visibility: VisibilityState,
-}
-
-impl VisibilityNode {
-    fn identity_affine() -> Matrix4<f32> {
-        Matrix4::identity()
-    }
 }
 
 impl<T> Widget<Visibility<T>, T, ()> for VisibilityNode

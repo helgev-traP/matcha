@@ -37,5 +37,7 @@ bitflags = { workspace = true }
 num = { workspace = true }
 cosmic-text = { workspace = true }
 
+pollster = { workspace = true }
+
 [lints]
 workspace = true

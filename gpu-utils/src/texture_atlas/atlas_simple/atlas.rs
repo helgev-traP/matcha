@@ -46,14 +46,14 @@ impl AtlasRegion {
         self.inner.atlas_id
     }
 
-    pub fn position_in_atlas(&self) -> Result<(u32, Box2D<f32, euclid::UnknownUnit>), TextureError> {
+    pub fn position_in_atlas(&self) -> Result<(u32, Box2D<f32, euclid::UnknownUnit>), RegionError> {
         // Get the texture location in the atlas
         let Some(atlas) = self.inner.atlas.upgrade() else {
-            return Err(TextureError::AtlasGone);
+            return Err(RegionError::AtlasGone);
         };
         let atlas = atlas.lock();
         let Some(location) = atlas.get_location(self.inner.region_id) else {
-            return Err(TextureError::TextureNotFoundInAtlas);
+            return Err(RegionError::TextureNotFoundInAtlas);
         };
 
         Ok((location.page_index, location.uv))
@@ -78,14 +78,14 @@ impl AtlasRegion {
             .map(|arc| Arc::as_ptr(&arc) as usize)
     }
 
-    pub fn translate_uv(&self, uvs: &[[f32; 2]]) -> Result<Vec<[f32; 2]>, TextureError> {
+    pub fn translate_uv(&self, uvs: &[[f32; 2]]) -> Result<Vec<[f32; 2]>, RegionError> {
         // Get the texture location in the atlas
         let Some(atlas) = self.inner.atlas.upgrade() else {
-            return Err(TextureError::AtlasGone);
+            return Err(RegionError::AtlasGone);
         };
         let atlas = atlas.lock();
         let Some(location) = atlas.get_location(self.inner.region_id) else {
-            return Err(TextureError::TextureNotFoundInAtlas);
+            return Err(RegionError::TextureNotFoundInAtlas);
         };
         let x_max = location.uv.max.x;
         let y_max = location.uv.max.y;
@@ -106,16 +106,16 @@ impl AtlasRegion {
         Ok(translated_vertices)
     }
 
-    pub fn write_data(&self, queue: &wgpu::Queue, data: &[u8]) -> Result<(), TextureError> {
+    pub fn write_data(&self, queue: &wgpu::Queue, data: &[u8]) -> Result<(), RegionError> {
         // Check data consistency
         let bytes_per_pixel = self
             .inner
             .format
             .block_copy_size(None)
-            .ok_or(TextureError::InvalidFormatBlockCopySize)?;
+            .ok_or(RegionError::InvalidFormatBlockCopySize)?;
         let expected_size = self.inner.size[0] * self.inner.size[1] * bytes_per_pixel;
         if data.len() as u32 != expected_size {
-            return Err(TextureError::DataConsistencyError(format!(
+            return Err(RegionError::DataConsistencyError(format!(
                 "Data size({}byte) does not match expected size({}byte)",
                 data.len(),
                 expected_size
@@ -124,13 +124,13 @@ impl AtlasRegion {
 
         // Get the texture in the atlas and location
         let Some(atlas) = self.inner.atlas.upgrade() else {
-            return Err(TextureError::AtlasGone);
+            return Err(RegionError::AtlasGone);
         };
         let atlas = atlas.lock();
 
         let texture = atlas.texture();
         let Some(location) = atlas.get_location(self.inner.region_id) else {
-            return Err(TextureError::TextureNotFoundInAtlas);
+            return Err(RegionError::TextureNotFoundInAtlas);
         };
 
         let bytes_per_row = self.inner.size[0] * bytes_per_pixel;
@@ -164,34 +164,34 @@ impl AtlasRegion {
         Ok(())
     }
 
-    pub fn read_data(&self) -> Result<(), TextureError> {
+    pub fn read_data(&self) -> Result<(), RegionError> {
         todo!()
     }
 
-    pub fn copy_from_texture(&self) -> Result<(), TextureError> {
+    pub fn copy_from_texture(&self) -> Result<(), RegionError> {
         todo!()
     }
 
-    pub fn copy_to_texture(&self) -> Result<(), TextureError> {
+    pub fn copy_to_texture(&self) -> Result<(), RegionError> {
         todo!()
     }
 
-    pub fn copy_from_buffer(&self) -> Result<(), TextureError> {
+    pub fn copy_from_buffer(&self) -> Result<(), RegionError> {
         todo!()
     }
 
-    pub fn copy_to_buffer(&self) -> Result<(), TextureError> {
+    pub fn copy_to_buffer(&self) -> Result<(), RegionError> {
         todo!()
     }
 
-    pub fn set_viewport(&self, render_pass: &mut wgpu::RenderPass<'_>) -> Result<(), TextureError> {
+    pub fn set_viewport(&self, render_pass: &mut wgpu::RenderPass<'_>) -> Result<(), RegionError> {
         // Get the texture location in the atlas
         let Some(atlas) = self.inner.atlas.upgrade() else {
-            return Err(TextureError::AtlasGone);
+            return Err(RegionError::AtlasGone);
         };
         let atlas = atlas.lock();
         let Some(location) = atlas.get_location(self.inner.region_id) else {
-            return Err(TextureError::TextureNotFoundInAtlas);
+            return Err(RegionError::TextureNotFoundInAtlas);
         };
 
         // Set the viewport to the texture area
@@ -210,14 +210,14 @@ impl AtlasRegion {
     pub fn begin_render_pass<'a>(
         &'a self,
         encoder: &'a mut wgpu::CommandEncoder,
-    ) -> Result<wgpu::RenderPass<'a>, TextureError> {
+    ) -> Result<wgpu::RenderPass<'a>, RegionError> {
         // Get the texture location in the atlas
         let Some(atlas) = self.inner.atlas.upgrade() else {
-            return Err(TextureError::AtlasGone);
+            return Err(RegionError::AtlasGone);
         };
         let atlas = atlas.lock();
         let Some(location) = atlas.get_location(self.inner.region_id) else {
-            return Err(TextureError::TextureNotFoundInAtlas);
+            return Err(RegionError::TextureNotFoundInAtlas);
         };
 
         // Create a render pass for the texture area, targeting the specific array layer (page) with 2D views
@@ -250,14 +250,14 @@ impl AtlasRegion {
         Ok(render_pass)
     }
 
-    pub fn uv(&self) -> Result<Box2D<f32, euclid::UnknownUnit>, TextureError> {
+    pub fn uv(&self) -> Result<Box2D<f32, euclid::UnknownUnit>, RegionError> {
         // Get the texture location in the atlas
         let Some(atlas) = self.inner.atlas.upgrade() else {
-            return Err(TextureError::AtlasGone);
+            return Err(RegionError::AtlasGone);
         };
         let atlas = atlas.lock();
         let Some(location) = atlas.get_location(self.inner.region_id) else {
-            return Err(TextureError::TextureNotFoundInAtlas);
+            return Err(RegionError::TextureNotFoundInAtlas);
         };
 
         Ok(location.uv)
@@ -717,7 +717,7 @@ impl TextureAtlas {
 struct DeallocationErrorTextureNotFound;
 
 #[derive(Error, Debug)]
-pub enum TextureError {
+pub enum RegionError {
     #[error("The texture's atlas has been dropped.")]
     AtlasGone,
     #[error("The texture was not found in the atlas.")]
@@ -946,7 +946,7 @@ mod tests {
             drop(atlas);
 
             let result = texture.uv();
-            assert!(matches!(result, Err(TextureError::AtlasGone)));
+            assert!(matches!(result, Err(RegionError::AtlasGone)));
         });
     }
 

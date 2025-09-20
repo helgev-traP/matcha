@@ -51,8 +51,8 @@ where
         self
     }
 
-    pub fn push(mut self, item: Box<dyn Dom<T>>) -> Self {
-        self.items.push(item);
+    pub fn push(mut self, item: impl Dom<T>) -> Self {
+        self.items.push(Box::new(item));
         self
     }
 }

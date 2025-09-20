@@ -1,3 +1,5 @@
+use winit::event_loop;
+
 use super::{
     backend::{Backend, StubBackend},
     color::Color,
@@ -141,6 +143,7 @@ where
     pub fn run(self) -> Result<(), winit::error::EventLoopError> {
         let mut winit_app = self.builder.build().expect("Failed to build WinitInstance");
         let event_loop = winit::event_loop::EventLoop::<Message>::with_user_event().build()?;
+        event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
         event_loop.run_app(&mut winit_app)
     }
 }

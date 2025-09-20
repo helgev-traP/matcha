@@ -1,7 +1,7 @@
 use nalgebra::Matrix4;
 
 /// Quantization factor for layout size keys.
-const SUB_PIXEL_QUANTIZE: f32 = 256_f32;
+pub const SUB_PIXEL_QUANTIZE: f32 = 256_f32;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct QSize([u32; 2]);

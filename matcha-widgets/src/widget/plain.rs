@@ -33,13 +33,13 @@ impl<T> Plain<T> {
         })
     }
 
-    pub fn style(mut self, style: impl Into<Arc<dyn Style>>) -> Self {
-        self.style.push(style.into());
+    pub fn style(mut self, style: impl Style + 'static) -> Self {
+        self.style.push(Arc::new(style));
         self
     }
 
-    pub fn content(mut self, content: Box<dyn Dom<T>>) -> Self {
-        self.content = Some(content);
+    pub fn content(mut self, content: impl Dom<T>) -> Self {
+        self.content = Some(Box::new(content));
         self
     }
 

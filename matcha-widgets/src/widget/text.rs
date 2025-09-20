@@ -23,13 +23,13 @@ pub struct Text<'a> {
 }
 
 impl<'a> Text<'a> {
-    pub fn new(content: &str) -> Box<Self> {
-        Box::new(Self {
+    pub fn new(content: &str) -> Self {
+        Self {
             label: None,
             content: content.to_string(),
             attrs: Attrs::new(),
             metrics: Metrics::new(14.0, 20.0), // Default metrics
-        })
+        }
     }
 
     pub fn label(mut self, label: &str) -> Self {
