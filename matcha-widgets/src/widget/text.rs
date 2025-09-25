@@ -78,8 +78,6 @@ impl<'a: 'static, T: Send + Sync + 'static> Dom<T> for Text<'a> {
             },
         ))
     }
-
-    async fn set_update_notifier(&self, _notifier: &UpdateNotifier) {}
 }
 
 // MARK: Widget

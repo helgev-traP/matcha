@@ -52,10 +52,6 @@ impl<T: Send + 'static> Dom<T> for Space {
             },
         ))
     }
-
-    async fn set_update_notifier(&self, _notifier: &UpdateNotifier) {
-        // No children to notify
-    }
 }
 
 /// Widget implementation for Space

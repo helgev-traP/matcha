@@ -61,10 +61,6 @@ impl<T: Send + Sync + 'static> Dom<T> for Button<T> {
             },
         ))
     }
-
-    async fn set_update_notifier(&self, notifier: &UpdateNotifier) {
-        self.content.set_update_notifier(notifier).await;
-    }
 }
 
 // MARK: Widget

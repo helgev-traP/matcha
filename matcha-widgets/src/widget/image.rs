@@ -50,10 +50,6 @@ impl<T: Send + Sync + 'static> Dom<T> for Image {
             },
         ))
     }
-
-    async fn set_update_notifier(&self, _notifier: &UpdateNotifier) {
-        // No children
-    }
 }
 
 // MARK: Widget

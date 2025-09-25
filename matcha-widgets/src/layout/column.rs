@@ -82,12 +82,6 @@ where
             },
         ))
     }
-
-    async fn set_update_notifier(&self, notifier: &UpdateNotifier) {
-        for item in &self.items {
-            item.set_update_notifier(notifier).await;
-        }
-    }
 }
 
 // MARK: Widget

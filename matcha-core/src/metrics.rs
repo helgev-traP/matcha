@@ -52,7 +52,7 @@ impl From<QSize> for [f32; 2] {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct QRect {
     origin: [i32; 2],
     size: [i32; 2],

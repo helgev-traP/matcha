@@ -109,47 +109,90 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
         viewport_size: [f32; 2],
         background: Background<'a>,
         ctx: &WidgetContext<'a>,
+        benchmark: &mut super::benchmark::Benchmark,
     ) -> RenderNode {
-        if self.model_update_flag.is_true() || self.widget.is_none() {
-            // Dom update is required
-            let dom = self.component.view().await;
+        // if self.model_update_flag.is_true() || self.widget.is_none() {
+        //     // Dom update is required
+        //     let dom = self.component.view().await;
 
+        //     self.model_update_flag = UpdateFlag::new();
+
+        //     if let Some(widget) = self.widget.as_mut() {
+        //         if widget.update_widget_tree(&*dom).await.is_err() {
+        //             self.widget = None;
+        //         }
+        //     }
+
+        //     let widget = self.widget.get_or_insert_with(|| {
+        //         // Initialize widget
+        //         dom.build_widget_tree()
+        //     });
+
+        //     // set model update notifier
+        //     widget.set_model_update_notifier(&self.model_update_flag.notifier()).await;
+
+        //     // set dirty flags
+        //     widget.update_dirty_flags(BackPropDirty::new(true), BackPropDirty::new(true));
+        // }
+
+        // let widget = self.widget.as_mut().expect("widget initialized above");
+
+        // let constraints: Constraints =
+        //     Constraints::new([0.0, viewport_size[0]], [0.0, viewport_size[1]]);
+
+        // let preferred_size = benchmark.with_layout_measure(|| widget.measure(&constraints, ctx));
+        // let final_size = [
+        //     preferred_size[0].clamp(0.0, viewport_size[0]),
+        //     preferred_size[1].clamp(0.0, viewport_size[1]),
+        // ];
+
+        // benchmark.with_create_render_tree(|| widget.render(final_size, background, ctx))
+
+        if self.widget.is_none() {
+            // directly build widget tree from dom
+            let dom = benchmark.with_create_dom(self.component.view()).await;
+            let widget = self.widget.insert(benchmark.with_create_widget(|| dom.build_widget_tree()));
+
+            // set model update notifier
             self.model_update_flag = UpdateFlag::new();
-            dom.set_update_notifier(&self.model_update_flag.notifier())
+            widget
+                .set_model_update_notifier(&self.model_update_flag.notifier())
                 .await;
+            // set dirty flags
+            widget.update_dirty_flags(BackPropDirty::new(true), BackPropDirty::new(true));
+        } else if self.model_update_flag.is_true() {
+            // Widget update is required
+            let dom = benchmark.with_create_dom(self.component.view()).await;
 
             if let Some(widget) = self.widget.as_mut() {
-                if widget.update_widget_tree(&*dom).await.is_err() {
+                if benchmark.with_update_widget(widget.update_widget_tree(&*dom)).await.is_err() {
                     self.widget = None;
                 }
             }
-            let widget = self.widget.get_or_insert_with(|| {
-                // Initialize widget
-                dom.build_widget_tree()
-            });
 
+            let widget = self.widget.get_or_insert_with(|| dom.build_widget_tree());
+
+            // set model update notifier
+            self.model_update_flag = UpdateFlag::new();
+            widget
+                .set_model_update_notifier(&self.model_update_flag.notifier())
+                .await;
             // set dirty flags
             widget.update_dirty_flags(BackPropDirty::new(true), BackPropDirty::new(true));
         }
 
         let widget = self.widget.as_mut().expect("widget initialized above");
 
-        Self::render_current_widget(&mut **widget, viewport_size, background, ctx)
-    }
+        let constraints: Constraints =
+            Constraints::new([0.0, viewport_size[0]], [0.0, viewport_size[1]]);
 
-    fn render_current_widget(
-        widget: &mut dyn AnyWidgetFrame<Event>,
-        viewport_size: [f32; 2],
-        background: Background,
-        ctx: &WidgetContext,
-    ) -> RenderNode {
-        let constraints = Constraints::new([0.0, viewport_size[0]], [0.0, viewport_size[1]]);
-        let preferred_size = widget.measure(&constraints, ctx);
+        let preferred_size = benchmark.with_layout_measure(|| widget.measure(&constraints, ctx));
         let final_size = [
             preferred_size[0].clamp(0.0, viewport_size[0]),
             preferred_size[1].clamp(0.0, viewport_size[1]),
         ];
-        widget.render(final_size, background, ctx)
+
+        benchmark.with_arrange_and_render(|| widget.render(final_size, background, ctx))
     }
 
     fn convert_winit_to_window_event(

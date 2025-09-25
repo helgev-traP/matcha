@@ -38,11 +38,11 @@ pub struct WinitInstance<
     app_handler: ui::ApplicationHandler,
     // --- backend ---
     backend: B,
+    // --- ticker ---
+    ticker: ticker::Ticker,
     // --- benchmark / monitoring ---
     benchmarker: benchmark::Benchmark,
     frame: u128,
-    // --- ticker ---
-    ticker: ticker::Ticker,
 }
 
 impl<
@@ -115,37 +115,37 @@ impl<
                     "Failed to get current texture",
                 ))??;
 
+        let target_view = surface_texture
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+
+        let ctx = create_widget_context(
+            &self.window,
+            &self.render_control,
+            &self.ui_control,
+            &self.any_resource,
+            self.ticker.current_time(),
+        )
+        .expect("Window must exist when render is called, as it is only called after resumed");
+
+        let object = {
+            let background = ui::Background::new(&target_view, [0.0, 0.0]);
+            self.tokio_runtime.block_on(self.ui_control.render(
+                ctx.viewport_size(),
+                background,
+                &ctx,
+                &mut self.benchmarker,
+            ))
+        };
+
+        let size = self
+            .window
+            .inner_size()
+            .expect("Window must exist when render is called, as it is only called after resumed");
+        let size = [size.width as f32, size.height as f32];
+
         self.benchmarker
-            .with_benchmark(|| -> Result<(), error::RenderError> {
-                let target_view = surface_texture
-                    .texture
-                    .create_view(&wgpu::TextureViewDescriptor::default());
-
-                let ctx = create_widget_context(
-                    &self.window,
-                    &self.render_control,
-                    &self.ui_control,
-                    &self.any_resource,
-                    self.ticker.current_time(),
-                )
-                .expect(
-                    "Window must exist when render is called, as it is only called after resumed",
-                );
-
-                let object = {
-                    let background = ui::Background::new(&target_view, [0.0, 0.0]);
-                    self.tokio_runtime.block_on(self.ui_control.render(
-                        ctx.viewport_size(),
-                        background,
-                        &ctx,
-                    ))
-                };
-
-                let size = self.window.inner_size().expect(
-                    "Window must exist when render is called, as it is only called after resumed",
-                );
-                let size = [size.width as f32, size.height as f32];
-
+            .with_gpu_driven_render(|| -> Result<(), error::RenderError> {
                 self.render_control
                     .render(
                         &object,
@@ -162,13 +162,12 @@ impl<
 
         // clear terminal line and print benchmark info
         print!(
-            "\r({:.3}) | (frame: {}) | Render time: {}, Avr: {}, Max: {}",
+            "\r({:.3}) | (frame: {}) | ",
             self.ticker.current_time().as_secs_f32(),
             self.frame,
-            self.benchmarker.last_time(),
-            self.benchmarker.average_time(),
-            self.benchmarker.max_time()
         );
+        self.benchmarker.print();
+        println!();
         std::io::Write::flush(&mut std::io::stdout()).ok();
 
         self.frame += 1;

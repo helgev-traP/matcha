@@ -116,12 +116,6 @@ impl<T: Send + 'static> Dom<T> for Grid<T> {
             },
         ))
     }
-
-    async fn set_update_notifier(&self, notifier: &UpdateNotifier) {
-        for item in &self.items {
-            item.item.set_update_notifier(notifier).await;
-        }
-    }
 }
 
 // MARK: Widget

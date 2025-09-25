@@ -44,20 +44,15 @@ impl<'a> InvalidationHandle<'a> {
     }
 }
 
+pub struct ArrangementTree {
+    pub arrangement: Arrangement,
+    pub children: Vec<ArrangementTree>,
+}
+
 #[async_trait::async_trait]
 pub trait Dom<E>: Send + Sync + Any {
     /// Builds the corresponding stateful `Widget` tree from this `Dom` node.
     fn build_widget_tree(&self) -> Box<dyn AnyWidgetFrame<E>>;
-
-    /// Sets an `UpdateNotifier` for the `Dom` tree to listen for model updates.
-    ///
-    /// This method is crucial for the `Component` system to detect changes in the `Model`.
-    /// `ComponentDom` uses this to receive the notifier.
-    ///
-    /// Custom `Dom` implementations that contain children (e.g., layout widgets)
-    /// have the responsibility to recursively propagate this notifier to all their children.
-    /// Failure to do so will prevent descendant `Component`s from detecting model updates.
-    async fn set_update_notifier(&self, notifier: &UpdateNotifier);
 }
 
 pub trait Widget<D: Dom<E>, E: 'static = (), ChildSetting: PartialEq + 'static = ()>:
@@ -151,13 +146,15 @@ pub(super) trait AnyWidgetFramePrivate {
 #[allow(private_bounds)]
 #[async_trait::async_trait]
 pub trait AnyWidgetFrame<E: 'static>:
-    AnyWidget<E> + AnyWidgetFramePrivate + std::any::Any + Send
+    AnyWidget<E> + AnyWidgetFramePrivate + std::any::Any + Send + Sync
 {
     fn label(&self) -> Option<&str>;
 
     fn need_redraw(&self) -> bool;
 
     async fn update_widget_tree(&mut self, dom: &dyn Dom<E>) -> Result<(), UpdateWidgetError>;
+
+    async fn set_model_update_notifier(&self, notifier: &UpdateNotifier);
 
     /// This method must be called before `Widget::device_event`, `Widget::is_inside`, `Widget::measure`, and `Widget::arrange`.
     fn update_dirty_flags(&mut self, rearrange_flags: BackPropDirty, redraw_flags: BackPropDirty);
@@ -563,6 +560,13 @@ where
         Ok(())
     }
 
+    async fn set_model_update_notifier(&self, notifier: &UpdateNotifier) {
+        // propagate to children
+        for (child, _) in &self.children {
+            child.set_model_update_notifier(notifier).await;
+        }
+    }
+
     fn update_dirty_flags(&mut self, rearrange_flags: BackPropDirty, redraw_flags: BackPropDirty) {
         let dirty_flags = self.dirty_flags.insert(DirtyFlags {
             need_rearrange: rearrange_flags,
@@ -594,7 +598,7 @@ where
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use super::{Constraints, DeviceInput, UpdateNotifier};
+    use super::{Constraints, DeviceInput};
     use utils::back_prop_dirty::BackPropDirty;
 
     #[derive(Debug, Clone, PartialEq, Default)]
@@ -621,8 +625,6 @@ mod tests {
                 MockWidget,
             ))
         }
-
-        async fn set_update_notifier(&self, _notifier: &UpdateNotifier) {}
     }
 
     struct MockWidget;

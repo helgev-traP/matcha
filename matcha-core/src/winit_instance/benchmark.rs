@@ -1,74 +1,205 @@
-use std::time::{Duration, Instant};
+use enum_map::{EnumMap, enum_map};
+use std::{
+    collections::VecDeque,
+    time::{Duration, Instant},
+};
 
 pub struct Benchmark {
-    ring: Vec<Duration>,
-    reading: usize,
+    items: EnumMap<BenchmarkItem, VecDeque<Duration>>,
+    capacity: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, enum_map::Enum)]
+pub enum BenchmarkItem {
+    CreateDom,
+    CreateWidget,
+    UpdateWidget,
+    LayoutMeasure,
+    ArrangeAndRender,
+    GpuDrivenRender,
+}
+
+impl BenchmarkItem {
+    pub fn all() -> &'static [BenchmarkItem] {
+        &[
+            BenchmarkItem::CreateDom,
+            BenchmarkItem::UpdateWidget,
+            BenchmarkItem::LayoutMeasure,
+            BenchmarkItem::ArrangeAndRender,
+            BenchmarkItem::GpuDrivenRender,
+        ]
+    }
+
+    pub fn print_names(&self) -> &str {
+        match self {
+            BenchmarkItem::CreateDom => "Create Dom",
+            BenchmarkItem::CreateWidget => "Create Widget",
+            BenchmarkItem::UpdateWidget => "Update Widget",
+            BenchmarkItem::LayoutMeasure => "Layout Measure",
+            BenchmarkItem::ArrangeAndRender => "Arrange and Render",
+            BenchmarkItem::GpuDrivenRender => "GPU Driven Render",
+        }
+    }
 }
 
 impl Benchmark {
-    pub fn new(samples: usize) -> Self {
+    pub fn new(capacity: usize) -> Self {
         Self {
-            ring: vec![Duration::from_secs(0); samples],
-            reading: 0,
+            items: enum_map! {
+                BenchmarkItem::CreateDom => VecDeque::with_capacity(capacity),
+                BenchmarkItem::CreateWidget => VecDeque::with_capacity(capacity),
+                BenchmarkItem::UpdateWidget => VecDeque::with_capacity(capacity),
+                BenchmarkItem::LayoutMeasure => VecDeque::with_capacity(capacity),
+                BenchmarkItem::ArrangeAndRender => VecDeque::with_capacity(capacity),
+                BenchmarkItem::GpuDrivenRender => VecDeque::with_capacity(capacity),
+            },
+            capacity,
         }
     }
 
-    pub fn with_benchmark<F, R>(&mut self, mut f: F) -> R
+    pub fn clear(&mut self) {
+        for buffer in self.items.values_mut() {
+            buffer.clear();
+        }
+    }
+}
+
+impl Benchmark {
+    #[inline]
+    pub fn with<R>(&mut self, item: BenchmarkItem, f: impl FnOnce() -> R) -> R {
+        let start = Instant::now();
+        let r = f();
+        let duration = start.elapsed();
+        let buffer = &mut self.items[item];
+        if buffer.len() == self.capacity {
+            buffer.pop_front();
+        }
+        buffer.push_back(duration);
+
+        r
+    }
+
+    pub async fn with_async<R, F>(&mut self, item: BenchmarkItem, f: F) -> R
     where
-        F: FnMut() -> R,
+        F: std::future::Future<Output = R>,
     {
-        let timer = Instant::now();
-        let result = f();
-        let time = timer.elapsed();
+        let start = Instant::now();
+        let r = f.await;
+        let duration = start.elapsed();
+        let buffer = &mut self.items[item];
+        if buffer.len() == self.capacity {
+            buffer.pop_front();
+        }
+        buffer.push_back(duration);
 
-        self.reading = (self.reading + 1) % self.ring.capacity();
-        self.ring[self.reading] = time;
-
-        result
+        r
     }
 
-    pub fn last_time(&self) -> Time {
-        let time = self.ring[self.reading].as_micros();
-        if time <= 1_000 {
-            Time::Microsecond(time as u32)
-        } else if time <= 1_000_000 {
-            Time::Millisecond((time / 1_000) as u32)
-        } else {
-            Time::Second((time / 1_000_000) as u32)
-        }
+    pub async fn with_create_dom<R>(&mut self, f: impl std::future::Future<Output = R>) -> R {
+        self.with_async(BenchmarkItem::CreateDom, f).await
     }
 
-    pub fn average_time(&self) -> Time {
-        let mut total = 0;
-        for time in &self.ring {
-            total += time.as_micros();
-        }
-
-        let time = total / self.ring.len() as u128;
-        if time <= 1_000 {
-            Time::Microsecond(time as u32)
-        } else if time <= 1_000_000 {
-            Time::Millisecond((time / 1_000) as u32)
-        } else {
-            Time::Second((time / 1_000_000) as u32)
-        }
+    pub fn with_create_widget<R>(&mut self, f: impl FnOnce() -> R) -> R {
+        self.with(BenchmarkItem::CreateWidget, f)
     }
 
-    pub fn max_time(&self) -> Time {
-        let mut max = Duration::from_secs(0);
-        for time in &self.ring {
-            if *time > max {
-                max = *time;
-            }
-        }
+    pub async fn with_update_widget<R>(&mut self, f: impl std::future::Future<Output = R>) -> R {
+        self.with_async(BenchmarkItem::UpdateWidget, f).await
+    }
 
-        let time = max.as_micros();
-        if time <= 1_000 {
-            Time::Microsecond(time as u32)
-        } else if time <= 1_000_000 {
-            Time::Millisecond((time / 1_000) as u32)
-        } else {
-            Time::Second((time / 1_000_000) as u32)
+    pub fn with_layout_measure<R>(&mut self, f: impl FnOnce() -> R) -> R {
+        self.with(BenchmarkItem::LayoutMeasure, f)
+    }
+
+    pub fn with_arrange_and_render<R>(&mut self, f: impl FnOnce() -> R) -> R {
+        self.with(BenchmarkItem::ArrangeAndRender, f)
+    }
+
+    pub fn with_gpu_driven_render<R>(&mut self, f: impl FnOnce() -> R) -> R {
+        self.with(BenchmarkItem::GpuDrivenRender, f)
+    }
+}
+
+impl Benchmark {
+    pub fn last_time(&self, item: BenchmarkItem) -> Option<Time> {
+        self.items[item]
+            .back()
+            .map(|d| Time::from_micros(d.as_micros()))
+    }
+
+    pub fn last_time_create_dom(&self) -> Option<Time> {
+        self.last_time(BenchmarkItem::CreateDom)
+    }
+
+    pub fn last_time_create_widget(&self) -> Option<Time> {
+        self.last_time(BenchmarkItem::CreateWidget)
+    }
+
+    pub fn last_time_update_widget(&self) -> Option<Time> {
+        self.last_time(BenchmarkItem::UpdateWidget)
+    }
+
+    pub fn last_time_layout_measure(&self) -> Option<Time> {
+        self.last_time(BenchmarkItem::LayoutMeasure)
+    }
+
+    pub fn last_time_arrange_and_render(&self) -> Option<Time> {
+        self.last_time(BenchmarkItem::ArrangeAndRender)
+    }
+
+    pub fn last_time_gpu_driven_render(&self) -> Option<Time> {
+        self.last_time(BenchmarkItem::GpuDrivenRender)
+    }
+
+    pub fn average_time(&self, item: BenchmarkItem) -> Option<Time> {
+        let buffer = &self.items[item];
+        if buffer.is_empty() {
+            return None;
+        }
+        let total_micros: u128 = buffer.iter().map(|d| d.as_micros()).sum();
+        let avg_micros = total_micros / (buffer.len() as u128);
+        Some(Time::from_micros(avg_micros))
+    }
+
+    pub fn average_time_create_dom(&self) -> Option<Time> {
+        self.average_time(BenchmarkItem::CreateDom)
+    }
+
+    pub fn average_time_create_widget(&self) -> Option<Time> {
+        self.average_time(BenchmarkItem::CreateWidget)
+    }
+
+    pub fn average_time_update_widget(&self) -> Option<Time> {
+        self.average_time(BenchmarkItem::UpdateWidget)
+    }
+
+    pub fn average_time_layout_measure(&self) -> Option<Time> {
+        self.average_time(BenchmarkItem::LayoutMeasure)
+    }
+
+    pub fn average_time_arrange_and_render(&self) -> Option<Time> {
+        self.average_time(BenchmarkItem::ArrangeAndRender)
+    }
+
+    pub fn average_time_gpu_driven_render(&self) -> Option<Time> {
+        self.average_time(BenchmarkItem::GpuDrivenRender)
+    }
+}
+
+impl Benchmark {
+    pub fn print(&self) {
+        print!("Benchmarks: ");
+        for &item in BenchmarkItem::all() {
+            print!(
+                "| {}: last {}, avr {} ",
+                item.print_names(),
+                self.last_time(item)
+                    .map(|t| t.to_string())
+                    .unwrap_or("-".to_string()),
+                self.average_time(item)
+                    .map(|t| t.to_string())
+                    .unwrap_or("-".to_string())
+            );
         }
     }
 }
@@ -77,6 +208,18 @@ pub enum Time {
     Second(u32),
     Millisecond(u32),
     Microsecond(u32),
+}
+
+impl Time {
+    pub fn from_micros(micros: u128) -> Self {
+        if micros <= 10_000 {
+            Time::Microsecond(micros as u32)
+        } else if micros <= 10_000_000 {
+            Time::Millisecond((micros / 1_000) as u32)
+        } else {
+            Time::Second((micros / 1_000_000) as u32)
+        }
+    }
 }
 
 impl std::fmt::Display for Time {

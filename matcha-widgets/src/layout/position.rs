@@ -83,12 +83,6 @@ impl<T: Send + 'static> Dom<T> for Position<T> {
             },
         ))
     }
-
-    async fn set_update_notifier(&self, notifier: &UpdateNotifier) {
-        if let Some(content) = &self.content {
-            content.set_update_notifier(notifier).await;
-        }
-    }
 }
 
 // MARK: Widget

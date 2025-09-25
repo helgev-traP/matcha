@@ -37,11 +37,6 @@ impl<E: Send + 'static> Dom<E> for Template {
             },
         ))
     }
-
-    async fn set_update_notifier(&self, _notifier: &UpdateNotifier) {
-        // If your widget has any child widgets,
-        // you should propagate the notifier to them.
-    }
 }
 
 // MARK: Widget

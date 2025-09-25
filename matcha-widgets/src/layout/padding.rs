@@ -90,12 +90,6 @@ where
             },
         ))
     }
-
-    async fn set_update_notifier(&self, notifier: &UpdateNotifier) {
-        if let Some(content) = &self.content {
-            content.set_update_notifier(notifier).await;
-        }
-    }
 }
 
 pub struct PaddingNode {
