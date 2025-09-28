@@ -261,7 +261,7 @@ impl<T: Send + Sync + 'static> Widget<Button<T>, T, ()> for ButtonNode<T> {
                 }
             }
 
-            let content_node = content.render(arrangement.size, background, ctx);
+            let content_node = content.render(background, ctx);
             render_node.push_child(content_node, arrangement.affine);
         }
 

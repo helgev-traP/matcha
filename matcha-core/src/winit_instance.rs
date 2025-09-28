@@ -1,10 +1,9 @@
 use std::fmt::Debug;
+use thiserror::Error;
 
 use crate::{any_resource::AnyResource, backend::Backend, ui};
 
 // MARK: modules
-
-pub mod error;
 
 mod benchmark;
 mod builder;
@@ -102,7 +101,7 @@ impl<
     InnerEvent: 'static,
 > WinitInstance<Model, Message, B, Event, InnerEvent>
 {
-    fn render(&mut self, force: bool) -> Result<(), error::RenderError> {
+    fn render(&mut self, force: bool) -> Result<(), RenderError> {
         // Check if the UI needs to be re-rendered before getting the surface texture
         if !self.ui_control.needs_render() && !force {
             return Ok(());
@@ -111,7 +110,7 @@ impl<
         let surface_texture =
             self.window
                 .get_current_texture()
-                .ok_or(error::RenderError::WindowSurface(
+                .ok_or(RenderError::WindowSurface(
                     "Failed to get current texture",
                 ))??;
 
@@ -145,7 +144,7 @@ impl<
         let size = [size.width as f32, size.height as f32];
 
         self.benchmarker
-            .with_gpu_driven_render(|| -> Result<(), error::RenderError> {
+            .with_gpu_driven_render(|| -> Result<(), RenderError> {
                 self.render_control
                     .render(
                         &object,
@@ -155,7 +154,7 @@ impl<
                             .format()
                             .expect("Surface must be configured when render is called"),
                     )
-                    .map_err(error::RenderError::Render)?;
+                    .map_err(RenderError::Render)?;
 
                 Ok(())
             })?;
@@ -180,7 +179,7 @@ impl<
     fn try_render(&mut self, force: bool) {
         if let Err(e) = self.render(force) {
             match e {
-                error::RenderError::Surface(
+                RenderError::Surface(
                     wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated,
                 ) => {
                     // reconfigure the surface
@@ -354,4 +353,26 @@ impl<
     fn memory_warning(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         let _ = event_loop;
     }
+}
+
+#[derive(Debug, Error)]
+pub enum InitError {
+    #[error("Failed to initialize tokio runtime")]
+    TokioRuntime,
+    #[error("Failed to initialize GPU")]
+    Gpu,
+    #[error(transparent)]
+    UiControl(#[from] ui_control::UiControlError),
+    #[error(transparent)]
+    WindowSurface(#[from] window_surface::WindowSurfaceError),
+}
+
+#[derive(Debug, Error)]
+pub enum RenderError {
+    #[error("Window surface error: {0}")]
+    WindowSurface(&'static str),
+    #[error(transparent)]
+    Surface(#[from] wgpu::SurfaceError),
+    #[error(transparent)]
+    Render(#[from] render_control::RenderControlError),
 }

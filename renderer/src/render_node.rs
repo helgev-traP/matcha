@@ -10,7 +10,7 @@ use gpu_utils::texture_atlas;
 /// The RenderNode stores textures, stencil information, and child elements along with
 /// per-node transform matrices. Transforms are applied by the renderer when generating GPU
 /// draw calls.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RenderNode {
     texture_and_position: Option<(texture_atlas::AtlasRegion, nalgebra::Matrix4<f32>)>,
     stencil_and_position: Option<(texture_atlas::AtlasRegion, nalgebra::Matrix4<f32>)>,

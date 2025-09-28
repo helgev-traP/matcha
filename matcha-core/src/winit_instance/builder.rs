@@ -7,9 +7,8 @@ use crate::{
     color::Color,
     device_input::mouse_state::MousePrimaryButton,
     ui,
-    ui::Component,
     winit_instance::{
-        AnyResource, WinitInstance, error, render_control, ticker, ui_control, window_surface,
+        AnyResource, InitError, WinitInstance, render_control, ticker, ui_control, window_surface,
     },
 };
 
@@ -38,7 +37,7 @@ pub struct WinitInstanceBuilder<
     Event: Send + 'static,
     InnerEvent: 'static = Event,
 > {
-    pub(crate) component: Component<Model, Message, Event, InnerEvent>,
+    pub(crate) component: ui::Component<Model, Message, Event, InnerEvent>,
     pub(crate) backend: B,
     pub(crate) runtime_builder: RuntimeBuilder,
     // window settings
@@ -95,7 +94,7 @@ impl<
     InnerEvent: 'static,
 > WinitInstanceBuilder<Model, Message, B, Event, InnerEvent>
 {
-    pub fn new(component: Component<Model, Message, Event, InnerEvent>, backend: B) -> Self {
+    pub fn new(component: ui::Component<Model, Message, Event, InnerEvent>, backend: B) -> Self {
         let threads = std::thread::available_parallelism().map_or(1, |n| n.get());
         Self {
             component,
@@ -190,13 +189,11 @@ impl<
 
     // --- Build ---
 
-    pub fn build(
-        self,
-    ) -> Result<WinitInstance<Model, Message, B, Event, InnerEvent>, error::InitError> {
+    pub fn build(self) -> Result<WinitInstance<Model, Message, B, Event, InnerEvent>, InitError> {
         let tokio_runtime = self
             .runtime_builder
             .build()
-            .map_err(|_| error::InitError::TokioRuntime)?;
+            .map_err(|_| InitError::TokioRuntime)?;
 
         let render_control = tokio_runtime
             .block_on(render_control::RenderControl::new(
@@ -205,7 +202,7 @@ impl<
                 COLOR_FORMAT,
                 STENCIL_FORMAT,
             ))
-            .map_err(|_| error::InitError::Gpu)?;
+            .map_err(|_| InitError::Gpu)?;
 
         let ui_control = ui_control::UiControl::new(
             self.component,

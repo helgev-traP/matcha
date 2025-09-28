@@ -203,7 +203,7 @@ impl<T: Send + Sync + 'static> Widget<Plain<T>, T, ()> for PlainNode<T> {
         }
 
         if let Some((child, _, arrangement)) = children.first() {
-            let child_node = child.render(arrangement.size, background, ctx);
+            let child_node = child.render(background, ctx);
             render_node.push_child(child_node, arrangement.affine);
         }
 

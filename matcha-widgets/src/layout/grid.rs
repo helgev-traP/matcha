@@ -296,7 +296,7 @@ where
         let mut render_node = RenderNode::new();
 
         for (child, _, arrangement) in children {
-            let child_node = child.render(arrangement.size, background, ctx);
+            let child_node = child.render(background, ctx);
             render_node = render_node.add_child(child_node, arrangement.affine);
         }
 

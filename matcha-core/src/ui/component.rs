@@ -3,6 +3,7 @@ use std::{
     sync::{Arc, atomic::AtomicBool},
 };
 
+use renderer::RenderNode;
 use tokio::sync::{Mutex, RwLock, RwLockReadGuard};
 use utils::back_prop_dirty::BackPropDirty;
 
@@ -11,7 +12,7 @@ use crate::{
     metrics::Constraints,
     ui::{
         AnyWidget, AnyWidgetFrame, ApplicationHandler, Background, Dom, UpdateWidgetError,
-        WidgetContext, widget::AnyWidgetFramePrivate,
+        WidgetContext,
     },
     update_flag::UpdateNotifier,
 };
@@ -308,19 +309,10 @@ impl<Model: Send + Sync + 'static, Event: 'static, InnerEvent: 'static> AnyWidge
 
     fn render(
         &self,
-        bounds: [f32; 2],
         background: Background,
         ctx: &WidgetContext,
-    ) -> renderer::render_node::RenderNode {
-        self.widget_tree.render(bounds, background, ctx)
-    }
-}
-
-impl<Model: Send + Sync + 'static, Event: 'static, InnerEvent: 'static> AnyWidgetFramePrivate
-    for ComponentWidget<Model, Event, InnerEvent>
-{
-    fn arrange(&self, bounds: [f32; 2], ctx: &WidgetContext) {
-        self.widget_tree.arrange(bounds, ctx)
+    ) -> RenderNode {
+        self.widget_tree.render(background, ctx)
     }
 }
 
@@ -357,6 +349,10 @@ impl<Model: Send + Sync + 'static, Event: 'static, InnerEvent: 'static> AnyWidge
             .set_update_notifier(notifier)
             .await;
         self.widget_tree.set_model_update_notifier(notifier).await;
+    }
+
+    fn arrange(&self, bounds: [f32; 2], ctx: &WidgetContext) {
+        self.widget_tree.arrange(bounds, ctx)
     }
 
     fn update_dirty_flags(&mut self, rearrange_flags: BackPropDirty, redraw_flags: BackPropDirty) {

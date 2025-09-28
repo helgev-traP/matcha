@@ -52,6 +52,15 @@ impl From<QSize> for [f32; 2] {
     }
 }
 
+impl From<&QSize> for [f32; 2] {
+    fn from(key: &QSize) -> Self {
+        [
+            key.0[0] as f32 / SUB_PIXEL_QUANTIZE,
+            key.0[1] as f32 / SUB_PIXEL_QUANTIZE,
+        ]
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct QRect {
     origin: [i32; 2],

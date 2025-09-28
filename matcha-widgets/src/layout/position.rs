@@ -242,7 +242,7 @@ impl<T: Send + 'static> Widget<Position<T>, T, ()> for PositionNode {
         if let Some((child, _, arrangement)) = children.first() {
             let affine = arrangement.affine;
 
-            let child_node = child.render(arrangement.size, background, ctx);
+            let child_node = child.render(background, ctx);
 
             return RenderNode::new().add_child(child_node, affine);
         }

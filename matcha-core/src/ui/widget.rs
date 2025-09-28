@@ -44,11 +44,6 @@ impl<'a> InvalidationHandle<'a> {
     }
 }
 
-pub struct ArrangementTree {
-    pub arrangement: Arrangement,
-    pub children: Vec<ArrangementTree>,
-}
-
 #[async_trait::async_trait]
 pub trait Dom<E>: Send + Sync + Any {
     /// Builds the corresponding stateful `Widget` tree from this `Dom` node.
@@ -128,15 +123,7 @@ pub trait AnyWidget<E: 'static> {
 
     fn measure(&self, constraints: &Constraints, ctx: &WidgetContext) -> [f32; 2];
 
-    fn render(&self, bounds: [f32; 2], background: Background, ctx: &WidgetContext) -> RenderNode;
-}
-
-/// Make it impossible to call arrange from outside the widget frame.
-/// Ensure render() will be called after arrange() in this module.
-///
-/// Publish this trait to `super` to allow components can implement it.
-pub(super) trait AnyWidgetFramePrivate {
-    fn arrange(&self, bounds: [f32; 2], ctx: &WidgetContext);
+    fn render(&self, background: Background, ctx: &WidgetContext) -> RenderNode;
 }
 
 /// Methods that Widget implementor should not use.
@@ -145,9 +132,7 @@ pub(super) trait AnyWidgetFramePrivate {
 // AnyWidgetFrame for arbitrary types.
 #[allow(private_bounds)]
 #[async_trait::async_trait]
-pub trait AnyWidgetFrame<E: 'static>:
-    AnyWidget<E> + AnyWidgetFramePrivate + std::any::Any + Send + Sync
-{
+pub trait AnyWidgetFrame<E: 'static>: AnyWidget<E> + std::any::Any + Send + Sync {
     fn label(&self) -> Option<&str>;
 
     fn need_redraw(&self) -> bool;
@@ -155,6 +140,8 @@ pub trait AnyWidgetFrame<E: 'static>:
     async fn update_widget_tree(&mut self, dom: &dyn Dom<E>) -> Result<(), UpdateWidgetError>;
 
     async fn set_model_update_notifier(&self, notifier: &UpdateNotifier);
+
+    fn arrange(&self, bounds: [f32; 2], ctx: &WidgetContext);
 
     /// This method must be called before `Widget::device_event`, `Widget::is_inside`, `Widget::measure`, and `Widget::arrange`.
     fn update_dirty_flags(&mut self, rearrange_flags: BackPropDirty, redraw_flags: BackPropDirty);
@@ -207,6 +194,8 @@ struct WidgetFrameCache {
     measure: Cache<Constraints, [f32; 2]>,
     /// cache the output of layout method.
     layout: Cache<QSize, Vec<Arrangement>>,
+    /// cache the output of render method.
+    render: Cache<QSize, RenderNode>,
 }
 
 impl<D, W, E, ChildSetting> WidgetFrame<D, W, E, ChildSetting>
@@ -230,6 +219,7 @@ where
             cache: Mutex::new(WidgetFrameCache {
                 measure: Cache::new(),
                 layout: Cache::new(),
+                render: Cache::new(),
             }),
             widget_impl,
             _dom_type: std::marker::PhantomData,
@@ -349,46 +339,49 @@ where
             cache.layout.clear();
         }
 
-        let children = self
-            .children
-            .iter()
-            .map(|(child, setting)| (&**child as &dyn AnyWidget<T>, setting))
-            .collect::<Vec<_>>();
-
         let (_, size) = cache.measure.get_or_insert_with(*constraints, || {
+            let children = self
+                .children
+                .iter()
+                .map(|(child, setting)| (&**child as &dyn AnyWidget<T>, setting))
+                .collect::<Vec<_>>();
+
             self.widget_impl.measure(constraints, &children, ctx)
         });
 
         *size
     }
 
-    fn render(&self, bounds: [f32; 2], background: Background, ctx: &WidgetContext) -> RenderNode {
+    fn render(&self, background: Background, ctx: &WidgetContext) -> RenderNode { // todo: add error type
         let Some(dirty_flags) = &self.dirty_flags else {
-            return RenderNode::default();
+            return RenderNode::new();
         };
 
-        // arrange must be called before locking the cache to avoid deadlocks.
-        self.arrange(bounds, ctx);
+        let cache = &mut *self.cache.lock();
 
-        let cache = self.cache.lock();
-        let (_, arrangement) = cache.layout.get().expect("infallible: arrange just called");
+        let Some((q_size, arrangement)) = cache.layout.get() else {
+            return RenderNode::new();
+        };
+        let bounds: [f32; 2] = q_size.into();
 
-        let children = self
-            .children
-            .iter()
-            .map(|(child, setting)| (&**child as &dyn AnyWidget<T>, setting))
-            .collect::<Vec<_>>();
-
-        let node = self.widget_impl.render(
-            bounds,
-            &children
+        let (_, node) = cache.render.get_or_insert_with(QSize::from(bounds), || {
+            let children = self
+                .children
                 .iter()
-                .zip(arrangement)
-                .map(|((c, s), a)| (*c, *s, a))
-                .collect::<Vec<_>>(),
-            background,
-            ctx,
-        );
+                .map(|(child, setting)| (&**child as &dyn AnyWidget<T>, setting))
+                .collect::<Vec<_>>();
+
+            self.widget_impl.render(
+                bounds,
+                &children
+                    .iter()
+                    .zip(arrangement)
+                    .map(|((c, s), a)| (*c, *s, a))
+                    .collect::<Vec<_>>(),
+                background,
+                ctx,
+            )
+        });
 
         // BUGFIX / SPEC:
         // Redraw flag consumption happens AFTER a successful render pass.
@@ -403,43 +396,7 @@ where
         let _ = dirty_flags.need_rearrange.take_dirty();
         let _ = dirty_flags.need_redraw.take_dirty();
 
-        node
-    }
-}
-
-impl<D, W, T, ChildSetting> AnyWidgetFramePrivate for WidgetFrame<D, W, T, ChildSetting>
-where
-    D: Dom<T> + Send + Sync + 'static,
-    W: Widget<D, T, ChildSetting> + Send + Sync + 'static,
-    T: 'static,
-    ChildSetting: Send + Sync + PartialEq + Clone + 'static,
-{
-    fn arrange(&self, bounds: [f32; 2], ctx: &WidgetContext) {
-        let Some(dirty_flags) = &self.dirty_flags else {
-            return;
-        };
-
-        let mut cache = self.cache.lock();
-
-        if dirty_flags.need_rearrange.take_dirty() {
-            // arrangement changed, need to redraw
-            cache.measure.clear();
-            cache.layout.clear();
-        }
-        cache.layout.get_or_insert_with(QSize::from(bounds), || {
-            // calc arrangement
-            let children = self
-                .children
-                .iter()
-                .map(|(child, setting)| (&**child as &dyn AnyWidget<T>, setting))
-                .collect::<Vec<_>>();
-            let arrangement = self.widget_impl.arrange(bounds, &children, ctx);
-            // update child arrangements
-            for ((child, _), arrangement) in self.children.iter().zip(arrangement.iter()) {
-                child.arrange(arrangement.size, ctx);
-            }
-            arrangement
-        });
+        node.clone()
     }
 }
 
@@ -565,6 +522,34 @@ where
         for (child, _) in &self.children {
             child.set_model_update_notifier(notifier).await;
         }
+    }
+
+    fn arrange(&self, bounds: [f32; 2], ctx: &WidgetContext) {
+        let Some(dirty_flags) = &self.dirty_flags else {
+            return;
+        };
+
+        let mut cache = self.cache.lock();
+
+        if dirty_flags.need_rearrange.take_dirty() {
+            // arrangement changed, need to redraw
+            cache.measure.clear();
+            cache.layout.clear();
+        }
+        cache.layout.get_or_insert_with(QSize::from(bounds), || {
+            // calc arrangement
+            let children = self
+                .children
+                .iter()
+                .map(|(child, setting)| (&**child as &dyn AnyWidget<T>, setting))
+                .collect::<Vec<_>>();
+            let arrangement = self.widget_impl.arrange(bounds, &children, ctx);
+            // update child arrangements
+            for ((child, _), arrangement) in self.children.iter().zip(arrangement.iter()) {
+                child.arrange(arrangement.size, ctx);
+            }
+            arrangement
+        });
     }
 
     fn update_dirty_flags(&mut self, rearrange_flags: BackPropDirty, redraw_flags: BackPropDirty) {
@@ -1292,7 +1277,8 @@ mod tests {
         // 2. Call render, which should consume the dirty flags.
         let texture_view = MaybeUninit::<wgpu::TextureView>::uninit();
         let background = Background::new(unsafe { texture_view.assume_init_ref() }, [0.0, 0.0]);
-        let _ = widget_frame.render([100.0, 100.0], background, &ctx);
+        widget_frame.arrange([800.0, 600.0], &ctx);
+        let _ = widget_frame.render(background, &ctx);
 
         // 3. Verify that the redraw flag is now false.
         assert!(
@@ -1301,7 +1287,8 @@ mod tests {
         );
 
         // 4. Verify that another render call does not change the state (flag remains false).
-        let _ = widget_frame.render([100.0, 100.0], background, &ctx);
+        widget_frame.arrange([800.0, 600.0], &ctx);
+        let _ = widget_frame.render(background, &ctx);
         assert!(
             !widget_frame.need_redraw(),
             "Redraw flag should remain false after a second render"

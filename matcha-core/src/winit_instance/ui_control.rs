@@ -192,7 +192,8 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
             preferred_size[1].clamp(0.0, viewport_size[1]),
         ];
 
-        benchmark.with_arrange_and_render(|| widget.render(final_size, background, ctx))
+        benchmark.with_layout_arrange(|| widget.arrange(final_size, ctx));
+        benchmark.with_widget_render(|| widget.render(background, ctx))
     }
 
     fn convert_winit_to_window_event(

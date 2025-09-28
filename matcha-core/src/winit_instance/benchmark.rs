@@ -15,7 +15,8 @@ pub enum BenchmarkItem {
     CreateWidget,
     UpdateWidget,
     LayoutMeasure,
-    ArrangeAndRender,
+    LayoutArrange,
+    WidgetRender,
     GpuDrivenRender,
 }
 
@@ -25,7 +26,8 @@ impl BenchmarkItem {
             BenchmarkItem::CreateDom,
             BenchmarkItem::UpdateWidget,
             BenchmarkItem::LayoutMeasure,
-            BenchmarkItem::ArrangeAndRender,
+            BenchmarkItem::LayoutArrange,
+            BenchmarkItem::WidgetRender,
             BenchmarkItem::GpuDrivenRender,
         ]
     }
@@ -36,7 +38,8 @@ impl BenchmarkItem {
             BenchmarkItem::CreateWidget => "Create Widget",
             BenchmarkItem::UpdateWidget => "Update Widget",
             BenchmarkItem::LayoutMeasure => "Layout Measure",
-            BenchmarkItem::ArrangeAndRender => "Arrange and Render",
+            BenchmarkItem::LayoutArrange => "Layout Arrange",
+            BenchmarkItem::WidgetRender => "Widget Render",
             BenchmarkItem::GpuDrivenRender => "GPU Driven Render",
         }
     }
@@ -50,7 +53,8 @@ impl Benchmark {
                 BenchmarkItem::CreateWidget => VecDeque::with_capacity(capacity),
                 BenchmarkItem::UpdateWidget => VecDeque::with_capacity(capacity),
                 BenchmarkItem::LayoutMeasure => VecDeque::with_capacity(capacity),
-                BenchmarkItem::ArrangeAndRender => VecDeque::with_capacity(capacity),
+                BenchmarkItem::LayoutArrange => VecDeque::with_capacity(capacity),
+                BenchmarkItem::WidgetRender => VecDeque::with_capacity(capacity),
                 BenchmarkItem::GpuDrivenRender => VecDeque::with_capacity(capacity),
             },
             capacity,
@@ -111,8 +115,12 @@ impl Benchmark {
         self.with(BenchmarkItem::LayoutMeasure, f)
     }
 
-    pub fn with_arrange_and_render<R>(&mut self, f: impl FnOnce() -> R) -> R {
-        self.with(BenchmarkItem::ArrangeAndRender, f)
+    pub fn with_layout_arrange<R>(&mut self, f: impl FnOnce() -> R) -> R {
+        self.with(BenchmarkItem::LayoutArrange, f)
+    }
+
+    pub fn with_widget_render<R>(&mut self, f: impl FnOnce() -> R) -> R {
+        self.with(BenchmarkItem::WidgetRender, f)
     }
 
     pub fn with_gpu_driven_render<R>(&mut self, f: impl FnOnce() -> R) -> R {
@@ -143,8 +151,12 @@ impl Benchmark {
         self.last_time(BenchmarkItem::LayoutMeasure)
     }
 
-    pub fn last_time_arrange_and_render(&self) -> Option<Time> {
-        self.last_time(BenchmarkItem::ArrangeAndRender)
+    pub fn last_time_layout_arrange(&self) -> Option<Time> {
+        self.last_time(BenchmarkItem::LayoutArrange)
+    }
+
+    pub fn last_time_widget_render(&self) -> Option<Time> {
+        self.last_time(BenchmarkItem::WidgetRender)
     }
 
     pub fn last_time_gpu_driven_render(&self) -> Option<Time> {
@@ -177,8 +189,12 @@ impl Benchmark {
         self.average_time(BenchmarkItem::LayoutMeasure)
     }
 
-    pub fn average_time_arrange_and_render(&self) -> Option<Time> {
-        self.average_time(BenchmarkItem::ArrangeAndRender)
+    pub fn average_time_layout_arrange(&self) -> Option<Time> {
+        self.average_time(BenchmarkItem::LayoutArrange)
+    }
+
+    pub fn average_time_widget_render(&self) -> Option<Time> {
+        self.average_time(BenchmarkItem::WidgetRender)
     }
 
     pub fn average_time_gpu_driven_render(&self) -> Option<Time> {
