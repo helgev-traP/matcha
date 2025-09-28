@@ -1,5 +1,3 @@
-use winit::event_loop;
-
 use super::{
     backend::{Backend, StubBackend},
     color::Color,
@@ -137,6 +135,36 @@ where
 
     pub fn default_font_size(mut self, size: f32) -> Self {
         self.builder = self.builder.default_font_size(size);
+        self
+    }
+
+    /// Inject a shared DebugConfig instance.
+    pub fn debug_config(mut self, cfg: crate::debug_config::SharedDebugConfig) -> Self {
+        self.builder = self.builder.debug_config(cfg);
+        self
+    }
+
+    /// Convenience wrapper to toggle measure cache disabling.
+    pub fn disable_layout_measure_cache(mut self, v: bool) -> Self {
+        self.builder = self.builder.disable_layout_measure_cache(v);
+        self
+    }
+
+    /// Convenience wrapper to toggle arrange cache disabling.
+    pub fn disable_layout_arrange_cache(mut self, v: bool) -> Self {
+        self.builder = self.builder.disable_layout_arrange_cache(v);
+        self
+    }
+
+    /// Convenience wrapper to toggle rendernode cache disabling.
+    pub fn disable_rendernode_cache(mut self, v: bool) -> Self {
+        self.builder = self.builder.disable_rendernode_cache(v);
+        self
+    }
+
+    /// Convenience wrapper to toggle widget-level cache disabling.
+    pub fn always_rebuild_widget(mut self, v: bool) -> Self {
+        self.builder = self.builder.always_rebuild_widget(v);
         self
     }
 

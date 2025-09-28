@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 use thiserror::Error;
 
-use crate::{any_resource::AnyResource, backend::Backend, ui};
+use crate::{any_resource::AnyResource, backend::Backend, debug_config::SharedDebugConfig, ui};
 
 // MARK: modules
 
@@ -30,6 +30,7 @@ pub struct WinitInstance<
     surface_preferred_format: wgpu::TextureFormat,
     // --- rendering context ---
     any_resource: AnyResource,
+    debug_config: SharedDebugConfig,
     // --- render control ---
     render_control: render_control::RenderControl,
     // --- UI control ---
@@ -73,6 +74,7 @@ fn create_widget_context<
     render_control: &'a render_control::RenderControl,
     ui_control: &ui_control::UiControl<Model, Message, Event, InnerEvent>,
     any_resource: &'a AnyResource,
+    debug_config: SharedDebugConfig,
     current_time: std::time::Duration,
 ) -> Option<ui::WidgetContext<'a>> {
     let size = window.inner_size()?;
@@ -89,6 +91,7 @@ fn create_widget_context<
         render_control.texture_allocator(),
         any_resource,
         ui_control.default_font_size(),
+        debug_config,
         current_time,
     ))
 }
@@ -107,12 +110,10 @@ impl<
             return Ok(());
         }
 
-        let surface_texture =
-            self.window
-                .get_current_texture()
-                .ok_or(RenderError::WindowSurface(
-                    "Failed to get current texture",
-                ))??;
+        let surface_texture = self
+            .window
+            .get_current_texture()
+            .ok_or(RenderError::WindowSurface("Failed to get current texture"))??;
 
         let target_view = surface_texture
             .texture
@@ -123,6 +124,7 @@ impl<
             &self.render_control,
             &self.ui_control,
             &self.any_resource,
+            self.debug_config.clone(),
             self.ticker.current_time(),
         )
         .expect("Window must exist when render is called, as it is only called after resumed");
@@ -179,9 +181,7 @@ impl<
     fn try_render(&mut self, force: bool) {
         if let Err(e) = self.render(force) {
             match e {
-                RenderError::Surface(
-                    wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated,
-                ) => {
+                RenderError::Surface(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
                     // reconfigure the surface
                     let size = self
                         .window
@@ -270,6 +270,7 @@ impl<
             &self.render_control,
             &self.ui_control,
             &self.any_resource,
+            self.debug_config.clone(),
             self.ticker.current_time(),
         ) else {
             return;

@@ -1,6 +1,8 @@
 use std::time::Duration;
 
-use crate::{any_resource::AnyResource, gpu::DeviceQueue, texture_allocator};
+use crate::{
+    any_resource::AnyResource, debug_config::SharedDebugConfig, gpu::DeviceQueue, texture_allocator,
+};
 
 /// Provides contextual information available to all widgets during their lifecycle.
 ///
@@ -16,11 +18,12 @@ pub struct WidgetContext<'a> {
     any_resource: &'a AnyResource,
     root_font_size: f32,
     font_size: f32,
+    debug_config: SharedDebugConfig,
     current_time: Duration,
 }
 
 impl<'a> WidgetContext<'a> {
-    pub(crate) const fn new(
+    pub(crate) fn new(
         device_queue: DeviceQueue<'a>,
         surface_format: wgpu::TextureFormat,
         window_size: [f32; 2],
@@ -28,6 +31,7 @@ impl<'a> WidgetContext<'a> {
         texture_atlas: &'a texture_allocator::TextureAllocator,
         any_resource: &'a AnyResource,
         root_font_size: f32,
+        debug_config: SharedDebugConfig,
         current_time: Duration,
     ) -> Self {
         Self {
@@ -39,6 +43,7 @@ impl<'a> WidgetContext<'a> {
             any_resource,
             root_font_size,
             font_size: root_font_size,
+            debug_config,
             current_time,
         }
     }
@@ -92,6 +97,11 @@ impl<'a> WidgetContext<'a> {
     pub fn current_time(&self) -> Duration {
         self.current_time
     }
+
+    /// Returns a clone of the shared debug config.
+    pub fn debug_config(&self) -> SharedDebugConfig {
+        self.debug_config.clone()
+    }
 }
 
 impl WidgetContext<'_> {
@@ -108,7 +118,7 @@ impl WidgetContext<'_> {
 
 impl WidgetContext<'_> {
     /// Creates a new context with a different font size.
-    pub const fn with_font_size(&self, font_size: f32) -> Self {
+    pub fn with_font_size(&self, font_size: f32) -> Self {
         Self {
             device_queue: self.device_queue,
             surface_format: self.surface_format,
@@ -118,6 +128,7 @@ impl WidgetContext<'_> {
             any_resource: self.any_resource,
             root_font_size: self.root_font_size,
             font_size,
+            debug_config: self.debug_config.clone(),
             current_time: self.current_time,
         }
     }

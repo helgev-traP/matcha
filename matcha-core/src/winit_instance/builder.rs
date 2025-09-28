@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+use crate::debug_config::{DebugConfig, SharedDebugConfig};
+use std::sync::Arc;
 use winit::dpi::PhysicalSize;
 
 use crate::{
@@ -56,6 +58,8 @@ pub struct WinitInstanceBuilder<
     pub(crate) scroll_pixel_per_line: f32,
     // font settings
     pub(crate) default_font_size: f32,
+    // debug / profiling config
+    pub(crate) debug_config: SharedDebugConfig,
 }
 
 pub(crate) enum RuntimeBuilder {
@@ -112,6 +116,7 @@ impl<
             mouse_primary_button: MOUSE_PRIMARY_BUTTON,
             scroll_pixel_per_line: SCROLL_PIXEL_PER_LINE,
             default_font_size: DEFAULT_FONT_SIZE,
+            debug_config: Arc::new(DebugConfig::default()),
         }
     }
 
@@ -187,6 +192,36 @@ impl<
         self
     }
 
+    /// Provide a shared DebugConfig instance to the builder.
+    pub fn debug_config(mut self, cfg: SharedDebugConfig) -> Self {
+        self.debug_config = cfg;
+        self
+    }
+
+    /// Convenience: toggle measure cache disabling.
+    pub fn disable_layout_measure_cache(self, v: bool) -> Self {
+        self.debug_config.set_disable_layout_measure_cache(v);
+        self
+    }
+
+    /// Convenience: toggle arrange cache disabling.
+    pub fn disable_layout_arrange_cache(self, v: bool) -> Self {
+        self.debug_config.set_disable_layout_arrange_cache(v);
+        self
+    }
+
+    /// Convenience: toggle render node cache disabling.
+    pub fn disable_rendernode_cache(self, v: bool) -> Self {
+        self.debug_config.set_disable_rendernode_cache(v);
+        self
+    }
+
+    /// Convenience: toggle widget-level cache disabling.
+    pub fn always_rebuild_widget(self, v: bool) -> Self {
+        self.debug_config.set_always_rebuild_widget(v);
+        self
+    }
+
     // --- Build ---
 
     pub fn build(self) -> Result<WinitInstance<Model, Message, B, Event, InnerEvent>, InitError> {
@@ -226,6 +261,7 @@ impl<
             window,
             surface_preferred_format: self.surface_preferred_format,
             any_resource: AnyResource::new(),
+            debug_config: self.debug_config.clone(),
             render_control,
             ui_control,
             app_handler: ui::ApplicationHandler::new(),

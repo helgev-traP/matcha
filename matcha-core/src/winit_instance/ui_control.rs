@@ -151,7 +151,9 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
         if self.widget.is_none() {
             // directly build widget tree from dom
             let dom = benchmark.with_create_dom(self.component.view()).await;
-            let widget = self.widget.insert(benchmark.with_create_widget(|| dom.build_widget_tree()));
+            let widget = self
+                .widget
+                .insert(benchmark.with_create_widget(|| dom.build_widget_tree()));
 
             // set model update notifier
             self.model_update_flag = UpdateFlag::new();
@@ -165,7 +167,11 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
             let dom = benchmark.with_create_dom(self.component.view()).await;
 
             if let Some(widget) = self.widget.as_mut() {
-                if benchmark.with_update_widget(widget.update_widget_tree(&*dom)).await.is_err() {
+                if benchmark
+                    .with_update_widget(widget.update_widget_tree(&*dom))
+                    .await
+                    .is_err()
+                {
                     self.widget = None;
                 }
             }

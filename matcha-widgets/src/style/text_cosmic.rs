@@ -423,7 +423,10 @@ impl Style for TextCosmic<'static> {
             TexRenderData {
                 source_texture_view: &tex.create_view(&wgpu::TextureViewDescriptor::default()),
                 source_texture_position_min: [0.0, 0.0],
-                source_texture_position_max: [cache_in_memory.size[0] as f32, cache_in_memory.size[1] as f32],
+                source_texture_position_max: [
+                    cache_in_memory.size[0] as f32,
+                    cache_in_memory.size[1] as f32,
+                ],
                 color_transformation: None,
                 color_offset: None,
             },

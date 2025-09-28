@@ -8,6 +8,8 @@ mod winit_instance;
 pub mod backend;
 pub mod ui;
 pub mod update_flag;
+// debug / profiling config
+pub mod debug_config;
 
 // winit event handling
 pub mod device_input;

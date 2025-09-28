@@ -1,10 +1,12 @@
 use std::any::Any;
+use std::sync::Arc;
 
 use parking_lot::Mutex;
 use renderer::render_node::RenderNode;
 use utils::{back_prop_dirty::BackPropDirty, cache::Cache};
 
 use crate::{
+    debug_config::DebugConfig,
     device_input::DeviceInput,
     metrics::{Arrangement, Constraints, QSize},
     ui::{ApplicationHandler, Background, WidgetContext},
@@ -339,6 +341,12 @@ where
             cache.layout.clear();
         }
 
+        // If debug requests recompute each time, clear measure entry before computing so
+        // get_or_insert_with will recompute and write into the persistent cache.
+        if ctx.debug_config().disable_layout_measure_cache() {
+            cache.measure.clear();
+        }
+
         let (_, size) = cache.measure.get_or_insert_with(*constraints, || {
             let children = self
                 .children
@@ -352,7 +360,8 @@ where
         *size
     }
 
-    fn render(&self, background: Background, ctx: &WidgetContext) -> RenderNode { // todo: add error type
+    // todo: add error type
+    fn render(&self, background: Background, ctx: &WidgetContext) -> RenderNode {
         let Some(dirty_flags) = &self.dirty_flags else {
             return RenderNode::new();
         };
@@ -364,6 +373,13 @@ where
         };
         let bounds: [f32; 2] = q_size.into();
 
+        // Decide whether to recompute render each time: if so, clear persistent render cache
+        // before get_or_insert_with so it gets recomputed and written into the cache.
+        if ctx.debug_config().disable_rendernode_cache() {
+            cache.render.clear();
+        }
+
+        // Default: use persistent render cache (possibly cleared above to force recompute).
         let (_, node) = cache.render.get_or_insert_with(QSize::from(bounds), || {
             let children = self
                 .children
@@ -383,16 +399,7 @@ where
             )
         });
 
-        // BUGFIX / SPEC:
-        // Redraw flag consumption happens AFTER a successful render pass.
-        // Contract:
-        //   - Multiple redraw requests within the same frame coalesce to a single render.
-        //   - Layout (rearrange) dirtiness is consumed earlier by measure()/arrange() paths.
-        //   - If render aborts (panic/early return in future), flag may remain set -> next frame still draws.
-        // Future optimization: switch to a generation counter (u32) if we need to record
-        // how many redraws were requested in a frame (statistics / throttling).
-        // NOTE: This intentionally _does not_ clear need_rearrange: that path is already
-        // cleared when caches are invalidated at layout time.
+        // consume flags
         let _ = dirty_flags.need_rearrange.take_dirty();
         let _ = dirty_flags.need_redraw.take_dirty();
 
@@ -536,6 +543,12 @@ where
             cache.measure.clear();
             cache.layout.clear();
         }
+
+        // If debug requests recompute each time, clear the layout entry so get_or_insert_with recomputes and writes.
+        if ctx.debug_config().disable_layout_arrange_cache() {
+            cache.layout.clear();
+        }
+
         cache.layout.get_or_insert_with(QSize::from(bounds), || {
             // calc arrangement
             let children = self
@@ -1007,6 +1020,8 @@ mod tests {
         ta: &'a TextureAllocator,
         ar: &'a AnyResource,
     ) -> WidgetContext<'a> {
+        // create a default DebugConfig for tests
+        let debug_cfg = Arc::new(DebugConfig::default());
         WidgetContext::new(
             *dq,
             wgpu::TextureFormat::Rgba8UnormSrgb,
@@ -1015,6 +1030,7 @@ mod tests {
             ta,
             ar,
             16.0,
+            debug_cfg,
             Duration::from_secs(0),
         )
     }
