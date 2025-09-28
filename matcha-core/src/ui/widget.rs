@@ -1,17 +1,18 @@
 use std::any::Any;
-use std::sync::Arc;
 
 use parking_lot::Mutex;
 use renderer::render_node::RenderNode;
+use smallvec::SmallVec;
 use utils::{back_prop_dirty::BackPropDirty, cache::Cache};
 
 use crate::{
-    debug_config::DebugConfig,
     device_input::DeviceInput,
     metrics::{Arrangement, Constraints, QSize},
     ui::{ApplicationHandler, Background, WidgetContext},
     update_flag::UpdateNotifier,
 };
+
+const SMALLVEC_INLINE_CAPACITY: usize = 16;
 
 /// Lightweight handle passed into widget update / event handlers allowing them
 /// to request layout or visual invalidation without touching internal caches.
@@ -255,26 +256,9 @@ where
 
         let actual_bounds: [f32; 2] = actual_bounds.into();
 
-        // PERF NOTE (hot path):
-        // We allocate a Vec each event to pair children with their Arrangement.
-        // For deep or high-frequency event streams (mouse move, drag), this can add pressure.
-        // Future optimization options (measured via profiler before changing):
-        //   1. smallvec::SmallVec<[(&mut dyn AnyWidget<T>, &mut ChildSetting, &Arrangement); 8]>
-        //      to stack-allocate typical small child counts.
-        //   2. Precompute a stable temporary scratch buffer reused per frame (unsafe careful).
-        //   3. Pass iterator of zipped triplets into widget_impl.device_event to let caller
-        //      iterate without intermediate collection.
-        //   4. Maintain arrangement indices and let widget_impl pull lazily.
-        // Start with SmallVec if profiling shows >5% frame time here.
-        // PERF NOTE (hit-test path):
-        // Similar allocation pattern as in device_event. See that block for optimization
-        // strategies (SmallVec / iterator API / scratch buffer reuse).
-        // Not optimized yet to keep code clarity until profiling justifies change.
-        let mut children_with_arrangement: Vec<(
-            &mut dyn AnyWidget<T>,
-            &mut ChildSetting,
-            &Arrangement,
-        )> = self
+        let mut children_with_arrangement: SmallVec<
+            [(&mut dyn AnyWidget<T>, &mut ChildSetting, &Arrangement); SMALLVEC_INLINE_CAPACITY],
+        > = self
             .children
             .iter_mut()
             .zip(arrangement.iter())
@@ -304,27 +288,17 @@ where
 
         let actual_bounds: [f32; 2] = actual_bounds.into();
 
-        // TODO: Potential performance tuning.
-        // In high-frequency events like mouse movements, the overhead of allocating this Vec on the heap
-        // for each event could become a bottleneck.
-        // Future optimizations might involve using an iterator-based API or a library like `smallvec`
-        // to avoid heap allocations.
-        let children = self
+        let children_triples: SmallVec<
+            [(&dyn AnyWidget<T>, &ChildSetting, &Arrangement); SMALLVEC_INLINE_CAPACITY],
+        > = self
             .children
             .iter()
-            .map(|(child, setting)| (&**child as &dyn AnyWidget<T>, setting))
-            .collect::<Vec<_>>();
+            .zip(arrangement)
+            .map(|((c, s), a)| (&**c as &dyn AnyWidget<T>, s, a))
+            .collect();
 
-        self.widget_impl.is_inside(
-            actual_bounds,
-            position,
-            &children
-                .iter()
-                .zip(arrangement)
-                .map(|((c, s), a)| (*c, *s, a))
-                .collect::<Vec<_>>(),
-            ctx,
-        )
+        self.widget_impl
+            .is_inside(actual_bounds, position, &children_triples, ctx)
     }
 
     fn measure(&self, constraints: &Constraints, ctx: &WidgetContext) -> [f32; 2] {
@@ -348,11 +322,11 @@ where
         }
 
         let (_, size) = cache.measure.get_or_insert_with(*constraints, || {
-            let children = self
-                .children
-                .iter()
-                .map(|(child, setting)| (&**child as &dyn AnyWidget<T>, setting))
-                .collect::<Vec<_>>();
+            let children: SmallVec<[(&dyn AnyWidget<T>, &ChildSetting); SMALLVEC_INLINE_CAPACITY]> =
+                self.children
+                    .iter()
+                    .map(|(child, setting)| (&**child as &dyn AnyWidget<T>, setting))
+                    .collect();
 
             self.widget_impl.measure(constraints, &children, ctx)
         });
@@ -381,22 +355,17 @@ where
 
         // Default: use persistent render cache (possibly cleared above to force recompute).
         let (_, node) = cache.render.get_or_insert_with(QSize::from(bounds), || {
-            let children = self
+            let children_triples: SmallVec<
+                [(&dyn AnyWidget<T>, &ChildSetting, &Arrangement); SMALLVEC_INLINE_CAPACITY],
+            > = self
                 .children
                 .iter()
-                .map(|(child, setting)| (&**child as &dyn AnyWidget<T>, setting))
-                .collect::<Vec<_>>();
+                .zip(arrangement)
+                .map(|((c, s), a)| (&**c as &dyn AnyWidget<T>, s, a))
+                .collect();
 
-            self.widget_impl.render(
-                bounds,
-                &children
-                    .iter()
-                    .zip(arrangement)
-                    .map(|((c, s), a)| (*c, *s, a))
-                    .collect::<Vec<_>>(),
-                background,
-                ctx,
-            )
+            self.widget_impl
+                .render(bounds, &children_triples, background, ctx)
         });
 
         // consume flags
@@ -551,11 +520,11 @@ where
 
         cache.layout.get_or_insert_with(QSize::from(bounds), || {
             // calc arrangement
-            let children = self
-                .children
-                .iter()
-                .map(|(child, setting)| (&**child as &dyn AnyWidget<T>, setting))
-                .collect::<Vec<_>>();
+            let children: SmallVec<[(&dyn AnyWidget<T>, &ChildSetting); SMALLVEC_INLINE_CAPACITY]> =
+                self.children
+                    .iter()
+                    .map(|(child, setting)| (&**child as &dyn AnyWidget<T>, setting))
+                    .collect();
             let arrangement = self.widget_impl.arrange(bounds, &children, ctx);
             // update child arrangements
             for ((child, _), arrangement) in self.children.iter().zip(arrangement.iter()) {
@@ -1021,7 +990,7 @@ mod tests {
         ar: &'a AnyResource,
     ) -> WidgetContext<'a> {
         // create a default DebugConfig for tests
-        let debug_cfg = Arc::new(DebugConfig::default());
+        let debug_cfg = Arc::new(crate::debug_config::DebugConfig::default());
         WidgetContext::new(
             *dq,
             wgpu::TextureFormat::Rgba8UnormSrgb,

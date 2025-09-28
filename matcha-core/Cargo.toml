@@ -35,6 +35,7 @@ bitflags = { workspace = true }
 num = { workspace = true }
 fxhash = { workspace = true }
 dashmap = { workspace = true }
+smallvec = { workspace = true }
 thiserror = { workspace = true }
 enum-map = "2.7.3"
 

@@ -55,6 +55,7 @@ bitflags = "2.6"
 num = "0.4"
 fxhash = "0.2"
 dashmap = "6.1"
+smallvec = "1.14"
 
 # cache
 # lru = "0.14.0"
