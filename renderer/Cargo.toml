@@ -12,6 +12,7 @@ gpu-utils = { workspace = true }
 moka.workspace = true
 fxhash.workspace = true
 utils = { workspace = true }
+smallvec = { workspace = true }
 
 [lints]
 workspace = true

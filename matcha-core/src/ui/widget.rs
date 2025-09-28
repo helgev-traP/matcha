@@ -1,4 +1,4 @@
-use std::any::Any;
+use std::{any::Any, sync::Arc};
 
 use parking_lot::Mutex;
 use renderer::render_node::RenderNode;
@@ -126,7 +126,7 @@ pub trait AnyWidget<E: 'static> {
 
     fn measure(&self, constraints: &Constraints, ctx: &WidgetContext) -> [f32; 2];
 
-    fn render(&self, background: Background, ctx: &WidgetContext) -> RenderNode;
+    fn render(&self, background: Background, ctx: &WidgetContext) -> Arc<RenderNode>;
 }
 
 /// Methods that Widget implementor should not use.
@@ -198,7 +198,7 @@ struct WidgetFrameCache {
     /// cache the output of layout method.
     layout: Cache<QSize, Vec<Arrangement>>,
     /// cache the output of render method.
-    render: Cache<QSize, RenderNode>,
+    render: Cache<QSize, Arc<RenderNode>>,
 }
 
 impl<D, W, E, ChildSetting> WidgetFrame<D, W, E, ChildSetting>
@@ -335,15 +335,15 @@ where
     }
 
     // todo: add error type
-    fn render(&self, background: Background, ctx: &WidgetContext) -> RenderNode {
+    fn render(&self, background: Background, ctx: &WidgetContext) -> Arc<RenderNode> {
         let Some(dirty_flags) = &self.dirty_flags else {
-            return RenderNode::new();
+            return Arc::new(RenderNode::new());
         };
 
         let cache = &mut *self.cache.lock();
 
         let Some((q_size, arrangement)) = cache.layout.get() else {
-            return RenderNode::new();
+            return Arc::new(RenderNode::new());
         };
         let bounds: [f32; 2] = q_size.into();
 
@@ -364,8 +364,10 @@ where
                 .map(|((c, s), a)| (&**c as &dyn AnyWidget<T>, s, a))
                 .collect();
 
-            self.widget_impl
-                .render(bounds, &children_triples, background, ctx)
+            Arc::new(
+                self.widget_impl
+                    .render(bounds, &children_triples, background, ctx),
+            )
         });
 
         // consume flags

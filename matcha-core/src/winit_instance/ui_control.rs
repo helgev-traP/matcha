@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use thiserror::Error;
 use utils::back_prop_dirty::BackPropDirty;
@@ -110,7 +110,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
         background: Background<'a>,
         ctx: &WidgetContext<'a>,
         benchmark: &mut super::benchmark::Benchmark,
-    ) -> RenderNode {
+    ) -> Arc<RenderNode> {
         // if self.model_update_flag.is_true() || self.widget.is_none() {
         //     // Dom update is required
         //     let dom = self.component.view().await;

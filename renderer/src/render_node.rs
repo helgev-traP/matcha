@@ -1,4 +1,8 @@
+use std::sync::Arc;
 use gpu_utils::texture_atlas;
+use smallvec::SmallVec;
+
+const SMALLVEC_INLINE_CAPACITY: usize = 16;
 
 /// Represents a render tree node that contains drawing information for the renderer.
 ///
@@ -15,7 +19,7 @@ pub struct RenderNode {
     texture_and_position: Option<(texture_atlas::AtlasRegion, nalgebra::Matrix4<f32>)>,
     stencil_and_position: Option<(texture_atlas::AtlasRegion, nalgebra::Matrix4<f32>)>,
 
-    child_elements: Vec<(RenderNode, nalgebra::Matrix4<f32>)>,
+    child_elements: SmallVec<[(Arc<RenderNode>, nalgebra::Matrix4<f32>); SMALLVEC_INLINE_CAPACITY]>,
 }
 
 impl Default for RenderNode {
@@ -29,7 +33,7 @@ impl RenderNode {
         Self {
             texture_and_position: None,
             stencil_and_position: None,
-            child_elements: Vec::new(),
+            child_elements: SmallVec::new(),
         }
     }
 
@@ -41,7 +45,7 @@ impl RenderNode {
         self.stencil_and_position.as_ref()
     }
 
-    pub(crate) fn child_elements(&self) -> &[(RenderNode, nalgebra::Matrix4<f32>)] {
+    pub(crate) fn child_elements(&self) -> &[(Arc<RenderNode>, nalgebra::Matrix4<f32>)] {
         &self.child_elements
     }
 
@@ -75,12 +79,20 @@ impl RenderNode {
         self
     }
 
-    pub fn push_child(&mut self, child: RenderNode, transform: nalgebra::Matrix4<f32>) {
-        self.child_elements.push((child, transform));
+    pub fn push_child(
+        &mut self,
+        child: impl Into<Arc<RenderNode>>,
+        transform: nalgebra::Matrix4<f32>,
+    ) {
+        self.child_elements.push((child.into(), transform));
     }
 
-    pub fn add_child(mut self, child: RenderNode, transform: nalgebra::Matrix4<f32>) -> Self {
-        self.child_elements.push((child, transform));
+    pub fn add_child(
+        mut self,
+        child: impl Into<Arc<RenderNode>>,
+        transform: nalgebra::Matrix4<f32>,
+    ) -> Self {
+        self.child_elements.push((child.into(), transform));
         self
     }
 }

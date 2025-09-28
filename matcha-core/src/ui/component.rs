@@ -307,7 +307,7 @@ impl<Model: Send + Sync + 'static, Event: 'static, InnerEvent: 'static> AnyWidge
         self.widget_tree.measure(constraints, ctx)
     }
 
-    fn render(&self, background: Background, ctx: &WidgetContext) -> RenderNode {
+    fn render(&self, background: Background, ctx: &WidgetContext) -> Arc<RenderNode> {
         self.widget_tree.render(background, ctx)
     }
 }
