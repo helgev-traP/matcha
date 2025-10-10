@@ -96,6 +96,12 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
 impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent: 'static>
     UiControl<Model, Message, Event, InnerEvent>
 {
+    // start component setup function
+    // TODO: This is provisional implementation. Refactor this after organizing async execution flow.
+    pub async fn setup(&self, app_handler: &ApplicationHandler) {
+        self.component.setup(app_handler);
+    }
+
     /// Returns true if a render should be performed.
     /// Render is required when the model update flag or animation update flag is true,
     /// or when the widget is not yet initialized.
@@ -111,43 +117,6 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
         ctx: &WidgetContext<'a>,
         benchmark: &mut super::benchmark::Benchmark,
     ) -> Arc<RenderNode> {
-        // if self.model_update_flag.is_true() || self.widget.is_none() {
-        //     // Dom update is required
-        //     let dom = self.component.view().await;
-
-        //     self.model_update_flag = UpdateFlag::new();
-
-        //     if let Some(widget) = self.widget.as_mut() {
-        //         if widget.update_widget_tree(&*dom).await.is_err() {
-        //             self.widget = None;
-        //         }
-        //     }
-
-        //     let widget = self.widget.get_or_insert_with(|| {
-        //         // Initialize widget
-        //         dom.build_widget_tree()
-        //     });
-
-        //     // set model update notifier
-        //     widget.set_model_update_notifier(&self.model_update_flag.notifier()).await;
-
-        //     // set dirty flags
-        //     widget.update_dirty_flags(BackPropDirty::new(true), BackPropDirty::new(true));
-        // }
-
-        // let widget = self.widget.as_mut().expect("widget initialized above");
-
-        // let constraints: Constraints =
-        //     Constraints::new([0.0, viewport_size[0]], [0.0, viewport_size[1]]);
-
-        // let preferred_size = benchmark.with_layout_measure(|| widget.measure(&constraints, ctx));
-        // let final_size = [
-        //     preferred_size[0].clamp(0.0, viewport_size[0]),
-        //     preferred_size[1].clamp(0.0, viewport_size[1]),
-        // ];
-
-        // benchmark.with_create_render_tree(|| widget.render(final_size, background, ctx))
-
         if self.widget.is_none() {
             // directly build widget tree from dom
             let dom = benchmark.with_create_dom(self.component.view()).await;
@@ -166,14 +135,13 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
             // Widget update is required
             let dom = benchmark.with_create_dom(self.component.view()).await;
 
-            if let Some(widget) = self.widget.as_mut() {
-                if benchmark
+            if let Some(widget) = self.widget.as_mut()
+                && benchmark
                     .with_update_widget(widget.update_widget_tree(&*dom))
                     .await
                     .is_err()
-                {
-                    self.widget = None;
-                }
+            {
+                self.widget = None;
             }
 
             let widget = self.widget.get_or_insert_with(|| dom.build_widget_tree());

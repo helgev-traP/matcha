@@ -28,14 +28,9 @@ nalgebra = { features = ["bytemuck"], workspace = true }
 # image
 image = { workspace = true }
 
-# font
-fontdb = { workspace = true }
-fontdue = { workspace = true }
-
 # other
 bitflags = { workspace = true }
 num = { workspace = true }
-cosmic-text = { workspace = true }
 
 pollster = { workspace = true }
 

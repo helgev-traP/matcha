@@ -39,15 +39,13 @@ bytemuck = { version = "1", features = ["derive"] }
 vello = "0.5"
 
 # math
-nalgebra = { version = "0.33", features = ["bytemuck"] }
+nalgebra = { version = "0.34", features = ["bytemuck"] }
 
 # image
 image = "0.25"
 
 # font
-fontdb = "0.23"
-fontdue = "0.9"
-cosmic-text = "0.11.2"
+glyphon = "0.8"
 
 # other
 rand = "0.9"

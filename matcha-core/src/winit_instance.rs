@@ -236,6 +236,10 @@ impl<
             return;
         }
 
+        // call setup function
+        self.tokio_runtime
+            .block_on(self.ui_control.setup(&self.app_handler));
+
         self.window.request_redraw();
     }
 

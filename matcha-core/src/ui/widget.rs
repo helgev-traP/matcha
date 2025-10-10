@@ -321,7 +321,7 @@ where
             cache.measure.clear();
         }
 
-        let (_, size) = cache.measure.get_or_insert_with(*constraints, || {
+        let (_, size) = cache.measure.get_or_insert_with(constraints, || {
             let children: SmallVec<[(&dyn AnyWidget<T>, &ChildSetting); SMALLVEC_INLINE_CAPACITY]> =
                 self.children
                     .iter()
@@ -347,6 +347,11 @@ where
         };
         let bounds: [f32; 2] = q_size.into();
 
+        if dirty_flags.need_redraw.take_dirty() {
+            // redraw needed, clear render cache
+            cache.render.clear();
+        }
+
         // Decide whether to recompute render each time: if so, clear persistent render cache
         // before get_or_insert_with so it gets recomputed and written into the cache.
         if ctx.debug_config().disable_rendernode_cache() {
@@ -354,7 +359,7 @@ where
         }
 
         // Default: use persistent render cache (possibly cleared above to force recompute).
-        let (_, node) = cache.render.get_or_insert_with(QSize::from(bounds), || {
+        let (_, node) = cache.render.get_or_insert_with(&QSize::from(bounds), || {
             let children_triples: SmallVec<
                 [(&dyn AnyWidget<T>, &ChildSetting, &Arrangement); SMALLVEC_INLINE_CAPACITY],
             > = self
@@ -440,27 +445,27 @@ where
             let mut old_pair = old_children_map.remove(&id);
 
             // check child identity
-            if let Some((old_child, _)) = &mut old_pair {
-                if old_child.update_widget_tree(child_dom).await.is_err() {
-                    old_pair = None;
-                }
+            if let Some((old_child, _)) = &mut old_pair
+                && old_child.update_widget_tree(child_dom).await.is_err()
+            {
+                old_pair = None;
             }
 
             // check setting identity
-            if let Some((_, old_setting)) = &old_pair {
-                if *old_setting != setting {
-                    // Setting changed.
-                    // CURRENT STRATEGY: treat ANY setting difference as layout-affecting,
-                    // thus trigger full rearrange + redraw.
-                    //
-                    // FUTURE OPTIMIZATION (design note):
-                    // Introduce a SettingImpact classification (layout / redraw-only / none)
-                    // so purely visual changes (e.g. colors) set only redraw, avoiding
-                    // measure/arrange cache invalidation.
-                    // See design memo: "Setting の再配置要否判定 API 抽象".
-                    // Keep simple conservative behavior until profiling justifies refinement.
-                    need_rearrange = true;
-                }
+            if let Some((_, old_setting)) = &old_pair
+                && *old_setting != setting
+            {
+                // Setting changed.
+                // CURRENT STRATEGY: treat ANY setting difference as layout-affecting,
+                // thus trigger full rearrange + redraw.
+                //
+                // FUTURE OPTIMIZATION (design note):
+                // Introduce a SettingImpact classification (layout / redraw-only / none)
+                // so purely visual changes (e.g. colors) set only redraw, avoiding
+                // measure/arrange cache invalidation.
+                // See design memo: "Setting の再配置要否判定 API 抽象".
+                // Keep simple conservative behavior until profiling justifies refinement.
+                need_rearrange = true;
             }
 
             // push to self.children
@@ -485,11 +490,9 @@ where
             need_rearrange = true;
         }
 
-        if need_rearrange {
-            if let Some(dirty_flags) = &self.dirty_flags {
-                dirty_flags.need_rearrange.mark_dirty();
-                dirty_flags.need_redraw.mark_dirty();
-            }
+        if need_rearrange && let Some(dirty_flags) = &self.dirty_flags {
+            dirty_flags.need_rearrange.mark_dirty();
+            dirty_flags.need_redraw.mark_dirty();
         }
 
         Ok(())
@@ -520,20 +523,37 @@ where
             cache.layout.clear();
         }
 
-        cache.layout.get_or_insert_with(QSize::from(bounds), || {
-            // calc arrangement
-            let children: SmallVec<[(&dyn AnyWidget<T>, &ChildSetting); SMALLVEC_INLINE_CAPACITY]> =
-                self.children
+        // We need to track whether the render cache needs to be cleared due to layout eviction.
+        let mut should_clear_render = false;
+
+        cache.layout.get_or_insert_with_eviction_callback(
+            &QSize::from(bounds),
+            || {
+                // calc arrangement
+                let children: SmallVec<
+                    [(&dyn AnyWidget<T>, &ChildSetting); SMALLVEC_INLINE_CAPACITY],
+                > = self
+                    .children
                     .iter()
                     .map(|(child, setting)| (&**child as &dyn AnyWidget<T>, setting))
                     .collect();
-            let arrangement = self.widget_impl.arrange(bounds, &children, ctx);
-            // update child arrangements
-            for ((child, _), arrangement) in self.children.iter().zip(arrangement.iter()) {
-                child.arrange(arrangement.size, ctx);
-            }
-            arrangement
-        });
+                let arrangement = self.widget_impl.arrange(bounds, &children, ctx);
+                // update child arrangements
+                for ((child, _), arrangement) in self.children.iter().zip(arrangement.iter()) {
+                    child.arrange(arrangement.size, ctx);
+                }
+                arrangement
+            },
+            |_, _| {
+                // Render cache depends on arrangement, so request it to be evicted.
+                should_clear_render = true;
+            },
+        );
+
+        // Now that the mutable borrow of layout has ended, clear the render cache if requested.
+        if should_clear_render {
+            cache.render.clear();
+        }
     }
 
     fn update_dirty_flags(&mut self, rearrange_flags: BackPropDirty, redraw_flags: BackPropDirty) {

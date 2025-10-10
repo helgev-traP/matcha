@@ -11,8 +11,13 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32) -> @builtin(position) vec4<
     return vec4<f32>(p.x, p.y, 0.0, 1.0);
 }
 
+struct PushConstants {
+    color: vec4<f32>,
+};
+
+var<push_constant> pc: PushConstants;
+
 @fragment
 fn fs_main() -> @location(0) vec4<f32> {
-    // Output fully transparent color (requires framebuffer supporting alpha)
-    return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+    return pc.color;
 }

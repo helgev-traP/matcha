@@ -1,5 +1,7 @@
+use std::vec;
+
 use crate::style::Style;
-use cosmic_text::{Attrs, Color, Metrics};
+
 use matcha_core::{
     device_input::DeviceInput,
     metrics::{Arrangement, Constraints},
@@ -7,28 +9,26 @@ use matcha_core::{
         AnyWidgetFrame, ApplicationHandler, Background, Dom, Widget, WidgetContext, WidgetFrame,
         widget::{AnyWidget, InvalidationHandle},
     },
-    update_flag::UpdateNotifier,
 };
 use renderer::render_node::RenderNode;
 
-use crate::style::text_cosmic::{TextCosmic, TextElement};
-
 // MARK: DOM
 
-pub struct Text<'a> {
+pub struct Text {
     label: Option<String>,
-    content: String,
-    attrs: Attrs<'a>,
-    metrics: Metrics,
+
+    sentence: crate::style::text::Sentence,
+    font_size: f32,
+    line_height: f32,
 }
 
-impl<'a> Text<'a> {
-    pub fn new(content: &str) -> Self {
+impl Text {
+    pub fn new(s: &str) -> Self {
         Self {
             label: None,
-            content: content.to_string(),
-            attrs: Attrs::new(),
-            metrics: Metrics::new(14.0, 20.0), // Default metrics
+            sentence: crate::style::text::Sentence::new(s),
+            font_size: 14.0,
+            line_height: 20.0,
         }
     }
 
@@ -37,44 +37,59 @@ impl<'a> Text<'a> {
         self
     }
 
-    pub fn attrs(mut self, attrs: Attrs<'a>) -> Self {
-        self.attrs = attrs;
+    pub fn color(mut self, color: matcha_core::color::Color) -> Self {
+        self.sentence = self.sentence.color(color);
         self
     }
 
-    pub fn metrics(mut self, metrics: Metrics) -> Self {
-        self.metrics = metrics;
+    pub fn family(mut self, family: crate::style::text::TextFamily) -> Self {
+        self.sentence = self.sentence.family(family);
+        self
+    }
+
+    pub fn stretch(mut self, stretch: crate::style::text::TextStretch) -> Self {
+        self.sentence = self.sentence.stretch(stretch);
+        self
+    }
+
+    pub fn style(mut self, style: crate::style::text::TextStyle) -> Self {
+        self.sentence = self.sentence.style(style);
+        self
+    }
+
+    pub fn weight(mut self, weight: crate::style::text::TextWeight) -> Self {
+        self.sentence = self.sentence.weight(weight);
+        self
+    }
+
+    pub fn font_size(mut self, size: f32) -> Self {
+        self.font_size = size;
+        self
+    }
+
+    pub fn line_height(mut self, height: f32) -> Self {
+        self.line_height = height;
         self
     }
 }
 
 #[async_trait::async_trait]
-impl<'a: 'static, T: Send + Sync + 'static> Dom<T> for Text<'a> {
+impl<T: Send + Sync + 'static> Dom<T> for Text {
     fn build_widget_tree(&self) -> Box<dyn AnyWidgetFrame<T>> {
-        let text_element = TextElement {
-            text: self.content.clone(),
-            attrs: self.attrs.clone(),
-        };
-
-        let style = TextCosmic {
-            texts: vec![text_element],
-            color: Color::rgb(0, 0, 0), // Default to black
-            metrics: self.metrics,
-            max_size: [None, None],
-            buffer: Default::default(),
-            cache_in_memory: Default::default(),
-            cache_in_texture: Default::default(),
-        };
+        let text_desc = crate::style::text::TextDesc::new(vec![self.sentence.clone()])
+            .font_size(self.font_size)
+            .line_height(self.line_height);
 
         Box::new(WidgetFrame::new(
             self.label.clone(),
             vec![],
             vec![],
-            TextNode {
-                content: self.content.clone(),
-                attrs: self.attrs.clone(),
-                metrics: self.metrics,
-                style,
+            TextWidget {
+                label: self.label.clone(),
+                clear: crate::style::viewport_clear::ViewportClear {
+                    color: matcha_core::color::Color::TRANSPARENT,
+                },
+                style: crate::style::text::Text::new(&text_desc),
             },
         ))
     }
@@ -82,51 +97,43 @@ impl<'a: 'static, T: Send + Sync + 'static> Dom<T> for Text<'a> {
 
 // MARK: Widget
 
-pub struct TextNode<'a> {
-    content: String,
-    attrs: Attrs<'a>,
-    metrics: Metrics,
-    style: TextCosmic<'a>,
+pub struct TextWidget {
+    label: Option<String>,
+    clear: crate::style::viewport_clear::ViewportClear,
+    style: crate::style::text::Text,
 }
 
-impl<'a: 'static, T: Send + Sync + 'static> Widget<Text<'a>, T, ()> for TextNode<'a> {
+impl<E: Send + Sync + 'static> Widget<Text, E, ()> for TextWidget {
     fn update_widget<'b>(
         &mut self,
-        dom: &'b Text<'a>,
+        dom: &'b Text,
         cache_invalidator: Option<InvalidationHandle>,
-    ) -> Vec<(&'b dyn Dom<T>, (), u128)> {
-        let mut changed = false;
-        if self.content != dom.content {
-            self.content = dom.content.clone();
-            changed = true;
-        }
-        if self.attrs != dom.attrs {
-            self.attrs = dom.attrs.clone();
-            changed = true;
-        }
-        if self.metrics != dom.metrics {
-            self.metrics = dom.metrics;
-            changed = true;
+    ) -> Vec<(&'b dyn Dom<E>, (), u128)> {
+        // Build a TextDesc like Dom::build_widget_tree does and create a new style
+        let text_desc = crate::style::text::TextDesc::new(vec![dom.sentence.clone()])
+            .font_size(dom.font_size)
+            .line_height(dom.line_height);
+
+        let new_style = crate::style::text::Text::new(&text_desc);
+
+        // If visible text metrics changed, request relayout
+        if !self.style.eq_desc(&text_desc)
+            && let Some(handle) = cache_invalidator
+        {
+            handle.relayout_next_frame();
         }
 
-        if changed {
-            if let Some(handle) = cache_invalidator {
-                handle.relayout_next_frame();
-            }
-            let text_element = TextElement {
-                text: self.content.clone(),
-                attrs: self.attrs.clone(),
-            };
-            self.style.texts = vec![text_element];
-            self.style.metrics = self.metrics;
-        }
+        self.label = dom.label.clone();
+        self.style = new_style;
+
+        // No children
         vec![]
     }
 
     fn measure(
         &self,
         constraints: &Constraints,
-        _: &[(&dyn AnyWidget<T>, &())],
+        _: &[(&dyn AnyWidget<E>, &())],
         ctx: &WidgetContext,
     ) -> [f32; 2] {
         let rect = self.style.required_region(constraints, ctx);
@@ -140,7 +147,7 @@ impl<'a: 'static, T: Send + Sync + 'static> Widget<Text<'a>, T, ()> for TextNode
     fn arrange(
         &self,
         _bounds: [f32; 2],
-        _children: &[(&dyn AnyWidget<T>, &())],
+        _children: &[(&dyn AnyWidget<E>, &())],
         _ctx: &WidgetContext,
     ) -> Vec<Arrangement> {
         vec![]
@@ -150,11 +157,11 @@ impl<'a: 'static, T: Send + Sync + 'static> Widget<Text<'a>, T, ()> for TextNode
         &mut self,
         _bounds: [f32; 2],
         _event: &DeviceInput,
-        _children: &mut [(&mut dyn AnyWidget<T>, &mut (), &Arrangement)],
+        _children: &mut [(&mut dyn AnyWidget<E>, &mut (), &Arrangement)],
         _cache_invalidator: InvalidationHandle,
         _ctx: &WidgetContext,
         _app_handler: &ApplicationHandler,
-    ) -> Option<T> {
+    ) -> Option<E> {
         None
     }
 
@@ -162,7 +169,7 @@ impl<'a: 'static, T: Send + Sync + 'static> Widget<Text<'a>, T, ()> for TextNode
         &self,
         bounds: [f32; 2],
         position: [f32; 2],
-        _children: &[(&dyn AnyWidget<T>, &(), &Arrangement)],
+        _children: &[(&dyn AnyWidget<E>, &(), &Arrangement)],
         ctx: &WidgetContext,
     ) -> bool {
         self.style.is_inside(position, bounds, ctx)
@@ -170,15 +177,17 @@ impl<'a: 'static, T: Send + Sync + 'static> Widget<Text<'a>, T, ()> for TextNode
 
     fn render(
         &self,
-        _bounds: [f32; 2],
-        _children: &[(&dyn AnyWidget<T>, &(), &Arrangement)],
+        bounds: [f32; 2],
+        _children: &[(&dyn AnyWidget<E>, &(), &Arrangement)],
         _background: Background,
         ctx: &WidgetContext,
     ) -> RenderNode {
+        println!("TextWidget::render");
+
         let mut render_node = RenderNode::new();
-        let size = <Self as Widget<Text, T, ()>>::measure(
+        let size = <Self as Widget<Text, E, ()>>::measure(
             self,
-            &Constraints::new([0.0f32, f32::INFINITY], [0.0f32, f32::INFINITY]),
+            &Constraints::from_boundary(bounds),
             &[],
             ctx,
         );
@@ -194,6 +203,10 @@ impl<'a: 'static, T: Send + Sync + 'static> Widget<Text<'a>, T, ()> for TextNode
                         .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                             label: Some("Text Render Encoder"),
                         });
+
+                // clear the texture to transparent
+                self.clear
+                    .draw(&mut encoder, &style_region, size, [0.0, 0.0], ctx);
 
                 self.style
                     .draw(&mut encoder, &style_region, size, [0.0, 0.0], ctx);

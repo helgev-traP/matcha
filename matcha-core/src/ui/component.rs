@@ -132,6 +132,15 @@ impl<Model: Send + Sync + 'static, Message, Event: 'static, InnerEvent: 'static>
         self.label.as_deref()
     }
 
+    pub  fn setup(&self, app_handler: &ApplicationHandler) {
+        let model_accessor = ModelAccessor {
+            model: Arc::clone(&self.model),
+            update_flag: Arc::clone(&self.model_update_flag),
+        };
+
+        (self.setup)(&model_accessor, app_handler);
+    }
+
     pub fn update(&self, message: &Message, app_handler: &ApplicationHandler) {
         let model_accessor = ModelAccessor {
             model: Arc::clone(&self.model),

@@ -138,7 +138,7 @@ impl Style for Polygon {
         let mut cache = self.caches.lock();
 
         if self.cache_the_mesh {
-            let (_k, v) = cache.get_or_insert_with(key.clone(), || Caches {
+            let (_k, v) = cache.get_or_insert_with(&key, || Caches {
                 mesh: (self.polygon)(boundary, ctx),
                 rect: None,
             });
@@ -263,7 +263,7 @@ impl Style for Polygon {
         // obtain mesh either from cache or freshly computed
         let mesh = if self.cache_the_mesh {
             cache
-                .get_or_insert_with(key.clone(), || Caches {
+                .get_or_insert_with(&key, || Caches {
                     mesh: (self.polygon)(boundary_size, ctx),
                     rect: None,
                 })
@@ -364,7 +364,7 @@ impl Style for Polygon {
 
         let mesh = if self.cache_the_mesh {
             cache
-                .get_or_insert_with(key.clone(), || Caches {
+                .get_or_insert_with(&key, || Caches {
                     mesh: (self.polygon)(boundary_size, ctx),
                     rect: None,
                 })

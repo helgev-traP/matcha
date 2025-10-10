@@ -43,7 +43,7 @@ impl Buffer {
         encoder: &mut wgpu::CommandEncoder,
         ctx: &WidgetContext,
     ) -> Option<&BufferData> {
-        let (_, cache) = self.cache.get_or_insert_with(boundary, || {
+        let (_, cache) = self.cache.get_or_insert_with(&boundary, || {
             // calculate necessary size for the texture
             let mut x_min = f32::MAX;
             let mut x_max = f32::MIN;

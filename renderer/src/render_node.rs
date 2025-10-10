@@ -1,6 +1,6 @@
-use std::sync::Arc;
 use gpu_utils::texture_atlas;
 use smallvec::SmallVec;
+use std::sync::Arc;
 
 const SMALLVEC_INLINE_CAPACITY: usize = 16;
 

@@ -1,10 +1,10 @@
 pub mod image;
 pub mod polygon;
 pub mod solid_box;
-pub mod text_cosmic;
-use std::sync::Arc;
+pub mod text;
+pub mod viewport_clear;
 
-pub use text_cosmic as text;
+use std::sync::Arc;
 
 use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
 use matcha_core::{

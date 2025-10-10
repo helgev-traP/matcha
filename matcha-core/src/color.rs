@@ -41,6 +41,21 @@ macro_rules! convert_srgb_u8 {
 }
 
 impl Color {
+    pub const fn rgb(r: u8, g: u8, b: u8) -> Self {
+        Color::Rgb8USrgb { r, g, b }
+    }
+
+    pub const fn rgba(r: u8, g: u8, b: u8, a: f32) -> Self {
+        Color::Rgba8USrgb {
+            r,
+            g,
+            b,
+            a: a as u8,
+        }
+    }
+}
+
+impl Color {
     pub const TRANSPARENT: Color = Color::RgbaF32 {
         r: 0.0,
         g: 0.0,

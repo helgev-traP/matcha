@@ -33,7 +33,7 @@ image = { workspace = true }
 
 # other
 num = { workspace = true }
-cosmic-text = { workspace = true }
+glyphon = { workspace = true }
 fxhash = { workspace = true }
 dashmap = { workspace = true }
 
