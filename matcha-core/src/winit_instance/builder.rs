@@ -264,7 +264,7 @@ impl<
             debug_config: self.debug_config.clone(),
             render_control,
             ui_control,
-            app_handler: ui::ApplicationHandler::new(),
+            app_handler: ui::ApplicationContext::new(),
             backend: self.backend,
             benchmarker: super::benchmark::Benchmark::new(60),
             frame: 0,

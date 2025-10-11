@@ -14,8 +14,10 @@ use renderer::{
 };
 
 type PolygonFn = dyn for<'a> Fn([f32; 2], &'a WidgetContext) -> Mesh + Send + Sync + 'static;
-type AdaptFn =
-    dyn for<'a> Fn([f32; 2], &'a WidgetContext) -> nalgebra::Matrix4<f32> + Send + Sync + 'static;
+type AdaptFn = dyn for<'a> Fn([f32; 2], &'a WidgetContext) -> nalgebra::Matrix4<f32>
+    + Send
+    + Sync
+    + 'static;
 
 /// Quantize factor used for cache keying of matrices.
 /// Matches metrics SUB_PIXEL_QUANTIZE used for QSize / QRect quantization.
@@ -253,7 +255,12 @@ impl Style for Polygon {
         }
     }
 
-    fn is_inside(&self, position: [f32; 2], boundary_size: [f32; 2], ctx: &WidgetContext) -> bool {
+    fn is_inside(
+        &self,
+        position: [f32; 2],
+        boundary_size: [f32; 2],
+        ctx: &WidgetContext,
+    ) -> bool {
         // include adaptive_affine in key so hit-test matches rendering/rect
         let adaptive_affine = (self.adaptive_affine)(boundary_size, ctx);
         let key = CacheKey::new(boundary_size, &adaptive_affine);

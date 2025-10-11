@@ -7,7 +7,7 @@ use parking_lot::Mutex;
 /// shared command buffer. Components receive `ApplicationHandle` clones to
 /// enqueue commands.
 #[derive(Clone)]
-pub struct ApplicationHandler {
+pub struct ApplicationContext {
     inner: Arc<Mutex<ApplicationHandlerInner>>,
 }
 
@@ -23,7 +23,7 @@ pub(crate) enum ApplicationHandlerCommand {
     // future: Custom(Box<dyn FnOnce(&mut AppState) + Send>), etc.
 }
 
-impl ApplicationHandler {
+impl ApplicationContext {
     pub(crate) fn new() -> Self {
         Self {
             inner: Arc::new(Mutex::new(ApplicationHandlerInner {
@@ -33,8 +33,8 @@ impl ApplicationHandler {
     }
 
     /// Create a cloneable handle to give to Components / ModelAccessor.
-    pub fn handle(&self) -> ApplicationHandler {
-        ApplicationHandler {
+    pub fn handle(&self) -> ApplicationContext {
+        ApplicationContext {
             inner: Arc::clone(&self.inner),
         }
     }
@@ -47,7 +47,7 @@ impl ApplicationHandler {
     }
 }
 
-impl ApplicationHandler {
+impl ApplicationContext {
     /// Enqueue a Quit command.
     pub fn quit(&self) {
         let mut guard = self.inner.lock();

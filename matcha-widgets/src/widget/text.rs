@@ -6,7 +6,8 @@ use matcha_core::{
     device_input::DeviceInput,
     metrics::{Arrangement, Constraints},
     ui::{
-        AnyWidgetFrame, ApplicationHandler, Background, Dom, Widget, WidgetContext, WidgetFrame,
+        AnyWidgetFrame, WidgetContext, ApplicationContext, Background, Dom, Widget,
+        WidgetFrame,
         widget::{AnyWidget, InvalidationHandle},
     },
 };
@@ -160,7 +161,7 @@ impl<E: Send + Sync + 'static> Widget<Text, E, ()> for TextWidget {
         _children: &mut [(&mut dyn AnyWidget<E>, &mut (), &Arrangement)],
         _cache_invalidator: InvalidationHandle,
         _ctx: &WidgetContext,
-        _app_handler: &ApplicationHandler,
+        _app_handler: &ApplicationContext,
     ) -> Option<E> {
         None
     }
@@ -182,8 +183,6 @@ impl<E: Send + Sync + 'static> Widget<Text, E, ()> for TextWidget {
         _background: Background,
         ctx: &WidgetContext,
     ) -> RenderNode {
-        println!("TextWidget::render");
-
         let mut render_node = RenderNode::new();
         let size = <Self as Widget<Text, E, ()>>::measure(
             self,

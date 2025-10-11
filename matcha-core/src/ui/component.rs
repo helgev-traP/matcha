@@ -11,25 +11,25 @@ use crate::{
     device_input::DeviceInput,
     metrics::Constraints,
     ui::{
-        AnyWidget, AnyWidgetFrame, ApplicationHandler, Background, Dom, UpdateWidgetError,
-        WidgetContext,
+        AnyWidget, AnyWidgetFrame, WidgetContext, ApplicationContext, Background, Dom,
+        UpdateWidgetError,
     },
     update_flag::UpdateNotifier,
 };
 
-type SetupFn<Model> = dyn Fn(&ModelAccessor<Model>, &ApplicationHandler) + Send + Sync;
+type SetupFn<Model> = dyn Fn(&ModelAccessor<Model>, &ApplicationContext) + Send + Sync;
 type UpdateFn<Model, Message> =
-    dyn Fn(&Message, &ModelAccessor<Model>, &ApplicationHandler) + Send + Sync;
+    dyn Fn(&Message, &ModelAccessor<Model>, &ApplicationContext) + Send + Sync;
 type InputFn<Model> =
-    dyn Fn(&DeviceInput, &ModelAccessor<Model>, &ApplicationHandler) + Send + Sync;
+    dyn Fn(&DeviceInput, &ModelAccessor<Model>, &ApplicationContext) + Send + Sync;
 type EventFn<Model, Event, InnerEvent> =
-    dyn Fn(InnerEvent, &ModelAccessor<Model>, &ApplicationHandler) -> Option<Event> + Send + Sync;
+    dyn Fn(InnerEvent, &ModelAccessor<Model>, &ApplicationContext) -> Option<Event> + Send + Sync;
 type ViewFn<Model, InnerEvent> = dyn Fn(&Model) -> Box<dyn Dom<InnerEvent>> + Send + Sync;
 
 fn default_input_function<Model: Send + Sync + 'static>(
     input: &DeviceInput,
     _model_accessor: &ModelAccessor<Model>,
-    app_handler: &ApplicationHandler,
+    app_handler: &ApplicationContext,
 ) {
     if input.event() == &crate::device_input::DeviceInputData::CloseRequested {
         app_handler.quit();
@@ -73,17 +73,17 @@ impl<Model: Send + Sync + 'static, Message, Event: 'static, InnerEvent: 'static>
             label: label.map(|s| s.to_string()),
             model: Arc::new(RwLock::new(model)),
             model_update_flag: Arc::new(UpdateFlag::new(false)),
-            setup: Box::new(|_: &ModelAccessor<Model>, _: &ApplicationHandler| {}),
-            update: Box::new(|_: &Message, _: &ModelAccessor<Model>, _: &ApplicationHandler| {}),
+            setup: Box::new(|_: &ModelAccessor<Model>, _: &ApplicationContext| {}),
+            update: Box::new(|_: &Message, _: &ModelAccessor<Model>, _: &ApplicationContext| {}),
             input: Arc::new(default_input_function),
-            event: Arc::new(|_: InnerEvent, _: &ModelAccessor<Model>, _: &ApplicationHandler| None),
+            event: Arc::new(|_: InnerEvent, _: &ModelAccessor<Model>, _: &ApplicationContext| None),
             view: Box::new(view),
         }
     }
 
     pub fn setup_fn(
         mut self,
-        f: impl Fn(&ModelAccessor<Model>, &ApplicationHandler) + Send + Sync + 'static,
+        f: impl Fn(&ModelAccessor<Model>, &ApplicationContext) + Send + Sync + 'static,
     ) -> Self {
         self.setup = Box::new(f);
         self
@@ -91,7 +91,7 @@ impl<Model: Send + Sync + 'static, Message, Event: 'static, InnerEvent: 'static>
 
     pub fn update_fn(
         mut self,
-        f: impl Fn(&Message, &ModelAccessor<Model>, &ApplicationHandler) + Send + Sync + 'static,
+        f: impl Fn(&Message, &ModelAccessor<Model>, &ApplicationContext) + Send + Sync + 'static,
     ) -> Self {
         self.update = Box::new(f);
         self
@@ -99,7 +99,7 @@ impl<Model: Send + Sync + 'static, Message, Event: 'static, InnerEvent: 'static>
 
     pub fn input_fn(
         mut self,
-        f: impl Fn(&DeviceInput, &ModelAccessor<Model>, &ApplicationHandler) + Send + Sync + 'static,
+        f: impl Fn(&DeviceInput, &ModelAccessor<Model>, &ApplicationContext) + Send + Sync + 'static,
     ) -> Self {
         self.input = Arc::new(f);
         self
@@ -107,7 +107,7 @@ impl<Model: Send + Sync + 'static, Message, Event: 'static, InnerEvent: 'static>
 
     pub fn event_fn<NewEventType: 'static>(
         self,
-        f: impl Fn(InnerEvent, &ModelAccessor<Model>, &ApplicationHandler) -> Option<NewEventType>
+        f: impl Fn(InnerEvent, &ModelAccessor<Model>, &ApplicationContext) -> Option<NewEventType>
         + Send
         + Sync
         + 'static,
@@ -132,7 +132,7 @@ impl<Model: Send + Sync + 'static, Message, Event: 'static, InnerEvent: 'static>
         self.label.as_deref()
     }
 
-    pub  fn setup(&self, app_handler: &ApplicationHandler) {
+    pub fn setup(&self, app_handler: &ApplicationContext) {
         let model_accessor = ModelAccessor {
             model: Arc::clone(&self.model),
             update_flag: Arc::clone(&self.model_update_flag),
@@ -141,7 +141,7 @@ impl<Model: Send + Sync + 'static, Message, Event: 'static, InnerEvent: 'static>
         (self.setup)(&model_accessor, app_handler);
     }
 
-    pub fn update(&self, message: &Message, app_handler: &ApplicationHandler) {
+    pub fn update(&self, message: &Message, app_handler: &ApplicationContext) {
         let model_accessor = ModelAccessor {
             model: Arc::clone(&self.model),
             update_flag: Arc::clone(&self.model_update_flag),
@@ -300,7 +300,7 @@ impl<Model: Send + Sync + 'static, Event: 'static, InnerEvent: 'static> AnyWidge
         &mut self,
         event: &DeviceInput,
         ctx: &WidgetContext,
-        app_handler: &ApplicationHandler,
+        app_handler: &ApplicationContext,
     ) -> Option<Event> {
         (self.input)(event, &self.model_access, app_handler);
 

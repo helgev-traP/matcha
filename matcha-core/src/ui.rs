@@ -12,6 +12,6 @@ pub use widget_context::WidgetContext;
 pub mod component;
 pub use component::{Component, ComponentDom, ComponentWidget, ModelAccessor};
 
-pub mod application_handler;
-pub use application_handler::ApplicationHandler;
-pub(crate) use application_handler::ApplicationHandlerCommand;
+pub mod application_context;
+pub use application_context::ApplicationContext;
+pub(crate) use application_context::ApplicationHandlerCommand;

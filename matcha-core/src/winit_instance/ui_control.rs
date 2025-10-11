@@ -12,7 +12,7 @@ use crate::{
         window_state::WindowState,
     },
     metrics::Constraints,
-    ui::{AnyWidgetFrame, ApplicationHandler, Background, WidgetContext, component::Component},
+    ui::{AnyWidgetFrame, ApplicationContext, Background, WidgetContext, component::Component},
     update_flag::UpdateFlag,
 };
 use renderer::render_node::RenderNode;
@@ -98,7 +98,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
 {
     // start component setup function
     // TODO: This is provisional implementation. Refactor this after organizing async execution flow.
-    pub async fn setup(&self, app_handler: &ApplicationHandler) {
+    pub async fn setup(&self, app_handler: &ApplicationContext) {
         self.component.setup(app_handler);
     }
 
@@ -263,7 +263,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
         get_window_size: impl Fn() -> (PhysicalSize<u32>, PhysicalSize<u32>),
         get_window_position: impl Fn() -> (PhysicalPosition<i32>, PhysicalPosition<i32>),
         ctx: &WidgetContext,
-        app_handler: &ApplicationHandler,
+        app_handler: &ApplicationContext,
     ) -> Option<Event> {
         let event =
             self.convert_winit_to_window_event(window_event, get_window_size, get_window_position);
@@ -275,7 +275,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
         }
     }
 
-    pub fn user_event(&self, user_event: &Message, app_handler: &ApplicationHandler) {
+    pub fn user_event(&self, user_event: &Message, app_handler: &ApplicationContext) {
         self.component.update(user_event, app_handler);
     }
 }

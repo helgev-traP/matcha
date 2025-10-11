@@ -8,7 +8,7 @@ use utils::{back_prop_dirty::BackPropDirty, cache::Cache};
 use crate::{
     device_input::DeviceInput,
     metrics::{Arrangement, Constraints, QSize},
-    ui::{ApplicationHandler, Background, WidgetContext},
+    ui::{ApplicationContext, Background, WidgetContext},
     update_flag::UpdateNotifier,
 };
 
@@ -71,7 +71,7 @@ pub trait Widget<D: Dom<E>, E: 'static = (), ChildSetting: PartialEq + 'static =
         children: &mut [(&mut dyn AnyWidget<E>, &mut ChildSetting, &Arrangement)],
         cache_invalidator: InvalidationHandle,
         ctx: &WidgetContext,
-        app_handler: &ApplicationHandler,
+        app_handler: &ApplicationContext,
     ) -> Option<E>;
 
     fn is_inside(
@@ -119,7 +119,7 @@ pub trait AnyWidget<E: 'static> {
         &mut self,
         event: &DeviceInput,
         ctx: &WidgetContext,
-        app_handler: &ApplicationHandler,
+        app_handler: &ApplicationContext,
     ) -> Option<E>;
 
     fn is_inside(&self, position: [f32; 2], ctx: &WidgetContext) -> bool;
@@ -241,7 +241,7 @@ where
         &mut self,
         event: &DeviceInput,
         ctx: &WidgetContext,
-        app_handler: &ApplicationHandler,
+        app_handler: &ApplicationContext,
     ) -> Option<T> {
         let Some(dirty_flags) = &self.dirty_flags else {
             return None;
@@ -637,7 +637,7 @@ mod tests {
             _children: &mut [(&mut dyn AnyWidget<String>, &mut MockSetting, &Arrangement)],
             _cache_invalidator: InvalidationHandle,
             _ctx: &WidgetContext,
-            _app_handler: &ApplicationHandler,
+            _app_handler: &ApplicationContext,
         ) -> Option<String> {
             None
         }
@@ -1054,7 +1054,7 @@ mod tests {
             _children: &mut [(&mut dyn AnyWidget<String>, &mut MockSetting, &Arrangement)],
             _cache_invalidator: InvalidationHandle,
             _ctx: &WidgetContext,
-            _app_handler: &ApplicationHandler,
+            _app_handler: &ApplicationContext,
         ) -> Option<String> {
             None
         }
@@ -1171,7 +1171,7 @@ mod tests {
             _: &mut [(&mut dyn AnyWidget<String>, &mut MockSetting, &Arrangement)],
             _: InvalidationHandle,
             _: &WidgetContext,
-            _: &ApplicationHandler,
+            _: &ApplicationContext,
         ) -> Option<String> {
             None
         }

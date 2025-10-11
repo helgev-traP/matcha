@@ -5,7 +5,7 @@ use matcha_core::{
     device_input::DeviceInput,
     metrics::{Arrangement, Constraints},
     ui::{
-        AnyWidget, AnyWidgetFrame, ApplicationHandler, Background, Dom, Widget, WidgetContext,
+        AnyWidget, AnyWidgetFrame, WidgetContext, ApplicationContext, Background, Dom, Widget,
         WidgetFrame,
     },
     update_flag::UpdateNotifier,
@@ -183,7 +183,7 @@ where
         children: &mut [(&mut dyn AnyWidget<T>, &mut GridChildSetting, &Arrangement)],
         _cache_invalidator: InvalidationHandle,
         ctx: &WidgetContext,
-        app_handler: &ApplicationHandler,
+        app_handler: &ApplicationContext,
     ) -> Option<T> {
         for (child, _, arrangement) in children.iter_mut() {
             let child_event = event.transform(arrangement.affine);

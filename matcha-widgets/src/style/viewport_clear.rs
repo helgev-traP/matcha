@@ -16,7 +16,11 @@ pub struct ViewportClear {
 }
 
 impl Style for ViewportClear {
-    fn required_region(&self, constraints: &Constraints, _ctx: &WidgetContext) -> Option<QRect> {
+    fn required_region(
+        &self,
+        constraints: &Constraints,
+        _ctx: &WidgetContext,
+    ) -> Option<QRect> {
         let max = constraints.max_size();
         if max[0] > 0.0 && max[1] > 0.0 {
             Some(QRect::new([0.0, 0.0], max))

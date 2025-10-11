@@ -2,13 +2,13 @@ use std::sync::Arc;
 
 use crate::style::Style;
 use matcha_core::metrics::{Arrangement, Constraints};
-use matcha_core::ui::ApplicationHandler;
+use matcha_core::ui::ApplicationContext;
 use matcha_core::{
     color::Color,
     device_input::{DeviceInput, DeviceInputData, ElementState, MouseInput, MouseLogicalButton},
     ui::Background,
     ui::{
-        AnyWidgetFrame, Dom, Widget, WidgetContext, WidgetFrame,
+        AnyWidgetFrame, WidgetContext, Dom, Widget, WidgetFrame,
         widget::{AnyWidget, InvalidationHandle},
     },
     update_flag::UpdateNotifier,
@@ -116,7 +116,7 @@ impl<T: Send + Sync + 'static> Widget<Button<T>, T, ()> for ButtonNode<T> {
         children: &mut [(&mut dyn AnyWidget<T>, &mut (), &Arrangement)],
         cache_invalidator: InvalidationHandle,
         ctx: &WidgetContext,
-        app_handler: &ApplicationHandler,
+        app_handler: &ApplicationContext,
     ) -> Option<T> {
         let mut msg = None;
         let mut new_state = self.state;

@@ -4,8 +4,8 @@ use matcha_core::{
     device_input::DeviceInput,
     metrics::{Arrangement, Constraints},
     ui::{
-        AnyWidget, AnyWidgetFrame, ApplicationHandler, Background, Dom, InvalidationHandle, Widget,
-        WidgetContext, WidgetFrame,
+        AnyWidget, AnyWidgetFrame, WidgetContext, ApplicationContext, Background, Dom,
+        InvalidationHandle, Widget, WidgetFrame,
     },
     update_flag::UpdateNotifier,
 };
@@ -134,7 +134,7 @@ where
         children: &mut [(&mut dyn AnyWidget<T>, &mut (), &Arrangement)],
         _cache_invalidator: InvalidationHandle,
         ctx: &WidgetContext,
-        _app_handler: &ApplicationHandler,
+        _app_handler: &ApplicationContext,
     ) -> Option<T> {
         if let Some((child, _, arrangement)) = children.first_mut() {
             let child_event = event.transform(arrangement.affine);

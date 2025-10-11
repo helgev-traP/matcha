@@ -35,7 +35,7 @@ pub struct WinitInstance<
     render_control: render_control::RenderControl,
     // --- UI control ---
     ui_control: ui_control::UiControl<Model, Message, Event, InnerEvent>,
-    app_handler: ui::ApplicationHandler,
+    app_handler: ui::ApplicationContext,
     // --- backend ---
     backend: B,
     // --- ticker ---
@@ -212,6 +212,8 @@ impl<
 
 // MARK: Winit Event Loop
 
+// TODO: Use TokioRuntime::spawn() instead of blocking on as much as possible.
+
 // winit event handler
 impl<
     Model: Send + Sync + 'static,
@@ -225,22 +227,23 @@ impl<
     // MARK: resumed
 
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        // create a window
-        if let Err(e) = self.window.start_window(
-            event_loop,
-            self.surface_preferred_format,
-            self.render_control.gpu(),
-        ) {
-            eprintln!("Failed to start window: {e:?}");
-            event_loop.exit();
-            return;
-        }
+        self.tokio_runtime.block_on(async {
+            // create a window
+            if let Err(e) = self.window.start_window(
+                event_loop,
+                self.surface_preferred_format,
+                self.render_control.gpu(),
+            ) {
+                eprintln!("Failed to start window: {e:?}");
+                event_loop.exit();
+                return;
+            }
 
-        // call setup function
-        self.tokio_runtime
-            .block_on(self.ui_control.setup(&self.app_handler));
+            // call setup function
+            self.ui_control.setup(&self.app_handler).await;
 
-        self.window.request_redraw();
+            self.window.request_redraw();
+        });
     }
 
     // MARK: window_event

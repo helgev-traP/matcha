@@ -2,8 +2,8 @@ use matcha_core::{
     device_input::DeviceInput,
     metrics::{Arrangement, Constraints},
     ui::{
-        AnyWidget, AnyWidgetFrame, ApplicationHandler, Background, Dom, InvalidationHandle, Widget,
-        WidgetContext, WidgetFrame,
+        AnyWidget, AnyWidgetFrame, WidgetContext, ApplicationContext, Background, Dom,
+        InvalidationHandle, Widget, WidgetFrame,
     },
     update_flag::UpdateNotifier,
 };
@@ -246,7 +246,7 @@ where
         children: &mut [(&mut dyn AnyWidget<T>, &mut (), &Arrangement)],
         _cache_invalidator: InvalidationHandle,
         ctx: &WidgetContext,
-        app_handler: &ApplicationHandler,
+        app_handler: &ApplicationContext,
     ) -> Option<T> {
         // Iterate children in reverse order so top-most (last) child receives events first.
         for (child, _, arrangement) in children.iter_mut().rev() {

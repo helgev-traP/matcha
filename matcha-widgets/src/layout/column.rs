@@ -1,11 +1,11 @@
 use matcha_core::metrics::{Arrangement, Constraints};
-use matcha_core::ui::ApplicationHandler;
+use matcha_core::ui::ApplicationContext;
 use nalgebra::Matrix4;
 
 use matcha_core::ui::widget::InvalidationHandle;
 use matcha_core::{
     device_input::DeviceInput,
-    ui::{AnyWidget, AnyWidgetFrame, Background, Dom, Widget, WidgetContext, WidgetFrame},
+    ui::{AnyWidget, AnyWidgetFrame, WidgetContext, Background, Dom, Widget, WidgetFrame},
     update_flag::UpdateNotifier,
 };
 use renderer::render_node::RenderNode;
@@ -235,7 +235,7 @@ where
         children: &mut [(&mut dyn AnyWidget<T>, &mut (), &Arrangement)],
         _cache_invalidator: InvalidationHandle,
         ctx: &WidgetContext,
-        app_handler: &ApplicationHandler,
+        app_handler: &ApplicationContext,
     ) -> Option<T> {
         // Process children in reverse order for proper event handling
         for (child, _, arrangement) in children.iter_mut().rev() {
