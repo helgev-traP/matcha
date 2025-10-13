@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::debug_config::{DebugConfig, SharedDebugConfig};
+use crate::debug_config::DebugConfig;
 use std::sync::Arc;
 use winit::dpi::PhysicalSize;
 
@@ -10,7 +10,7 @@ use crate::{
     device_input::mouse_state::MousePrimaryButton,
     ui,
     winit_instance::{
-        AnyResource, InitError, WinitInstance, render_control, ticker, ui_control, window_surface,
+        AnyResource, InitError, WinitInstance, render_control, ticker, ui_control,
     },
 };
 
@@ -59,7 +59,7 @@ pub struct WinitInstanceBuilder<
     // font settings
     pub(crate) default_font_size: f32,
     // debug / profiling config
-    pub(crate) debug_config: SharedDebugConfig,
+    pub(crate) debug_config: DebugConfig,
 }
 
 pub(crate) enum RuntimeBuilder {
@@ -116,7 +116,7 @@ impl<
             mouse_primary_button: MOUSE_PRIMARY_BUTTON,
             scroll_pixel_per_line: SCROLL_PIXEL_PER_LINE,
             default_font_size: DEFAULT_FONT_SIZE,
-            debug_config: Arc::new(DebugConfig::default()),
+            debug_config: DebugConfig::default(),
         }
     }
 
@@ -192,8 +192,8 @@ impl<
         self
     }
 
-    /// Provide a shared DebugConfig instance to the builder.
-    pub fn debug_config(mut self, cfg: SharedDebugConfig) -> Self {
+    /// Provide a DebugConfig instance to the builder.
+    pub fn debug_config(mut self, cfg: DebugConfig) -> Self {
         self.debug_config = cfg;
         self
     }
@@ -248,9 +248,9 @@ impl<
             self.default_font_size,
         )?;
 
-        let mut window = window_surface::WindowSurface::new();
+        let mut window = crate::window_surface::WindowSurface::new();
         window.set_title(self.title.as_str());
-        window.set_init_size(self.init_size);
+        window.request_inner_size(self.init_size);
         window.set_maximized(self.maximized);
         if self.full_screen {
             window.set_fullscreen(true);
@@ -259,7 +259,7 @@ impl<
         Ok(WinitInstance {
             tokio_runtime,
             window,
-            surface_preferred_format: self.surface_preferred_format,
+            preferred_surface_format: self.surface_preferred_format,
             any_resource: AnyResource::new(),
             debug_config: self.debug_config.clone(),
             render_control,

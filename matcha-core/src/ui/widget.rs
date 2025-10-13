@@ -71,7 +71,6 @@ pub trait Widget<D: Dom<E>, E: 'static = (), ChildSetting: PartialEq + 'static =
         children: &mut [(&mut dyn AnyWidget<E>, &mut ChildSetting, &Arrangement)],
         cache_invalidator: InvalidationHandle,
         ctx: &WidgetContext,
-        app_handler: &ApplicationContext,
     ) -> Option<E>;
 
     fn is_inside(
@@ -115,12 +114,7 @@ pub trait Widget<D: Dom<E>, E: 'static = (), ChildSetting: PartialEq + 'static =
 
 /// Make trait object that can be used from widget implement.
 pub trait AnyWidget<E: 'static> {
-    fn device_input(
-        &mut self,
-        event: &DeviceInput,
-        ctx: &WidgetContext,
-        app_handler: &ApplicationContext,
-    ) -> Option<E>;
+    fn device_input(&mut self, event: &DeviceInput, ctx: &WidgetContext) -> Option<E>;
 
     fn is_inside(&self, position: [f32; 2], ctx: &WidgetContext) -> bool;
 
@@ -237,12 +231,7 @@ where
     T: 'static,
     ChildSetting: Send + Sync + PartialEq + Clone + 'static,
 {
-    fn device_input(
-        &mut self,
-        event: &DeviceInput,
-        ctx: &WidgetContext,
-        app_handler: &ApplicationContext,
-    ) -> Option<T> {
+    fn device_input(&mut self, event: &DeviceInput, ctx: &WidgetContext) -> Option<T> {
         let Some(dirty_flags) = &self.dirty_flags else {
             return None;
         };
@@ -274,7 +263,6 @@ where
                 need_redraw: &dirty_flags.need_redraw,
             },
             ctx,
-            app_handler,
         )
     }
 
@@ -354,7 +342,7 @@ where
 
         // Decide whether to recompute render each time: if so, clear persistent render cache
         // before get_or_insert_with so it gets recomputed and written into the cache.
-        if ctx.debug_config().disable_rendernode_cache() {
+        if ctx.debug_config().disable_render_node_cache() {
             cache.render.clear();
         }
 
@@ -637,7 +625,6 @@ mod tests {
             _children: &mut [(&mut dyn AnyWidget<String>, &mut MockSetting, &Arrangement)],
             _cache_invalidator: InvalidationHandle,
             _ctx: &WidgetContext,
-            _app_handler: &ApplicationContext,
         ) -> Option<String> {
             None
         }
@@ -992,9 +979,9 @@ mod tests {
 
     // --- Added Tests ---
 
+    use crate::ui::context::AnyConfig;
     use crate::{
-        any_resource::AnyResource, gpu::DeviceQueue, texture_allocator::TextureAllocator,
-        ui::widget_context::WidgetContext,
+        any_resource::AnyResource, texture_allocator::TextureAllocator, ui::context::WidgetContext,
     };
     use std::{
         mem::MaybeUninit,
@@ -1013,17 +1000,18 @@ mod tests {
     ) -> WidgetContext<'a> {
         // create a default DebugConfig for tests
         let debug_cfg = Arc::new(crate::debug_config::DebugConfig::default());
-        WidgetContext::new(
-            *dq,
-            wgpu::TextureFormat::Rgba8UnormSrgb,
-            [800.0, 600.0],
-            1.0,
-            ta,
-            ar,
-            16.0,
-            debug_cfg,
-            Duration::from_secs(0),
-        )
+        WidgetContext {
+            task_executor: tokio::runtime::Handle::current(),
+            device_queue: *dq,
+            surface_format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            window_size: [800.0, 600.0],
+            window_dpi: 1.0,
+            texture_atlas: ta,
+            any_resource: ar,
+            scoped_config: AnyConfig::new(),
+            debug_config: debug_cfg,
+            current_time: Duration::from_secs(0),
+        }
     }
 
     #[derive(Default)]
@@ -1054,7 +1042,6 @@ mod tests {
             _children: &mut [(&mut dyn AnyWidget<String>, &mut MockSetting, &Arrangement)],
             _cache_invalidator: InvalidationHandle,
             _ctx: &WidgetContext,
-            _app_handler: &ApplicationContext,
         ) -> Option<String> {
             None
         }
@@ -1171,7 +1158,6 @@ mod tests {
             _: &mut [(&mut dyn AnyWidget<String>, &mut MockSetting, &Arrangement)],
             _: InvalidationHandle,
             _: &WidgetContext,
-            _: &ApplicationContext,
         ) -> Option<String> {
             None
         }

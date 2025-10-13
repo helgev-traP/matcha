@@ -109,12 +109,12 @@ impl Size {
         }
     }
 
-    /// Specify size in magnification of root font size.
-    pub fn rem(rem: f32) -> Self {
-        Self {
-            f: Arc::new(move |_, _, ctx| rem * ctx.root_font_size()),
-        }
-    }
+    // /// Specify size in magnification of root font size.
+    // pub fn rem(rem: f32) -> Self {
+    //     Self {
+    //         f: Arc::new(move |_, _, ctx| rem * ctx.root_font_size()),
+    //     }
+    // }
 
     /// Specify size in magnification of viewport width.
     pub fn vw(vw: f32) -> Self {

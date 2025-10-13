@@ -1,27 +1,17 @@
-use std::sync::Arc;
+// TODO NOTE:
+// In this framework, GPU Device Lost have not been handled yet.
+// This must be handled in the future.
 
-#[derive(Clone, Copy)]
-pub struct DeviceQueue<'a> {
-    pub(crate) device: &'a wgpu::Device,
-    pub(crate) queue: &'a wgpu::Queue,
-}
-
-impl DeviceQueue<'_> {
-    pub fn device(&self) -> &wgpu::Device {
-        self.device
-    }
-
-    pub fn queue(&self) -> &wgpu::Queue {
-        self.queue
-    }
-}
+const DEFAULT_PREFERRED_SURFACE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8UnormSrgb;
 
 pub struct Gpu {
     // gpu device
     instance: wgpu::Instance,
     adapter: wgpu::Adapter,
-    device: Arc<wgpu::Device>,
-    queue: Arc<wgpu::Queue>,
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+
+    preferred_surface_format: wgpu::TextureFormat,
 }
 
 impl Gpu {
@@ -58,34 +48,40 @@ impl Gpu {
         Ok(Self {
             instance,
             adapter,
-            device: Arc::new(device),
-            queue: Arc::new(queue),
+            device,
+            queue,
+            preferred_surface_format: DEFAULT_PREFERRED_SURFACE_FORMAT,
         })
+    }
+
+    pub fn with_preferred_surface_format(
+        mut self,
+        format: wgpu::TextureFormat,
+    ) -> Self {
+        self.preferred_surface_format = format;
+        self
+    }
+
+    pub fn preferred_surface_format(&self) -> wgpu::TextureFormat {
+        self.preferred_surface_format
     }
 }
 
 impl Gpu {
-    pub fn instance(&self) -> &wgpu::Instance {
+    pub(crate) fn instance(&self) -> &wgpu::Instance {
         &self.instance
     }
 
-    pub fn adapter(&self) -> &wgpu::Adapter {
+    pub(crate) fn adapter(&self) -> &wgpu::Adapter {
         &self.adapter
     }
 
-    pub fn device(&self) -> &Arc<wgpu::Device> {
+    pub fn device(&self) -> &wgpu::Device {
         &self.device
     }
 
-    pub fn queue(&self) -> &Arc<wgpu::Queue> {
+    pub fn queue(&self) -> &wgpu::Queue {
         &self.queue
-    }
-
-    pub fn device_queue(&self) -> DeviceQueue<'_> {
-        DeviceQueue {
-            device: &self.device,
-            queue: &self.queue,
-        }
     }
 }
 

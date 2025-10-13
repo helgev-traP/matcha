@@ -1,18 +1,26 @@
+use renderer::{core_renderer, CoreRenderer};
 use std::fmt::Debug;
 use thiserror::Error;
 
-use crate::{any_resource::AnyResource, backend::Backend, debug_config::SharedDebugConfig, ui};
+use crate::{
+    backend::Backend,
+    ui,
+    window_surface::{self},
+};
 
 // MARK: modules
 
 mod benchmark;
 mod builder;
-mod render_control;
 mod ticker;
-mod ui_control;
-mod window_surface;
+mod window_ui;
 
 pub(crate) use builder::WinitInstanceBuilder;
+
+// todo: move this to more appropriate place
+pub trait WindowManager<Message> {
+    fn message_routing(&self, message: &Message) -> Option<winit::window::WindowId>;
+}
 
 // MARK: Winit
 
@@ -25,21 +33,27 @@ pub struct WinitInstance<
 > {
     // --- tokio runtime ---
     tokio_runtime: tokio::runtime::Runtime,
-    // --- window ---
-    window: window_surface::WindowSurface,
-    surface_preferred_format: wgpu::TextureFormat,
-    // --- rendering context ---
-    any_resource: AnyResource,
-    debug_config: SharedDebugConfig,
+
+    // --- Context ---
+    context: ui::context::AllContext,
+    preferred_surface_format: wgpu::TextureFormat,
+    // ticker: ticker::Ticker,
+
+    // --- ui ---
+    windows: std::collections::HashMap<
+        winit::window::WindowId,
+        window_ui::WindowUi<Model, Message, Event, InnerEvent>,
+        fxhash::FxBuildHasher,
+    >,
+    window_manager: Box<dyn WindowManager<Message> + Send + Sync>,
+
     // --- render control ---
-    render_control: render_control::RenderControl,
-    // --- UI control ---
-    ui_control: ui_control::UiControl<Model, Message, Event, InnerEvent>,
-    app_handler: ui::ApplicationContext,
+    base_color: wgpu::Color,
+    renderer: CoreRenderer,
+
     // --- backend ---
     backend: B,
-    // --- ticker ---
-    ticker: ticker::Ticker,
+
     // --- benchmark / monitoring ---
     benchmarker: benchmark::Benchmark,
     frame: u128,
@@ -63,39 +77,6 @@ impl<
 
 // MARK: render
 
-fn create_widget_context<
-    'a,
-    Model: Send + Sync + 'static,
-    Message: 'static,
-    Event: 'static,
-    InnerEvent: 'static,
->(
-    window: &window_surface::WindowSurface,
-    render_control: &'a render_control::RenderControl,
-    ui_control: &ui_control::UiControl<Model, Message, Event, InnerEvent>,
-    any_resource: &'a AnyResource,
-    debug_config: SharedDebugConfig,
-    current_time: std::time::Duration,
-) -> Option<ui::WidgetContext<'a>> {
-    let size = window.inner_size()?;
-    let size = [size.width as f32, size.height as f32];
-    let dpi = window.dpi()?;
-
-    let format = window.format()?;
-
-    Some(ui::WidgetContext::new(
-        render_control.device_queue(),
-        format,
-        size,
-        dpi,
-        render_control.texture_allocator(),
-        any_resource,
-        ui_control.default_font_size(),
-        debug_config,
-        current_time,
-    ))
-}
-
 impl<
     Model: Send + Sync + 'static,
     Message: 'static,
@@ -104,57 +85,59 @@ impl<
     InnerEvent: 'static,
 > WinitInstance<Model, Message, B, Event, InnerEvent>
 {
-    fn render(&mut self, force: bool) -> Result<(), RenderError> {
+    fn render(
+        &mut self,
+        window_id: winit::window::WindowId,
+        winit_event_loop: &winit::event_loop::ActiveEventLoop,
+        force: bool,
+    ) -> Result<(), RenderError> {
+        let Some(window_ui) = self.windows.get_mut(&window_id) else {
+            return Err(RenderError::WindowNotFound);
+        };
+
         // Check if the UI needs to be re-rendered before getting the surface texture
-        if !self.ui_control.needs_render() && !force {
+        if !window_ui.needs_render() && !force {
             return Ok(());
         }
 
-        let surface_texture = self
-            .window
-            .get_current_texture()
-            .ok_or(RenderError::WindowSurface("Failed to get current texture"))??;
-
-        let target_view = surface_texture
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-
-        let ctx = create_widget_context(
-            &self.window,
-            &self.render_control,
-            &self.ui_control,
-            &self.any_resource,
-            self.debug_config.clone(),
-            self.ticker.current_time(),
-        )
-        .expect("Window must exist when render is called, as it is only called after resumed");
-
         let object = {
-            let background = ui::Background::new(&target_view, [0.0, 0.0]);
-            self.tokio_runtime.block_on(self.ui_control.render(
-                ctx.viewport_size(),
-                background,
-                &ctx,
+            self.tokio_runtime.block_on(window_ui.render(
+                self.tokio_runtime.handle(),
+                &self.context,
+                winit_event_loop,
                 &mut self.benchmarker,
             ))
         };
 
-        let size = self
-            .window
-            .inner_size()
-            .expect("Window must exist when render is called, as it is only called after resumed");
-        let size = [size.width as f32, size.height as f32];
+        let Some(window_ui::RenderResult {
+            render_node: object,
+            viewport_size,
+            surface_texture,
+            surface_format,
+        }) = object
+        else {
+            // Nothing to render
+            return Ok(());
+        };
+
+        let device = self.context.gpu().device();
+        let queue = self.context.gpu().queue();
 
         self.benchmarker
             .with_gpu_driven_render(|| -> Result<(), RenderError> {
-                self.render_control
+                self.renderer
                     .render(
+                        device,
+                        queue,
+                        surface_format,
+                        &surface_texture
+                            .texture
+                            .create_view(&wgpu::TextureViewDescriptor::default()),
+                        viewport_size,
                         &object,
-                        &target_view,
-                        size,
-                        self.window
-                            .format()
-                            .expect("Surface must be configured when render is called"),
+                        self.base_color,
+                        &self.context.texture_allocator().color_texture(),
+                        &self.context.texture_allocator().stencil_texture(),
                     )
                     .map_err(RenderError::Render)?;
 
@@ -164,7 +147,7 @@ impl<
         // clear terminal line and print benchmark info
         print!(
             "\r({:.3}) | (frame: {}) | ",
-            self.ticker.current_time().as_secs_f32(),
+            self.context.current_time().as_secs_f32(),
             self.frame,
         );
         self.benchmarker.print();
@@ -178,31 +161,10 @@ impl<
         Ok(())
     }
 
-    fn try_render(&mut self, force: bool) {
-        if let Err(e) = self.render(force) {
-            match e {
-                RenderError::Surface(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-                    // reconfigure the surface
-                    let size = self
-                        .window
-                        .inner_size()
-                        .expect("Window must exist to render");
-                    self.window
-                        .set_size(size, self.render_control.device_queue().device);
-                    // request redraw in the next frame
-                    self.window.request_redraw();
-                }
-                _ => {
-                    eprintln!("Render error: {e:?}");
-                }
-            }
-        }
-    }
-
     fn handle_commands(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        for command in self.app_handler.drain_commands() {
+        for command in self.context.drain_commands() {
             match command {
-                ui::ApplicationHandlerCommand::Quit => {
+                ui::ApplicationContextCommand::Quit => {
                     event_loop.exit();
                 }
             }
@@ -228,21 +190,17 @@ impl<
 
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         self.tokio_runtime.block_on(async {
-            // create a window
-            if let Err(e) = self.window.start_window(
-                event_loop,
-                self.surface_preferred_format,
-                self.render_control.gpu(),
-            ) {
-                eprintln!("Failed to start window: {e:?}");
-                event_loop.exit();
-                return;
+            // start window
+            for window_ui in self.windows.values_mut() {
+                window_ui.start_window(event_loop, &self.context).await;
             }
 
             // call setup function
-            self.ui_control.setup(&self.app_handler).await;
-
-            self.window.request_redraw();
+            for window_ui in self.windows.values_mut() {
+                window_ui
+                    .setup(self.tokio_runtime.handle(), &self.context)
+                    .await;
+            }
         });
     }
 
@@ -254,52 +212,29 @@ impl<
         window_id: winit::window::WindowId,
         event: winit::event::WindowEvent,
     ) {
-        self.ticker.tick();
-
         // events which are to be handled by render system
         match event {
             winit::event::WindowEvent::RedrawRequested => {
-                self.try_render(false);
+                if let Err(e) = self.render(window_id, event_loop, false) {
+                    todo!("Render error: {:?}", e);
+                }
             }
             winit::event::WindowEvent::Resized(physical_size) => {
-                // update the window size
-                self.window
-                    .set_size(physical_size, self.render_control.device_queue().device);
-                self.try_render(true);
+                if let Some(window_ui) = self.windows.get_mut(&window_id) {
+                    window_ui.resize_window(physical_size, self.context.gpu().device());
+                    window_ui.request_redraw();
+                }
             }
             _ => {}
         }
 
         // convert window event to Event
 
-        let Some(ctx) = create_widget_context(
-            &self.window,
-            &self.render_control,
-            &self.ui_control,
-            &self.any_resource,
-            self.debug_config.clone(),
-            self.ticker.current_time(),
-        ) else {
+        let Some(window_ui) = self.windows.get_mut(&window_id) else {
             return;
         };
 
-        let event = self.ui_control.window_event(
-            event,
-            || {
-                (
-                    self.window.inner_size().expect("window should be there when window event is called"),
-                    self.window.outer_size().expect("window should be there when window event is called"),
-                )
-            },
-            || {
-                (
-                    self.window.inner_position().expect("").expect("window should be there and when Android / Wayland window moving event should not be called"),
-                    self.window.outer_position().expect("").expect("window should be there and when Android / Wayland window moving event should not be called"),
-                )
-            },
-            &ctx,
-            &self.app_handler,
-        );
+        let event = window_ui.window_event(event, self.tokio_runtime.handle(), &self.context);
 
         if let Some(event) = event {
             let backend = self.backend.clone();
@@ -321,7 +256,9 @@ impl<
             winit::event::StartCause::Init => {}
             winit::event::StartCause::WaitCancelled { .. } => {}
             winit::event::StartCause::ResumeTimeReached { .. } | winit::event::StartCause::Poll => {
-                self.window.request_redraw();
+                for window_ui in self.windows.values_mut() {
+                    window_ui.request_redraw();
+                }
             }
         }
     }
@@ -329,8 +266,12 @@ impl<
     // MARK: user_event
 
     fn user_event(&mut self, event_loop: &winit::event_loop::ActiveEventLoop, event: Message) {
-        self.ui_control.user_event(&event, &self.app_handler);
-        self.window.request_redraw();
+        if let Some(window_id) = self.window_manager.message_routing(&event) {
+            if let Some(window_ui) = self.windows.get_mut(&window_id) {
+                window_ui.user_event(&event, self.tokio_runtime.handle(), &self.context);
+                window_ui.request_redraw();
+            }
+        }
 
         self.handle_commands(event_loop);
     }
@@ -370,17 +311,19 @@ pub enum InitError {
     #[error("Failed to initialize GPU")]
     Gpu,
     #[error(transparent)]
-    UiControl(#[from] ui_control::UiControlError),
+    WindowUi(#[from] window_ui::WindowUiError),
     #[error(transparent)]
     WindowSurface(#[from] window_surface::WindowSurfaceError),
 }
 
 #[derive(Debug, Error)]
 pub enum RenderError {
+    #[error("Window not found")]
+    WindowNotFound,
     #[error("Window surface error: {0}")]
     WindowSurface(&'static str),
     #[error(transparent)]
     Surface(#[from] wgpu::SurfaceError),
     #[error(transparent)]
-    Render(#[from] render_control::RenderControlError),
+    Render(#[from] core_renderer::TextureValidationError),
 }

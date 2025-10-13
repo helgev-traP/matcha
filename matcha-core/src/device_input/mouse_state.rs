@@ -13,6 +13,47 @@ pub enum MousePrimaryButton {
     Right,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct MouseStateConfig {
+    pub combo_duration: Duration,
+    pub long_press_duration: Duration,
+    pub primary_button: MousePrimaryButton,
+    pub pixel_per_line: f32,
+}
+
+impl MouseStateConfig {
+    pub fn init(self) -> Option<MouseState> {
+        let Self {
+            combo_duration,
+            long_press_duration,
+            primary_button,
+            pixel_per_line,
+        } = self;
+
+        if combo_duration <= long_press_duration {
+            Some(MouseState {
+                combo_duration,
+                long_press_duration,
+                position: [0.0, 0.0],
+                primary_button,
+                pixel_per_line,
+                primary: ButtonState::default(),
+                dragging_from_primary: None,
+                secondary: ButtonState::default(),
+                dragging_from_secondary: None,
+                middle: ButtonState::default(),
+                dragging_from_middle: None,
+                back: ButtonState::default(),
+                back_dragging_from: None,
+                forward: ButtonState::default(),
+                forward_dragging_from: None,
+            })
+        } else {
+            None
+        }
+    }
+}
+
 /// Manages the mouse state to detect complex gestures like clicks, drags, and long presses
 /// from raw mouse input events.
 pub struct MouseState {

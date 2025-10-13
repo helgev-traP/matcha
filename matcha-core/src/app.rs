@@ -139,7 +139,7 @@ where
     }
 
     /// Inject a shared DebugConfig instance.
-    pub fn debug_config(mut self, cfg: crate::debug_config::SharedDebugConfig) -> Self {
+    pub fn debug_config(mut self, cfg: crate::debug_config::DebugConfig) -> Self {
         self.builder = self.builder.debug_config(cfg);
         self
     }

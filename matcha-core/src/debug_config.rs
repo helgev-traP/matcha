@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Runtime debug configuration used to selectively disable caches for profiling.
@@ -54,7 +53,7 @@ impl DebugConfig {
     pub fn set_disable_rendernode_cache(&self, v: bool) {
         self.disable_rendernode_cache.store(v, Ordering::Relaxed)
     }
-    pub fn disable_rendernode_cache(&self) -> bool {
+    pub fn disable_render_node_cache(&self) -> bool {
         self.disable_rendernode_cache.load(Ordering::Relaxed)
     }
 }
@@ -77,6 +76,3 @@ impl Clone for DebugConfig {
         }
     }
 }
-
-/// Shared reference type for passing the config around.
-pub type SharedDebugConfig = Arc<DebugConfig>;

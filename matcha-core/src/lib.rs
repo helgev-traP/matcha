@@ -3,6 +3,7 @@ pub mod app;
 
 // event loop, window handling and rendering
 mod winit_instance;
+mod window_surface;
 
 // widget system
 pub mod backend;

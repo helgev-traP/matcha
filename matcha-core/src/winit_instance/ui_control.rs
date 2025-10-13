@@ -114,7 +114,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
         &'a mut self,
         viewport_size: [f32; 2],
         background: Background<'a>,
-        ctx: &WidgetContext<'a>,
+        ctx: &WidgetContext,
         benchmark: &mut super::benchmark::Benchmark,
     ) -> Arc<RenderNode> {
         if self.widget.is_none() {

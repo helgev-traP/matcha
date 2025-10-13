@@ -300,12 +300,11 @@ impl<Model: Send + Sync + 'static, Event: 'static, InnerEvent: 'static> AnyWidge
         &mut self,
         event: &DeviceInput,
         ctx: &WidgetContext,
-        app_handler: &ApplicationContext,
     ) -> Option<Event> {
-        (self.input)(event, &self.model_access, app_handler);
+        (self.input)(event, &self.model_access, &ctx.application_context());
 
-        let inner_event = self.widget_tree.device_input(event, ctx, app_handler);
-        inner_event.and_then(|e| (self.event)(e, &self.model_access, app_handler))
+        let inner_event = self.widget_tree.device_input(event, ctx);
+        inner_event.and_then(|e| (self.event)(e, &self.model_access, &ctx.application_context()))
     }
 
     fn is_inside(&self, position: [f32; 2], ctx: &WidgetContext) -> bool {

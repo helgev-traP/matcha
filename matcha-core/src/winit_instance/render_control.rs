@@ -1,9 +1,6 @@
 use thiserror::Error;
 
-use crate::{
-    gpu::{DeviceQueue, Gpu, GpuError},
-    texture_allocator::TextureAllocator,
-};
+use crate::gpu::GpuError;
 use renderer::{
     core_renderer::CoreRenderer,
     // debug_renderer::DebugRenderer as CoreRenderer,
@@ -12,70 +9,44 @@ use renderer::{
 };
 
 pub struct RenderControl {
-    gpu: Gpu,
     base_color: wgpu::Color,
     renderer: CoreRenderer,
-    texture_allocator: TextureAllocator,
 }
 
 impl RenderControl {
-    pub async fn new(
-        power_preferences: wgpu::PowerPreference,
-        base_color: wgpu::Color,
-        color_format: wgpu::TextureFormat,
-        stencil_format: wgpu::TextureFormat,
-    ) -> Result<Self, GpuError> {
-        let gpu = Gpu::new(power_preferences).await?;
-        let renderer = CoreRenderer::new(gpu.device());
-
-        let texture_allocator = TextureAllocator::new(&gpu, color_format, stencil_format);
-
+    pub async fn new(device: &wgpu::Device, base_color: wgpu::Color) -> Result<Self, GpuError> {
+        let renderer = CoreRenderer::new(device);
         Ok(Self {
-            gpu,
             base_color,
             renderer,
-            texture_allocator,
         })
-    }
-
-    pub(crate) fn gpu(&self) -> &Gpu {
-        &self.gpu
-    }
-
-    pub fn device(&self) -> &wgpu::Device {
-        self.gpu.device()
-    }
-
-    pub fn queue(&self) -> &wgpu::Queue {
-        self.gpu.queue()
-    }
-
-    pub fn device_queue(&self) -> DeviceQueue<'_> {
-        self.gpu.device_queue()
-    }
-
-    pub fn texture_allocator(&self) -> &TextureAllocator {
-        &self.texture_allocator
     }
 
     pub fn render(
         &self,
-        object: &RenderNode,
+        // target
         target_view: &wgpu::TextureView,
         viewport_size: [f32; 2],
         surface_format: wgpu::TextureFormat,
+        // resources
+        object: &RenderNode,
+        texture_atlas: &wgpu::Texture,
+        stencil_atlas: &wgpu::Texture,
+        // gpu
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
     ) -> Result<(), RenderControlError> {
         self.renderer
             .render(
-                self.device(),
-                self.queue(),
+                device,
+                queue,
                 surface_format,
                 target_view,
                 viewport_size,
                 object,
                 self.base_color,
-                &self.texture_allocator.color_texture(),
-                &self.texture_allocator.stencil_texture(),
+                texture_atlas,
+                stencil_atlas,
             )
             .map_err(RenderControlError::TextureValidation)?;
 
