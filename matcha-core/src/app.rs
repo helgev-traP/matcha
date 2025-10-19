@@ -9,29 +9,47 @@ use super::{
 };
 use std::time::Duration;
 
-pub struct App<Message, Event, B>
+/// Top-level application builder.
+/// Generics:
+/// - Model: application model stored inside `Component` (must be Send+Sync)
+/// - Message: external message type sent to the app
+/// - B: backend type implementing `Backend<Event>`
+/// - Event: event type produced by UI
+/// - InnerEvent: event type used internally by Component's view
+pub struct App<Model, Message, B, Event, InnerEvent>
 where
-    Event: Send,
-    B: Backend<Event>,
+    Model: Send + Sync + 'static,
+    Message: Send + Sync + 'static,
+    Event: Send + 'static,
+    B: Backend<Event> + 'static,
 {
     builder: WinitInstanceBuilder<Message, Event, B>,
+    // Phantom markers for unused type parameters so the struct keeps them in its
+    // type signature and avoids "type parameter is never used" errors.
+    _model: std::marker::PhantomData<Model>,
+    _inner_event: std::marker::PhantomData<InnerEvent>,
 }
 
-impl<Message, Event> App<Message, Event, ()>
+impl<Message, Event> App<(), Message, (), Event, ()>
 where
-    Message: 'static,
+    Message: Send + Sync + 'static,
     Event: Send + 'static,
 {
+    /// Convenience constructor for apps that don't use a typed `Model` / `InnerEvent`
+    /// and use the unit backend `()`.
     pub fn new(component: impl AnyComponent<Message, Event> + 'static) -> Self {
         Self {
             builder: WinitInstance::builder(component, ()),
+            _model: std::marker::PhantomData,
+            _inner_event: std::marker::PhantomData,
         }
     }
 }
 
 impl<Model, Message, B, Event, InnerEvent> App<Model, Message, B, Event, InnerEvent>
 where
-    Message: 'static,
+    Model: Send + Sync + 'static,
+    Message: Send + Sync + 'static,
     Event: std::fmt::Debug + Send + 'static,
     B: Backend<Event> + Clone + 'static,
 {
@@ -41,7 +59,7 @@ where
         backend: NewB,
     ) -> App<Model, NewMessage, NewB, Event, InnerEvent>
     where
-        NewMessage: 'static,
+        NewMessage: Send + Sync + 'static,
         NewB: Backend<Event> + Clone + 'static,
     {
         let mut new_builder = WinitInstance::builder(component, backend);
@@ -61,6 +79,8 @@ where
 
         App {
             builder: new_builder,
+            _model: std::marker::PhantomData,
+            _inner_event: std::marker::PhantomData,
         }
     }
 

@@ -1,12 +1,10 @@
 use matcha_core::{
     device_input::DeviceInput,
     metrics::{Arrangement, Constraints},
-    ui::{
-        AnyWidget, AnyWidgetFrame, ApplicationContext, Background, Dom, InvalidationHandle, Widget,
-        WidgetContext, WidgetFrame,
-    },
-    update_flag::UpdateNotifier,
+    ui::{AnyWidget, AnyWidgetFrame, Background, Dom, InvalidationHandle, Widget, WidgetFrame},
 };
+use matcha_core::context::WidgetContext;
+use utils::update_flag::UpdateNotifier;
 use renderer::render_node::RenderNode;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -131,11 +129,10 @@ where
         children: &mut [(&mut dyn AnyWidget<T>, &mut (), &Arrangement)],
         _cache_invalidator: InvalidationHandle,
         ctx: &WidgetContext,
-        _app_handler: &ApplicationContext,
     ) -> Option<T> {
         if self.visibility == VisibilityState::Visible {
             if let Some((child, _, _arrangement)) = children.first_mut() {
-                return child.device_input(event, ctx, _app_handler);
+                return child.device_input(event, ctx);
             }
         }
         None

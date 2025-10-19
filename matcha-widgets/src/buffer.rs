@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::style::Style;
 use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
-use matcha_core::{metrics::QRect, ui::WidgetContext};
+use matcha_core::{metrics::QRect, context::WidgetContext};
 use utils::cache::Cache;
 
 pub struct Buffer {
@@ -87,7 +87,8 @@ impl Buffer {
             // We unwrap here because allocation failure is unexpected in normal operation.
             let atlas_region = ctx
                 .texture_atlas()
-                .allocate_color(ctx.device(), ctx.queue(), texture_size)
+                .lock()
+                .allocate(&ctx.device(), &ctx.queue(), texture_size)
                 .expect("Texture atlas allocation failed for Buffer");
 
             for style in &self.style {

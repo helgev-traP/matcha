@@ -1,7 +1,7 @@
 use crate::style::Style;
 use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
 use matcha_core::metrics::QSize;
-use matcha_core::{color::Color, ui::WidgetContext};
+use matcha_core::{color::Color, context::WidgetContext};
 use parking_lot::Mutex;
 
 pub use glyphon::cosmic_text::Stretch as TextStretch;
@@ -206,9 +206,9 @@ impl Style for Text {
         let (_, buffer) = &*self.buffer.get_or_insert_with(&q_size, || {
             let size = constraints.max_size();
 
-            let glyphon_shared = ctx
-                .any_resource()
-                .get_or_insert_with(|| TextShared::setup(ctx.device(), ctx.queue()));
+let glyphon_shared = ctx
+            .any_resource()
+            .get_or_insert_with(|| TextShared::setup(&ctx.device(), &ctx.queue()));
 
             let mut font_system = glyphon_shared.font_system.lock();
 
@@ -272,9 +272,9 @@ impl Style for Text {
         let size = boundary_size;
         let q_size = QSize::from(size);
 
-        let glyphon_shared = ctx
+let glyphon_shared = ctx
             .any_resource()
-            .get_or_insert_with(|| TextShared::setup(ctx.device(), ctx.queue()));
+            .get_or_insert_with(|| TextShared::setup(&ctx.device(), &ctx.queue()));
 
         // 1) Acquire locks in required order
         let mut font_system = glyphon_shared.font_system.lock();
@@ -324,10 +324,10 @@ impl Style for Text {
         let target_size = target.size();
         // viewport resolution should match the render target (region) size so shader NDC math maps correctly
         let (_, viewport) = &mut *self
-            .viewport
-            .get_or_insert_with(&q_size, || glyphon::Viewport::new(ctx.device(), &cache));
+.viewport
+            .get_or_insert_with(&q_size, || glyphon::Viewport::new(&ctx.device(), &cache));
         viewport.update(
-            ctx.queue(),
+            &ctx.queue(),
             glyphon::Resolution {
                 width: target_size[0],
                 height: target_size[1],
@@ -335,9 +335,9 @@ impl Style for Text {
         );
 
         let (_, text_renderer) = &mut *self.text_renderer.get_or_insert_with(&q_size, || {
-            glyphon::TextRenderer::new(
+glyphon::TextRenderer::new(
                 &mut text_atlas,
-                ctx.device(),
+                &ctx.device(),
                 wgpu::MultisampleState::default(),
                 None,
             )
@@ -361,10 +361,10 @@ impl Style for Text {
         };
 
         // 5) Call prepare to ensure glyphs are rasterized into glyphon's atlas and vertex buffer is populated.
-        if text_renderer
+if text_renderer
             .prepare(
-                ctx.device(),
-                ctx.queue(),
+                &ctx.device(),
+                &ctx.queue(),
                 &mut font_system,
                 &mut text_atlas,
                 &viewport,

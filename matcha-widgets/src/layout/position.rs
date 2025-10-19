@@ -3,12 +3,10 @@ use nalgebra::Matrix4;
 use matcha_core::{
     device_input::DeviceInput,
     metrics::{Arrangement, Constraints},
-    ui::{
-        AnyWidget, AnyWidgetFrame, ApplicationContext, Background, Dom, InvalidationHandle, Widget,
-        WidgetContext, WidgetFrame,
-    },
-    update_flag::UpdateNotifier,
+    ui::{AnyWidget, AnyWidgetFrame, Background, Dom, InvalidationHandle, Widget, WidgetFrame},
 };
+use matcha_core::context::{ApplicationContext, WidgetContext};
+use utils::update_flag::UpdateNotifier;
 use renderer::render_node::RenderNode;
 
 // MARK: DOM
@@ -118,11 +116,10 @@ impl<T: Send + 'static> Widget<Position<T>, T, ()> for PositionNode {
         children: &mut [(&mut dyn AnyWidget<T>, &mut (), &Arrangement)],
         _cache_invalidator: InvalidationHandle,
         ctx: &WidgetContext,
-        _app_handler: &ApplicationContext,
     ) -> Option<T> {
         if let Some((child, _, arrangement)) = children.first_mut() {
             let child_event = event.transform(arrangement.affine);
-            return child.device_input(&child_event, ctx, _app_handler);
+            return child.device_input(&child_event, ctx);
         }
         None
     }

@@ -380,3 +380,78 @@ impl AnyConfig {
             .expect("Type map in `NestedConfig` should ensure `key == value.type_id()`")
     }
 }
+
+impl WidgetContext {
+    /// Create a minimal WidgetContext suitable for unit tests.
+    ///
+    /// This constructs local placeholder resources and returns a WidgetContext that
+    /// tests can use without a real GPU / GlobalResources. It intentionally uses
+    /// weak references where appropriate so the returned context is self-contained.
+    pub(crate) fn new_for_tests() -> Self {
+        use parking_lot::RwLock as PLRwLock;
+        use std::sync::Arc as StdArc;
+
+        // task executor: prefer existing tokio handle, otherwise create a
+        // dedicated current-thread runtime and leak it so the handle remains valid
+        let task_executor: tokio::runtime::Handle = match tokio::runtime::Handle::try_current() {
+            Ok(h) => h,
+            Err(_) => {
+                // Build a current-thread runtime and leak it for the test lifetime.
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("failed to build test runtime");
+                let handle = rt.handle().clone();
+                // Enter the runtime to set it as the current reactor for this thread.
+                // Leak both the runtime and the enter guard so the reactor stays active
+                // for the lifetime of the test process.
+                let guard = rt.enter();
+                Box::leak(Box::new(guard));
+                Box::leak(Box::new(rt));
+                handle
+            }
+        };
+
+        // create temporary strong owners for window_surface, debug_config and current_time
+        let window_surface =
+            StdArc::new(PLRwLock::new(crate::window_surface::WindowSurface::new()));
+        let window_surface_weak = StdArc::downgrade(&window_surface);
+        // keep a leaked strong owner so the Weak stays valid for the test lifetime
+        Box::leak(Box::new(window_surface));
+
+        let debug_cfg = StdArc::new(PLRwLock::new(crate::debug_config::DebugConfig::default()));
+        let debug_cfg_weak = StdArc::downgrade(&debug_cfg);
+        Box::leak(Box::new(debug_cfg));
+
+        let current_time = StdArc::new(PLRwLock::new(std::time::Instant::now()));
+        let current_time_weak = StdArc::downgrade(&current_time);
+        Box::leak(Box::new(current_time));
+
+        // Other shared resources: create Weak placeholders
+        let gpu_weak = std::sync::Weak::new();
+        let texture_atlas_weak = std::sync::Weak::new();
+        let stencil_atlas_weak = std::sync::Weak::new();
+        let gpu_resource_weak = std::sync::Weak::new();
+        let any_resource_weak = std::sync::Weak::new();
+
+        // command sender/receiver pair for test context
+        let (tx, _rx) = tokio::sync::mpsc::unbounded_channel::<ApplicationCommand>();
+        let command_sender_weak = tx.downgrade();
+        // keep sender alive so WeakUnboundedSender::upgrade() succeeds in tests
+        Box::leak(Box::new(tx));
+
+        WidgetContext {
+            task_executor,
+            window_surface: window_surface_weak,
+            current_time: current_time_weak,
+            debug_config: debug_cfg_weak,
+            gpu: gpu_weak,
+            texture_atlas: texture_atlas_weak,
+            stencil_atlas: stencil_atlas_weak,
+            gpu_resource: gpu_resource_weak,
+            any_resource: any_resource_weak,
+            scoped_config: AnyConfig::new(),
+            command_sender: command_sender_weak,
+        }
+    }
+}

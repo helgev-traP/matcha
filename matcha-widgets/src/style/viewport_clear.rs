@@ -3,7 +3,7 @@ use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
 use matcha_core::{
     color::Color,
     metrics::{Constraints, QRect},
-    ui::WidgetContext,
+    context::WidgetContext,
 };
 use renderer::widgets_renderer::viewport_clear::ViewportClear as RendererViewportClear;
 
@@ -46,7 +46,7 @@ impl Style for ViewportClear {
         renderer.render(
             &mut render_pass,
             target_format,
-            ctx.device(),
+            &ctx.device(),
             self.color.to_rgba_f32(),
         );
     }

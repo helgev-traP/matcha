@@ -3,7 +3,7 @@ use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
 use matcha_core::{
     color::Color,
     metrics::{Constraints, QRect},
-    ui::WidgetContext,
+    context::WidgetContext,
 };
 use renderer::{
     vertex::colored_vertex::ColorVertex,
@@ -87,7 +87,7 @@ impl Style for SolidBox {
                     offset[0], offset[1], 0.0,
                 )),
             },
-            ctx.device(),
+            &ctx.device(),
         );
     }
 }

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use matcha_core::{metrics::Constraints, ui::WidgetContext};
+use matcha_core::{metrics::Constraints, context::WidgetContext};
 
 pub struct ChildSize<'a> {
     get_size: Box<dyn FnMut() -> [f32; 2] + 'a>,
@@ -66,14 +66,14 @@ impl Size {
     /// Specify size in inches.
     pub fn inch(inch: f32) -> Self {
         Self {
-            f: Arc::new(move |_, _, ctx| inch * ctx.dpi() as f32),
+            f: Arc::new(move |_, _, ctx| inch * ctx.dpi().unwrap_or(1.0) as f32),
         }
     }
 
     /// Specify size in points.
     pub fn point(point: f32) -> Self {
         Self {
-            f: Arc::new(move |_, _, ctx| point * ctx.dpi() as f32 / 72.0),
+            f: Arc::new(move |_, _, ctx| point * ctx.dpi().unwrap_or(1.0) as f32 / 72.0),
         }
     }
 
@@ -104,8 +104,9 @@ impl Size {
 
     /// Specify size in magnification of font size.
     pub fn em(em: f32) -> Self {
+        // WidgetContext does not currently expose font size; use a reasonable default (16.0px).
         Self {
-            f: Arc::new(move |_, _, ctx| em * ctx.font_size()),
+            f: Arc::new(move |_, _, _ctx| em * 16.0),
         }
     }
 
@@ -119,14 +120,14 @@ impl Size {
     /// Specify size in magnification of viewport width.
     pub fn vw(vw: f32) -> Self {
         Self {
-            f: Arc::new(move |_, _, ctx| vw * ctx.viewport_size()[0]),
+            f: Arc::new(move |_, _, ctx| vw * ctx.viewport_size().map(|v| v[0]).unwrap_or(0.0)),
         }
     }
 
     /// Specify size in magnification of viewport height.
     pub fn vh(vh: f32) -> Self {
         Self {
-            f: Arc::new(move |_, _, ctx| vh * ctx.viewport_size()[1]),
+            f: Arc::new(move |_, _, ctx| vh * ctx.viewport_size().map(|v| v[1]).unwrap_or(0.0)),
         }
     }
 
@@ -134,8 +135,8 @@ impl Size {
     pub fn vmax(vmax: f32) -> Self {
         Self {
             f: Arc::new(move |_, _, ctx| {
-                let viewport_size = ctx.viewport_size();
-                vmax * viewport_size[0].max(viewport_size[1])
+                let vs = ctx.viewport_size().unwrap_or([0.0, 0.0]);
+                vmax * vs[0].max(vs[1])
             }),
         }
     }
@@ -144,8 +145,8 @@ impl Size {
     pub fn vmin(vmin: f32) -> Self {
         Self {
             f: Arc::new(move |_, _, ctx| {
-                let viewport_size = ctx.viewport_size();
-                vmin * viewport_size[0].min(viewport_size[1])
+                let vs = ctx.viewport_size().unwrap_or([0.0, 0.0]);
+                vmin * vs[0].min(vs[1])
             }),
         }
     }

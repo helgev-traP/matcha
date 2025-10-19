@@ -4,12 +4,10 @@ use crate::style::Style;
 use matcha_core::{
     device_input::DeviceInput,
     metrics::{Arrangement, Constraints},
-    ui::{
-        AnyWidgetFrame, ApplicationContext, Background, Dom, Widget, WidgetContext, WidgetFrame,
-        widget::{AnyWidget, InvalidationHandle},
-    },
-    update_flag::UpdateNotifier,
+    context::WidgetContext,
+    ui::{AnyWidgetFrame, Background, Dom, Widget, WidgetFrame, widget::{AnyWidget, InvalidationHandle}},
 };
+use utils::update_flag::UpdateNotifier;
 use renderer::render_node::RenderNode;
 
 use crate::{buffer::Buffer, types::size::Size};
@@ -142,11 +140,10 @@ impl<T: Send + Sync + 'static> Widget<Plain<T>, T, ()> for PlainNode<T> {
         children: &mut [(&mut dyn AnyWidget<T>, &mut (), &Arrangement)],
         _cache_invalidator: InvalidationHandle,
         ctx: &WidgetContext,
-        app_handler: &ApplicationContext,
     ) -> Option<T> {
         if let Some((child, _, arrangement)) = children.first_mut() {
             let child_event = event.transform(arrangement.affine);
-            return child.device_input(&child_event, ctx, app_handler);
+            return child.device_input(&child_event, ctx);
         }
         None
     }
@@ -184,7 +181,8 @@ impl<T: Send + Sync + 'static> Widget<Plain<T>, T, ()> for PlainNode<T> {
             let texture_size = [size[0].ceil() as u32, size[1].ceil() as u32];
             if let Ok(style_region) =
                 ctx.texture_atlas()
-                    .allocate_color(ctx.device(), ctx.queue(), texture_size)
+                    .lock()
+                    .allocate(&ctx.device(), &ctx.queue(), texture_size)
             {
                 let mut encoder =
                     ctx.device()

@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use gpu_utils::gpu::Gpu;
 use parking_lot::RwLock;
-use renderer::RenderNode;
+use renderer::{CoreRenderer, RenderNode};
 use utils::{back_prop_dirty::BackPropDirty, update_flag::UpdateFlag};
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 
@@ -127,18 +127,14 @@ impl<Message: 'static, Event: 'static> WindowUi<Message, Event> {
         tokio_handle: &tokio::runtime::Handle,
         winit_event_loop: &winit::event_loop::ActiveEventLoop,
         resource: &GlobalResources,
+        renderer: &CoreRenderer,
         benchmark: &mut utils::benchmark::Benchmark,
     ) -> Option<RenderResult> {
-        let viewport_size;
-        let surface_texture;
-        let surface_format;
-        let background;
-        {
-            let mut window = self.window.upgradable_read();
+        let mut window = self.window.upgradable_read();
 
-            // check window existence
-            if window.window().is_none() {
-                window.with_upgraded(|window| {
+        // check window existence
+        if window.window().is_none() {
+            window.with_upgraded(|window| {
                     // reset widget and states
                     self.widget = None;
                     self.model_update_detecter = UpdateFlag::new();
@@ -153,78 +149,53 @@ impl<Message: 'static, Event: 'static> WindowUi<Message, Event> {
                         &resource.gpu(),
                     ).expect("failed to start window");
                 })
-            }
-
-            let viewport_size_physical = window.inner_size().expect("we checked window existence");
-            viewport_size = [
-                viewport_size_physical.width as f32,
-                viewport_size_physical.height as f32,
-            ];
-
-            surface_texture = match window
-                .current_texture()
-                .expect("we checked window existence")
-            {
-                Ok(texture) => texture,
-                Err(e) => {
-                    match e {
-                        wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated => {
-                            // reconfigure the surface
-                            window.with_upgraded(|w| {
-                                w.reconfigure_surface(&resource.gpu().device());
-                            });
-
-                            // call rerender event
-                            window.request_redraw();
-
-                            return None;
-                        }
-                        wgpu::SurfaceError::Timeout => {
-                            // skip this frame
-                            return None;
-                        }
-                        wgpu::SurfaceError::OutOfMemory => {
-                            panic!("out of memory");
-                        }
-                        wgpu::SurfaceError::Other => {
-                            panic!("unknown error at wgpu surface");
-                        }
-                    }
-                }
-            };
-
-            surface_format = window.format().expect("we checked window existence");
-
-            // placeholder background
-            // TODO: support background image
-            background = unsafe { std::mem::MaybeUninit::uninit().assume_init() };
         }
 
-        Some(
-            self.render_inner(
-                viewport_size,
-                surface_texture,
-                surface_format,
-                background,
-                tokio_handle,
-                resource,
-                benchmark,
-            )
-            .await,
-        )
-    }
+        let viewport_size_physical = window.inner_size().expect("we checked window existence");
+        let viewport_size = [
+            viewport_size_physical.width as f32,
+            viewport_size_physical.height as f32,
+        ];
 
-    // if this method is called, it means we already have a current surface texture so we must re-render it to prevent flickering.
-    async fn render_inner<'a>(
-        &'a mut self,
-        viewport_size: [f32; 2],
-        surface_texture: wgpu::SurfaceTexture,
-        surface_format: wgpu::TextureFormat,
-        background: Background<'a>,
-        tokio_handle: &tokio::runtime::Handle,
-        resource: &GlobalResources,
-        benchmark: &mut utils::benchmark::Benchmark,
-    ) -> RenderResult {
+        let surface = match window
+            .current_texture()
+            .expect("we checked window existence")
+        {
+            Ok(texture) => texture,
+            Err(e) => {
+                match e {
+                    wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated => {
+                        // reconfigure the surface
+                        window.with_upgraded(|w| {
+                            w.reconfigure_surface(&resource.gpu().device());
+                        });
+
+                        // call rerender event
+                        window.request_redraw();
+
+                        return None;
+                    }
+                    wgpu::SurfaceError::Timeout => {
+                        // skip this frame
+                        return None;
+                    }
+                    wgpu::SurfaceError::OutOfMemory => {
+                        panic!("out of memory");
+                    }
+                    wgpu::SurfaceError::Other => {
+                        panic!("unknown error at wgpu surface");
+                    }
+                }
+            }
+        };
+
+        let surface_texture_view = surface.texture.create_view(&Default::default());
+        let surface_format = window.format().expect("we checked window existence");
+
+        // placeholder background
+        // TODO: consider this.
+        let background = Background::new(&surface_texture_view, [0.0, 0.0]);
+
         let ctx = resource.widget_context(tokio_handle, &self.window);
 
         if self.widget.is_none() {
@@ -284,12 +255,14 @@ impl<Message: 'static, Event: 'static> WindowUi<Message, Event> {
         benchmark.with("layout_arrange", || widget.arrange(final_size, &ctx));
         let render_node = benchmark.with("widget_render", || widget.render(background, &ctx));
 
-        RenderResult {
+        let render_result = RenderResult {
             render_node,
             viewport_size,
-            surface_texture,
+            surface_texture: surface,
             surface_format,
-        }
+        };
+
+        Some(render_result)
     }
 
     fn convert_winit_to_window_event(

@@ -1,12 +1,10 @@
 use matcha_core::{
     device_input::DeviceInput,
     metrics::{Arrangement, Constraints},
-    ui::{
-        AnyWidget, AnyWidgetFrame, ApplicationContext, Background, Dom, InvalidationHandle, Widget,
-        WidgetContext, WidgetFrame,
-    },
-    update_flag::UpdateNotifier,
+    ui::{AnyWidget, AnyWidgetFrame, Background, Dom, InvalidationHandle, Widget, WidgetFrame},
 };
+use matcha_core::context::WidgetContext;
+use utils::update_flag::UpdateNotifier;
 use renderer::render_node::RenderNode;
 
 use crate::types::size::{ChildSize, Size};
@@ -86,7 +84,6 @@ impl<T: Send + 'static> Widget<Space, T, ()> for SpaceNode {
         _children: &mut [(&mut dyn AnyWidget<T>, &mut (), &Arrangement)],
         _cache_invalidator: InvalidationHandle,
         _ctx: &WidgetContext,
-        _app_handler: &ApplicationContext,
     ) -> Option<T> {
         None
     }

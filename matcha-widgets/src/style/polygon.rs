@@ -5,7 +5,7 @@ use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
 use matcha_core::{
     color::Color,
     metrics::{QRect, QSize},
-    ui::WidgetContext,
+    context::WidgetContext,
 };
 use parking_lot::Mutex;
 use renderer::{
@@ -425,19 +425,19 @@ impl Style for Polygon {
                     .collect();
                 (color_vertices, indices)
             }
-            Mesh::TriangleIndexed { indices, vertices } => {
-                if indices.len() < 3 || vertices.is_empty() {
-                    return;
-                }
-                let color_vertices = vertices
-                    .iter()
-                    .map(|v| ColorVertex {
-                        position: nalgebra::Point3::new(v.position[0], v.position[1], 0.0),
-                        color: v.color.to_rgba_f32(),
-                    })
-                    .collect();
-                (color_vertices, indices.clone())
-            }
+                    Mesh::TriangleIndexed { indices, vertices } => {
+                        if indices.len() < 3 || vertices.is_empty() {
+                            return;
+                        }
+                        let color_vertices = vertices
+                            .iter()
+                            .map(|v| ColorVertex {
+                                position: nalgebra::Point3::new(v.position[0], v.position[1], 0.0),
+                                color: v.color.to_rgba_f32(),
+                            })
+                            .collect();
+                        (color_vertices, indices.clone())
+                    }
         };
 
         if vertices.is_empty() || indices.is_empty() {
@@ -460,7 +460,7 @@ impl Style for Polygon {
                 indices: &indices,
                 transform,
             },
-            ctx.device(),
+            &ctx.device(),
         );
     }
 }

@@ -24,7 +24,6 @@ pub struct WinitInstance<Message: 'static, Event: Send + 'static, B: Backend<Eve
 
     // --- Context ---
     resource: GlobalResources,
-    preferred_surface_format: wgpu::TextureFormat,
     // ticker: ticker::Ticker,
 
     // --- ui ---
@@ -80,6 +79,7 @@ impl<Message: 'static, Event: Send + 'static, B: Backend<Event> + Clone + 'stati
                 self.tokio_runtime.handle(),
                 winit_event_loop,
                 &self.resource,
+                &self.renderer,
                 &mut self.benchmarker,
             ))
         };

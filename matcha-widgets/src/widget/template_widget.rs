@@ -1,11 +1,8 @@
 use matcha_core::{
     device_input::DeviceInput,
     metrics::{Arrangement, Constraints},
-    ui::{
-        AnyWidgetFrame, ApplicationContext, Background, Dom, Widget, WidgetContext, WidgetFrame,
-        widget::{AnyWidget, InvalidationHandle},
-    },
-    update_flag::UpdateNotifier,
+    context::WidgetContext,
+    ui::{AnyWidgetFrame, Background, Dom, Widget, WidgetFrame, widget::{AnyWidget, InvalidationHandle}},
 };
 use renderer::render_node::RenderNode;
 
@@ -67,7 +64,6 @@ impl<E: Send + 'static> Widget<Template, E, ()> for TemplateNode {
         _children: &mut [(&mut dyn AnyWidget<E>, &mut (), &Arrangement)],
         _cache_invalidator: InvalidationHandle,
         _ctx: &WidgetContext,
-        _app_handler: &ApplicationContext,
     ) -> Option<E> {
         // Handle device events here.
         None

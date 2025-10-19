@@ -5,7 +5,7 @@ use dashmap::DashMap;
 use image::EncodableLayout;
 use matcha_core::{
     metrics::{Constraints, QRect},
-    ui::WidgetContext,
+    context::WidgetContext,
 };
 use renderer::widgets_renderer::texture_copy::{RenderData, TargetData, TextureCopy};
 
@@ -335,7 +335,7 @@ impl Style for Image {
                     color_transformation: None,
                     color_offset: None,
                 },
-                ctx.device(),
+                &ctx.device(),
             );
         });
     }

@@ -2,7 +2,7 @@ use crate::style::Style;
 use cosmic_text::{Attrs, Buffer, Color, FontSystem, Metrics, Shaping, SwashCache};
 use fxhash::FxHasher;
 use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
-use matcha_core::ui::WidgetContext;
+use matcha_core::context::WidgetContext;
 use parking_lot::Mutex;
 use renderer::widgets_renderer::texture_copy::{
     RenderData as TexRenderData, TargetData as TexTargetData, TextureCopy,

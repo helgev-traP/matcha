@@ -5,11 +5,9 @@ use crate::style::Style;
 use matcha_core::{
     device_input::DeviceInput,
     metrics::{Arrangement, Constraints},
-    ui::{
-        AnyWidgetFrame, ApplicationContext, Background, Dom, Widget, WidgetContext, WidgetFrame,
-        widget::{AnyWidget, InvalidationHandle},
-    },
+    ui::{AnyWidgetFrame, Background, Dom, Widget, WidgetFrame, widget::{AnyWidget, InvalidationHandle}},
 };
+use matcha_core::context::WidgetContext;
 use renderer::render_node::RenderNode;
 
 // MARK: DOM
@@ -160,7 +158,6 @@ impl<E: Send + Sync + 'static> Widget<Text, E, ()> for TextWidget {
         _children: &mut [(&mut dyn AnyWidget<E>, &mut (), &Arrangement)],
         _cache_invalidator: InvalidationHandle,
         _ctx: &WidgetContext,
-        _app_handler: &ApplicationContext,
     ) -> Option<E> {
         None
     }
@@ -194,7 +191,8 @@ impl<E: Send + Sync + 'static> Widget<Text, E, ()> for TextWidget {
             let texture_size = [size[0].ceil() as u32, size[1].ceil() as u32];
             if let Ok(style_region) =
                 ctx.texture_atlas()
-                    .allocate_color(ctx.device(), ctx.queue(), texture_size)
+                    .lock()
+                    .allocate(&ctx.device(), &ctx.queue(), texture_size)
             {
                 let mut encoder =
                     ctx.device()

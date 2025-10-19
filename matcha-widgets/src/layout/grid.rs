@@ -4,12 +4,10 @@ use matcha_core::ui::widget::InvalidationHandle;
 use matcha_core::{
     device_input::DeviceInput,
     metrics::{Arrangement, Constraints},
-    ui::{
-        AnyWidget, AnyWidgetFrame, ApplicationContext, Background, Dom, Widget, WidgetContext,
-        WidgetFrame,
-    },
-    update_flag::UpdateNotifier,
+    ui::{AnyWidget, AnyWidgetFrame, Background, Dom, Widget, WidgetFrame},
 };
+use matcha_core::context::{ApplicationContext, WidgetContext};
+use utils::update_flag::UpdateNotifier;
 use renderer::render_node::RenderNode;
 
 use crate::types::{
@@ -183,11 +181,10 @@ where
         children: &mut [(&mut dyn AnyWidget<T>, &mut GridChildSetting, &Arrangement)],
         _cache_invalidator: InvalidationHandle,
         ctx: &WidgetContext,
-        app_handler: &ApplicationContext,
     ) -> Option<T> {
         for (child, _, arrangement) in children.iter_mut() {
             let child_event = event.transform(arrangement.affine);
-            if let Some(result) = child.device_input(&child_event, ctx, app_handler) {
+            if let Some(result) = child.device_input(&child_event, ctx) {
                 return Some(result);
             }
         }

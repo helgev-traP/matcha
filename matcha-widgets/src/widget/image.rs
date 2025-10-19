@@ -2,15 +2,14 @@ use crate::style::Style;
 use matcha_core::{
     device_input::DeviceInput,
     metrics::{Arrangement, Constraints},
-    ui::{
-        AnyWidgetFrame, ApplicationContext, Background, Dom, Widget, WidgetContext, WidgetFrame,
-        widget::{AnyWidget, InvalidationHandle},
-    },
-    update_flag::UpdateNotifier,
+    ui::{AnyWidgetFrame, Background, Dom, Widget, WidgetFrame, widget::{AnyWidget, InvalidationHandle}},
 };
+use matcha_core::context::{ApplicationContext, WidgetContext};
+use utils::update_flag::UpdateNotifier;
 use renderer::render_node::RenderNode;
 
 use crate::{style, types::size::Size};
+use nalgebra::Matrix4;
 
 // MARK: DOM
 
@@ -105,7 +104,6 @@ impl<T: Send + Sync + 'static> Widget<Image, T, ()> for ImageNode {
         _children: &mut [(&mut dyn AnyWidget<T>, &mut (), &Arrangement)],
         _cache_invalidator: InvalidationHandle,
         _ctx: &WidgetContext,
-        _app_handler: &ApplicationContext,
     ) -> Option<T> {
         None
     }
@@ -142,7 +140,8 @@ impl<T: Send + Sync + 'static> Widget<Image, T, ()> for ImageNode {
             let texture_size = [size[0].ceil() as u32, size[1].ceil() as u32];
             if let Ok(style_region) =
                 ctx.texture_atlas()
-                    .allocate_color(ctx.device(), ctx.queue(), texture_size)
+                    .lock()
+                    .allocate(&ctx.device(), &ctx.queue(), texture_size)
             {
                 let mut encoder =
                     ctx.device()
@@ -155,7 +154,7 @@ impl<T: Send + Sync + 'static> Widget<Image, T, ()> for ImageNode {
 
                 ctx.queue().submit(Some(encoder.finish()));
                 render_node =
-                    render_node.with_texture(style_region, size, nalgebra::Matrix4::identity())
+                    render_node.with_texture(style_region, size, Matrix4::identity())
             }
         }
 

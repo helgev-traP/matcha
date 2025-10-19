@@ -2,18 +2,14 @@ use std::sync::Arc;
 
 use crate::style::Style;
 use matcha_core::metrics::{Arrangement, Constraints};
-use matcha_core::ui::ApplicationContext;
 use matcha_core::{
     color::Color,
     device_input::{DeviceInput, DeviceInputData, ElementState, MouseInput, MouseLogicalButton},
-    ui::Background,
-    ui::{
-        AnyWidgetFrame, Dom, Widget, WidgetContext, WidgetFrame,
-        widget::{AnyWidget, InvalidationHandle},
-    },
-    update_flag::UpdateNotifier,
+    context::{ApplicationContext, WidgetContext},
+    ui::{AnyWidgetFrame, Dom, Widget, WidgetFrame, widget::{AnyWidget, InvalidationHandle}, Background},
 };
 use renderer::render_node::RenderNode;
+use utils::update_flag::UpdateNotifier;
 
 use crate::style::solid_box::SolidBox;
 
@@ -116,7 +112,6 @@ impl<T: Send + Sync + 'static> Widget<Button<T>, T, ()> for ButtonNode<T> {
         children: &mut [(&mut dyn AnyWidget<T>, &mut (), &Arrangement)],
         cache_invalidator: InvalidationHandle,
         ctx: &WidgetContext,
-        app_handler: &ApplicationContext,
     ) -> Option<T> {
         let mut msg = None;
         let mut new_state = self.state;
@@ -187,10 +182,10 @@ impl<T: Send + Sync + 'static> Widget<Button<T>, T, ()> for ButtonNode<T> {
             return msg;
         }
 
-        if let Some((content, _, arrangement)) = children.first_mut() {
-            let content_event = event.transform(arrangement.affine);
-            return content.device_input(&content_event, ctx, app_handler);
-        }
+            if let Some((content, _, arrangement)) = children.first_mut() {
+                let content_event = event.transform(arrangement.affine);
+                return content.device_input(&content_event, ctx);
+            }
 
         None
     }
@@ -235,7 +230,8 @@ impl<T: Send + Sync + 'static> Widget<Button<T>, T, ()> for ButtonNode<T> {
                 // For now, we replicate the old behavior of drawing to a texture atlas.
                 if let Ok(style_region) =
                     ctx.texture_atlas()
-                        .allocate_color(ctx.device(), ctx.queue(), texture_size)
+                        .lock()
+                        .allocate(&ctx.device(), &ctx.queue(), texture_size)
                 {
                     let mut encoder =
                         ctx.device()

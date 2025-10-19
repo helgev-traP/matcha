@@ -433,27 +433,27 @@ where
             let mut old_pair = old_children_map.remove(&id);
 
             // check child identity
-            if let Some((old_child, _)) = &mut old_pair
-                && old_child.update_widget_tree(child_dom).await.is_err()
-            {
-                old_pair = None;
+            if let Some((old_child, _)) = &mut old_pair {
+                if old_child.update_widget_tree(child_dom).await.is_err() {
+                    old_pair = None;
+                }
             }
 
             // check setting identity
-            if let Some((_, old_setting)) = &old_pair
-                && *old_setting != setting
-            {
-                // Setting changed.
-                // CURRENT STRATEGY: treat ANY setting difference as layout-affecting,
-                // thus trigger full rearrange + redraw.
-                //
-                // FUTURE OPTIMIZATION (design note):
-                // Introduce a SettingImpact classification (layout / redraw-only / none)
-                // so purely visual changes (e.g. colors) set only redraw, avoiding
-                // measure/arrange cache invalidation.
-                // See design memo: "Setting の再配置要否判定 API 抽象".
-                // Keep simple conservative behavior until profiling justifies refinement.
-                need_rearrange = true;
+            if let Some((_, old_setting)) = &old_pair {
+                if *old_setting != setting {
+                    // Setting changed.
+                    // CURRENT STRATEGY: treat ANY setting difference as layout-affecting,
+                    // thus trigger full rearrange + redraw.
+                    //
+                    // FUTURE OPTIMIZATION (design note):
+                    // Introduce a SettingImpact classification (layout / redraw-only / none)
+                    // so purely visual changes (e.g. colors) set only redraw, avoiding
+                    // measure/arrange cache invalidation.
+                    // See design memo: "Setting の再配置要否判定 API 抽象".
+                    // Keep simple conservative behavior until profiling justifies refinement.
+                    need_rearrange = true;
+                }
             }
 
             // push to self.children
@@ -478,9 +478,11 @@ where
             need_rearrange = true;
         }
 
-        if need_rearrange && let Some(dirty_flags) = &self.dirty_flags {
-            dirty_flags.need_rearrange.mark_dirty();
-            dirty_flags.need_redraw.mark_dirty();
+        if need_rearrange {
+            if let Some(dirty_flags) = &self.dirty_flags {
+                dirty_flags.need_rearrange.mark_dirty();
+                dirty_flags.need_redraw.mark_dirty();
+            }
         }
 
         Ok(())
@@ -979,10 +981,8 @@ mod tests {
 
     // --- Added Tests ---
 
-    use crate::ui::context::AnyConfig;
-    use crate::{
-        any_resource::AnyResource, texture_allocator::TextureAllocator, ui::context::WidgetContext,
-    };
+    use crate::context::AnyConfig;
+    use crate::context::WidgetContext;
     use std::{
         mem::MaybeUninit,
         sync::{
@@ -993,25 +993,10 @@ mod tests {
     };
 
     // Helper to create a dummy WidgetContext for tests that don't depend on real GPU resources.
-    fn create_mock_widget_context<'a>(
-        dq: &'a DeviceQueue,
-        ta: &'a TextureAllocator,
-        ar: &'a AnyResource,
-    ) -> WidgetContext<'a> {
-        // create a default DebugConfig for tests
-        let debug_cfg = Arc::new(crate::debug_config::DebugConfig::default());
-        WidgetContext {
-            task_executor: tokio::runtime::Handle::current(),
-            device_queue: *dq,
-            surface_format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            window_size: [800.0, 600.0],
-            window_dpi: 1.0,
-            texture_atlas: ta,
-            any_resource: ar,
-            scoped_config: AnyConfig::new(),
-            debug_config: debug_cfg,
-            current_time: Duration::from_secs(0),
-        }
+    /// Create a minimal WidgetContext suitable for unit tests that don't require real GPU
+    /// resources. This delegates to the centralized test helper on `context.rs`.
+    fn create_mock_widget_context() -> WidgetContext {
+        crate::context::WidgetContext::new_for_tests()
     }
 
     #[derive(Default)]
@@ -1086,23 +1071,11 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_measure_cache_behavior() {
+    #[tokio::test]
+    async fn test_measure_cache_behavior() {
         // NOTE: This test cannot be async because the mock context setup is not Send.
         // We create dummy resources on the stack using MaybeUninit for safety.
-        let device = MaybeUninit::<wgpu::Device>::uninit();
-        let queue = MaybeUninit::<wgpu::Queue>::uninit();
-        let device_queue = DeviceQueue {
-            device: unsafe { device.assume_init_ref() },
-            queue: unsafe { queue.assume_init_ref() },
-        };
-        let texture_allocator = MaybeUninit::<TextureAllocator>::uninit();
-        let any_resource = AnyResource::new();
-        let ctx = create_mock_widget_context(
-            &device_queue,
-            unsafe { texture_allocator.assume_init_ref() },
-            &any_resource,
-        );
+        let ctx = create_mock_widget_context();
 
         let call_count = Arc::new(CallCount::default());
         let widget_impl = MockWidgetWithCallCount {
@@ -1240,22 +1213,10 @@ mod tests {
         assert!(widget_frame.need_redraw());
     }
 
-    #[test]
-    fn test_redraw_flag_cleared_after_render() {
+    #[tokio::test]
+    async fn test_redraw_flag_cleared_after_render() {
         // This test must be non-async due to the use of `MaybeUninit` for mock context.
-        let device = MaybeUninit::<wgpu::Device>::uninit();
-        let queue = MaybeUninit::<wgpu::Queue>::uninit();
-        let device_queue = DeviceQueue {
-            device: unsafe { device.assume_init_ref() },
-            queue: unsafe { queue.assume_init_ref() },
-        };
-        let texture_allocator = MaybeUninit::<TextureAllocator>::uninit();
-        let any_resource = AnyResource::new();
-        let ctx = create_mock_widget_context(
-            &device_queue,
-            unsafe { texture_allocator.assume_init_ref() },
-            &any_resource,
-        );
+        let ctx = create_mock_widget_context();
 
         let dom = MockDom {
             id: 0,
