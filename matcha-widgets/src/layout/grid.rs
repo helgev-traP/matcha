@@ -5,7 +5,7 @@ use matcha_core::{
     device_input::DeviceInput,
     metrics::{Arrangement, Constraints},
     ui::{
-        AnyWidget, AnyWidgetFrame, WidgetContext, ApplicationContext, Background, Dom, Widget,
+        AnyWidget, AnyWidgetFrame, ApplicationContext, Background, Dom, Widget, WidgetContext,
         WidgetFrame,
     },
     update_flag::UpdateNotifier,

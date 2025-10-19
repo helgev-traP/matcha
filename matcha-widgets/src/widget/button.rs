@@ -8,7 +8,7 @@ use matcha_core::{
     device_input::{DeviceInput, DeviceInputData, ElementState, MouseInput, MouseLogicalButton},
     ui::Background,
     ui::{
-        AnyWidgetFrame, WidgetContext, Dom, Widget, WidgetFrame,
+        AnyWidgetFrame, Dom, Widget, WidgetContext, WidgetFrame,
         widget::{AnyWidget, InvalidationHandle},
     },
     update_flag::UpdateNotifier,

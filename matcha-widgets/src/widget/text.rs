@@ -6,8 +6,7 @@ use matcha_core::{
     device_input::DeviceInput,
     metrics::{Arrangement, Constraints},
     ui::{
-        AnyWidgetFrame, WidgetContext, ApplicationContext, Background, Dom, Widget,
-        WidgetFrame,
+        AnyWidgetFrame, ApplicationContext, Background, Dom, Widget, WidgetContext, WidgetFrame,
         widget::{AnyWidget, InvalidationHandle},
     },
 };

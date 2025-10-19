@@ -3,19 +3,16 @@ use std::{
     sync::{Arc, atomic::AtomicBool},
 };
 
-use renderer::RenderNode;
-use tokio::sync::{Mutex, RwLock, RwLockReadGuard};
-use utils::back_prop_dirty::BackPropDirty;
-
 use crate::{
+    context::{ApplicationContext, WidgetContext},
     device_input::DeviceInput,
     metrics::Constraints,
-    ui::{
-        AnyWidget, AnyWidgetFrame, WidgetContext, ApplicationContext, Background, Dom,
-        UpdateWidgetError,
-    },
-    update_flag::UpdateNotifier,
+    ui::{AnyWidget, AnyWidgetFrame, Background, Dom, UpdateWidgetError},
 };
+
+use renderer::RenderNode;
+use tokio::sync::{Mutex, RwLock, RwLockReadGuard};
+use utils::{back_prop_dirty::BackPropDirty, update_flag::UpdateNotifier};
 
 type SetupFn<Model> = dyn Fn(&ModelAccessor<Model>, &ApplicationContext) + Send + Sync;
 type UpdateFn<Model, Message> =
@@ -125,32 +122,41 @@ impl<Model: Send + Sync + 'static, Message, Event: 'static, InnerEvent: 'static>
     }
 }
 
+#[async_trait::async_trait]
+pub trait AnyComponent<Message, Event: 'static> {
+    fn label(&self) -> Option<&str>;
+    fn setup(&self, app_ctx: &ApplicationContext);
+    fn update(&self, message: &Message, app_ctx: &ApplicationContext);
+    async fn view(&self) -> Box<dyn Dom<Event>>;
+}
+
+#[async_trait::async_trait]
 impl<Model: Send + Sync + 'static, Message, Event: 'static, InnerEvent: 'static>
-    Component<Model, Message, Event, InnerEvent>
+    AnyComponent<Message, Event> for Component<Model, Message, Event, InnerEvent>
 {
-    pub fn label(&self) -> Option<&str> {
+    fn label(&self) -> Option<&str> {
         self.label.as_deref()
     }
 
-    pub fn setup(&self, app_handler: &ApplicationContext) {
+    fn setup(&self, app_ctx: &ApplicationContext) {
         let model_accessor = ModelAccessor {
             model: Arc::clone(&self.model),
             update_flag: Arc::clone(&self.model_update_flag),
         };
 
-        (self.setup)(&model_accessor, app_handler);
+        (self.setup)(&model_accessor, app_ctx);
     }
 
-    pub fn update(&self, message: &Message, app_handler: &ApplicationContext) {
+    fn update(&self, message: &Message, app_ctx: &ApplicationContext) {
         let model_accessor = ModelAccessor {
             model: Arc::clone(&self.model),
             update_flag: Arc::clone(&self.model_update_flag),
         };
 
-        (self.update)(message, &model_accessor, app_handler);
+        (self.update)(message, &model_accessor, app_ctx);
     }
 
-    pub async fn view(&self) -> Box<dyn Dom<Event>> {
+    async fn view(&self) -> Box<dyn Dom<Event>> {
         Box::new(ComponentDom {
             label: self.label.clone(),
             model_access: ModelAccessor {
@@ -242,8 +248,6 @@ impl UpdateFlag {
     // }
 }
 
-// MARK: - ComponentDom
-
 pub struct ComponentDom<Model: Send + Sync + 'static, Event: 'static, InnerEvent: 'static = Event> {
     label: Option<String>,
 
@@ -277,8 +281,6 @@ impl<Model: Send + Sync + 'static, Event: 'static, InnerEvent: 'static>
     }
 }
 
-// MARK: - ComponentWidget
-
 pub struct ComponentWidget<
     Model: Send + Sync + 'static,
     Event: 'static,
@@ -296,11 +298,7 @@ pub struct ComponentWidget<
 impl<Model: Send + Sync + 'static, Event: 'static, InnerEvent: 'static> AnyWidget<Event>
     for ComponentWidget<Model, Event, InnerEvent>
 {
-    fn device_input(
-        &mut self,
-        event: &DeviceInput,
-        ctx: &WidgetContext,
-    ) -> Option<Event> {
+    fn device_input(&mut self, event: &DeviceInput, ctx: &WidgetContext) -> Option<Event> {
         (self.input)(event, &self.model_access, &ctx.application_context());
 
         let inner_event = self.widget_tree.device_input(event, ctx);

@@ -66,9 +66,6 @@ thiserror = "2.0"
 # todo: maybe useful.
 # interpolation = "0.3.0"
 
-# dev-dependencies
-pollster = "0.4"
-
 [workspace.lints.clippy]
 unwrap_used = "warn"
 type_complexity = "allow"

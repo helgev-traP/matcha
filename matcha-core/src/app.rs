@@ -1,5 +1,7 @@
+use crate::ui::component::AnyComponent;
+
 use super::{
-    backend::{Backend, StubBackend},
+    backend::Backend,
     color::Color,
     device_input::mouse_state::MousePrimaryButton,
     ui::component::Component,
@@ -7,37 +9,31 @@ use super::{
 };
 use std::time::Duration;
 
-pub struct App<Model, Message, B, Event, InnerEvent = Event>
+pub struct App<Message, Event, B>
 where
-    Model: Send + Sync + 'static,
-    Message: 'static,
-    B: Backend<Event> + Clone + 'static,
-    Event: Send + 'static,
-    InnerEvent: 'static,
+    Event: Send,
+    B: Backend<Event>,
 {
-    builder: WinitInstanceBuilder<Model, Message, B, Event, InnerEvent>,
+    builder: WinitInstanceBuilder<Message, Event, B>,
 }
 
-impl<Model, Event, InnerEvent> App<Model, (), StubBackend, Event, InnerEvent>
+impl<Message, Event> App<Message, Event, ()>
 where
-    Model: Send + Sync + 'static,
-    Event: std::fmt::Debug + Send + 'static,
-    InnerEvent: 'static,
+    Message: 'static,
+    Event: Send + 'static,
 {
-    pub fn new(component: Component<Model, (), Event, InnerEvent>) -> Self {
+    pub fn new(component: impl AnyComponent<Message, Event> + 'static) -> Self {
         Self {
-            builder: WinitInstance::builder(component, StubBackend),
+            builder: WinitInstance::builder(component, ()),
         }
     }
 }
 
 impl<Model, Message, B, Event, InnerEvent> App<Model, Message, B, Event, InnerEvent>
 where
-    Model: Send + Sync + 'static,
     Message: 'static,
-    B: Backend<Event> + Clone + 'static,
     Event: std::fmt::Debug + Send + 'static,
-    InnerEvent: 'static,
+    B: Backend<Event> + Clone + 'static,
 {
     pub fn with_backend<NewMessage, NewB>(
         self,

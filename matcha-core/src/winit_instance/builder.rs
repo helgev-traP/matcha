@@ -1,17 +1,13 @@
 use std::time::Duration;
 
-use crate::debug_config::DebugConfig;
-use std::sync::Arc;
+use crate::{debug_config::DebugConfig, ui::component::AnyComponent};
 use winit::dpi::PhysicalSize;
 
 use crate::{
     backend::Backend,
     color::Color,
     device_input::mouse_state::MousePrimaryButton,
-    ui,
-    winit_instance::{
-        AnyResource, InitError, WinitInstance, render_control, ticker, ui_control,
-    },
+    winit_instance::{InitError, WinitInstance},
 };
 
 // --- Constants ---
@@ -32,14 +28,8 @@ const MOUSE_PRIMARY_BUTTON: MousePrimaryButton = MousePrimaryButton::Left;
 
 // --- Builder ---
 
-pub struct WinitInstanceBuilder<
-    Model: Send + Sync + 'static,
-    Message: 'static,
-    B: Backend<Event> + Clone + 'static,
-    Event: Send + 'static,
-    InnerEvent: 'static = Event,
-> {
-    pub(crate) component: ui::Component<Model, Message, Event, InnerEvent>,
+pub struct WinitInstanceBuilder<Message, Event: Send, B: Backend<Event>> {
+    pub(crate) component: Box<dyn AnyComponent<Message, Event>>,
     pub(crate) backend: B,
     pub(crate) runtime_builder: RuntimeBuilder,
     // window settings
@@ -90,18 +80,11 @@ impl RuntimeBuilder {
     }
 }
 
-impl<
-    Model: Send + Sync + 'static,
-    Message: 'static,
-    B: Backend<Event> + Clone + 'static,
-    Event: Send + 'static,
-    InnerEvent: 'static,
-> WinitInstanceBuilder<Model, Message, B, Event, InnerEvent>
-{
-    pub fn new(component: ui::Component<Model, Message, Event, InnerEvent>, backend: B) -> Self {
+impl<Message, Event: Send + 'static, B: Backend<Event>> WinitInstanceBuilder<Message, Event, B> {
+    pub fn new(component: impl AnyComponent<Message, Event> + 'static, backend: B) -> Self {
         let threads = std::thread::available_parallelism().map_or(1, |n| n.get());
         Self {
-            component,
+            component: Box::new(component),
             backend,
             runtime_builder: RuntimeBuilder::CreateInternally { threads },
             title: "Matcha App".to_string(),
@@ -224,51 +207,7 @@ impl<
 
     // --- Build ---
 
-    pub fn build(self) -> Result<WinitInstance<Model, Message, B, Event, InnerEvent>, InitError> {
-        let tokio_runtime = self
-            .runtime_builder
-            .build()
-            .map_err(|_| InitError::TokioRuntime)?;
-
-        let render_control = tokio_runtime
-            .block_on(render_control::RenderControl::new(
-                self.power_preference,
-                self.base_color.into(),
-                COLOR_FORMAT,
-                STENCIL_FORMAT,
-            ))
-            .map_err(|_| InitError::Gpu)?;
-
-        let ui_control = ui_control::UiControl::new(
-            self.component,
-            self.double_click_threshold,
-            self.long_press_threshold,
-            self.mouse_primary_button,
-            self.scroll_pixel_per_line,
-            self.default_font_size,
-        )?;
-
-        let mut window = crate::window_surface::WindowSurface::new();
-        window.set_title(self.title.as_str());
-        window.request_inner_size(self.init_size);
-        window.set_maximized(self.maximized);
-        if self.full_screen {
-            window.set_fullscreen(true);
-        }
-
-        Ok(WinitInstance {
-            tokio_runtime,
-            window,
-            preferred_surface_format: self.surface_preferred_format,
-            any_resource: AnyResource::new(),
-            debug_config: self.debug_config.clone(),
-            render_control,
-            ui_control,
-            app_handler: ui::ApplicationContext::new(),
-            backend: self.backend,
-            benchmarker: super::benchmark::Benchmark::new(60),
-            frame: 0,
-            ticker: ticker::Ticker::new(),
-        })
+    pub fn build(self) -> Result<WinitInstance<Message, Event, B>, InitError> {
+        todo!()
     }
 }

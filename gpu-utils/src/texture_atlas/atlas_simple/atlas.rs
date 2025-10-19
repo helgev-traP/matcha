@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 
-use euclid::Rect;
 use guillotiere::euclid::Box2D;
 use guillotiere::{AllocId, AtlasAllocator, Size, euclid};
 use parking_lot::Mutex;
@@ -787,7 +786,7 @@ mod tests {
     /// Tests if the `TextureAtlas` is initialized with the correct parameters.
     #[test]
     fn test_atlas_initialization() {
-        pollster::block_on(async {
+        futures::executor::block_on(async {
             let (device, _queue) = setup_wgpu().await;
             let size = wgpu::Extent3d {
                 width: 256,
@@ -815,7 +814,7 @@ mod tests {
     /// It verifies that allocation increases usage and deallocation (on drop) decreases it.
     #[test]
     fn test_texture_allocation_and_deallocation() {
-        pollster::block_on(async {
+        futures::executor::block_on(async {
             let (device, queue) = setup_wgpu().await;
             let size = wgpu::Extent3d {
                 width: 64,
@@ -878,7 +877,7 @@ mod tests {
     /// Tests if the space freed by a deallocated texture can be reused by a new allocation.
     #[test]
     fn test_reuse_deallocated_space() {
-        pollster::block_on(async {
+        futures::executor::block_on(async {
             let (device, queue) = setup_wgpu().await;
             let size = wgpu::Extent3d {
                 width: 64,
@@ -903,7 +902,7 @@ mod tests {
     /// Tests if the UV coordinates of an allocated texture are calculated correctly.
     #[test]
     fn test_texture_uv() {
-        pollster::block_on(async {
+        futures::executor::block_on(async {
             let (device, queue) = setup_wgpu().await;
             let size = wgpu::Extent3d {
                 width: 128,
@@ -931,7 +930,7 @@ mod tests {
     /// Tests that texture methods return `TextureError::AtlasGone` after the atlas has been dropped.
     #[test]
     fn test_texture_error_when_atlas_gone() {
-        pollster::block_on(async {
+        futures::executor::block_on(async {
             let (device, queue) = setup_wgpu().await;
             let size = wgpu::Extent3d {
                 width: 128,
@@ -953,7 +952,7 @@ mod tests {
     /// Tests that `write_data` writes to the correct location in the atlas.
     #[test]
     fn test_texture_write_and_read_data() {
-        pollster::block_on(async {
+        futures::executor::block_on(async {
             let (device, queue) = setup_wgpu().await;
             let atlas_size = wgpu::Extent3d {
                 width: 512,

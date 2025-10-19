@@ -143,7 +143,7 @@ mod tests {
     /// Tests the initialization of `AtlasManager`.
     #[test]
     fn test_manager_new() {
-        pollster::block_on(async {
+        futures::executor::block_on(async {
             let (device, queue) = setup_wgpu().await;
             let memory_strategy = MemoryAllocateStrategy {
                 initial_pages: 1,
@@ -167,7 +167,7 @@ mod tests {
     /// Tests adding a new format set to the manager.
     #[test]
     fn test_add_format() {
-        pollster::block_on(async {
+        futures::executor::block_on(async {
             let (device, queue) = setup_wgpu().await;
             let memory_strategy = MemoryAllocateStrategy {
                 initial_pages: 2,
@@ -207,7 +207,7 @@ mod tests {
     /// Tests basic texture allocation.
     #[test]
     fn test_allocate_basic() {
-        pollster::block_on(async {
+        futures::executor::block_on(async {
             let (device, queue) = setup_wgpu().await;
             let memory_strategy = MemoryAllocateStrategy {
                 initial_pages: 1,
@@ -236,7 +236,7 @@ mod tests {
     /// Tests allocation with invalid texture sizes.
     #[test]
     fn test_allocate_invalid_size() {
-        pollster::block_on(async {
+        futures::executor::block_on(async {
             let (device, queue) = setup_wgpu().await;
             let memory_strategy = MemoryAllocateStrategy {
                 initial_pages: 1,
@@ -277,7 +277,7 @@ mod tests {
     /// Tests allocation with a non-existent format set.
     #[test]
     fn test_allocate_format_not_found() {
-        pollster::block_on(async {
+        futures::executor::block_on(async {
             let (device, queue) = setup_wgpu().await;
             let memory_strategy = MemoryAllocateStrategy {
                 initial_pages: 1,

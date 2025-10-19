@@ -1,3 +1,4 @@
+use gpu_utils::gpu::Gpu;
 use std::sync::Arc;
 use thiserror::Error;
 use winit::{
@@ -5,8 +6,6 @@ use winit::{
     event_loop::ActiveEventLoop,
     window::{Fullscreen, Window},
 };
-
-use crate::gpu::Gpu;
 
 pub enum WindowSurface {
     Window {
@@ -167,7 +166,7 @@ impl WindowSurface {
             surface_config.format = gpu.preferred_surface_format();
         }
 
-        surface.configure(gpu.device(), &surface_config);
+        surface.configure(&gpu.device(), &surface_config);
 
         // Replace self with Window variant, preserving settings
         *self = WindowSurface::Window {

@@ -247,11 +247,7 @@ impl Image {
 
 // helper methods
 impl Image {
-    fn with_image<R>(
-        &self,
-        ctx: &WidgetContext,
-        f: impl FnOnce(&wgpu::Texture) -> R,
-    ) -> Option<R> {
+    fn with_image<R>(&self, ctx: &WidgetContext, f: impl FnOnce(&wgpu::Texture) -> R) -> Option<R> {
         let cache_map = ctx.any_resource().get_or_insert_default::<ImageCache>();
         let image_cache = cache_map
             .map
@@ -284,22 +280,13 @@ impl Image {
 // MARK: Style implementation
 
 impl Style for Image {
-    fn required_region(
-        &self,
-        constraints: &Constraints,
-        ctx: &WidgetContext,
-    ) -> Option<QRect> {
+    fn required_region(&self, constraints: &Constraints, ctx: &WidgetContext) -> Option<QRect> {
         let boundary_size = constraints.max_size();
 
         self.with_image(ctx, |texture| self.calc_layout(boundary_size, texture, ctx))
     }
 
-    fn is_inside(
-        &self,
-        position: [f32; 2],
-        boundary_size: [f32; 2],
-        ctx: &WidgetContext,
-    ) -> bool {
+    fn is_inside(&self, position: [f32; 2], boundary_size: [f32; 2], ctx: &WidgetContext) -> bool {
         let draw_range = self.required_region(&Constraints::from_boundary(boundary_size), ctx);
         if let Some(rect) = draw_range {
             rect.contains(position)

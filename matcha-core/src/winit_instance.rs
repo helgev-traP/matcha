@@ -1,51 +1,38 @@
-use renderer::{core_renderer, CoreRenderer};
+use renderer::{CoreRenderer, core_renderer};
 use std::fmt::Debug;
 use thiserror::Error;
 
 use crate::{
     backend::Backend,
-    ui,
+    context::{ApplicationCommand, GlobalResources},
+    ui::component::AnyComponent,
     window_surface::{self},
 };
 
 // MARK: modules
 
-mod benchmark;
 mod builder;
-mod ticker;
 mod window_ui;
 
 pub(crate) use builder::WinitInstanceBuilder;
 
-// todo: move this to more appropriate place
-pub trait WindowManager<Message> {
-    fn message_routing(&self, message: &Message) -> Option<winit::window::WindowId>;
-}
-
 // MARK: Winit
 
-pub struct WinitInstance<
-    Model: Send + Sync + 'static,
-    Message: 'static,
-    B: Backend<Event> + Clone + 'static,
-    Event: Send + 'static,
-    InnerEvent: 'static = Event,
-> {
+pub struct WinitInstance<Message: 'static, Event: Send + 'static, B: Backend<Event> + 'static> {
     // --- tokio runtime ---
     tokio_runtime: tokio::runtime::Runtime,
 
     // --- Context ---
-    context: ui::context::AllContext,
+    resource: GlobalResources,
     preferred_surface_format: wgpu::TextureFormat,
     // ticker: ticker::Ticker,
 
     // --- ui ---
     windows: std::collections::HashMap<
         winit::window::WindowId,
-        window_ui::WindowUi<Model, Message, Event, InnerEvent>,
+        window_ui::WindowUi<Message, Event>,
         fxhash::FxBuildHasher,
     >,
-    window_manager: Box<dyn WindowManager<Message> + Send + Sync>,
 
     // --- render control ---
     base_color: wgpu::Color,
@@ -55,35 +42,23 @@ pub struct WinitInstance<
     backend: B,
 
     // --- benchmark / monitoring ---
-    benchmarker: benchmark::Benchmark,
+    benchmarker: utils::benchmark::Benchmark,
     frame: u128,
 }
 
-impl<
-    Model: Send + Sync + 'static,
-    Message: 'static,
-    B: Backend<Event> + Clone + 'static,
-    Event: Send + 'static,
-    InnerEvent: 'static,
-> WinitInstance<Model, Message, B, Event, InnerEvent>
-{
+impl<Message, Event: Send + 'static, B: Backend<Event> + 'static> WinitInstance<Message, Event, B> {
     pub fn builder(
-        component: ui::Component<Model, Message, Event, InnerEvent>,
+        component: impl AnyComponent<Message, Event> + 'static,
         backend: B,
-    ) -> WinitInstanceBuilder<Model, Message, B, Event, InnerEvent> {
+    ) -> WinitInstanceBuilder<Message, Event, B> {
         WinitInstanceBuilder::new(component, backend)
     }
 }
 
 // MARK: render
 
-impl<
-    Model: Send + Sync + 'static,
-    Message: 'static,
-    B: Backend<Event> + Clone + 'static,
-    Event: Send + 'static,
-    InnerEvent: 'static,
-> WinitInstance<Model, Message, B, Event, InnerEvent>
+impl<Message: 'static, Event: Send + 'static, B: Backend<Event> + Clone + 'static>
+    WinitInstance<Message, Event, B>
 {
     fn render(
         &mut self,
@@ -103,8 +78,8 @@ impl<
         let object = {
             self.tokio_runtime.block_on(window_ui.render(
                 self.tokio_runtime.handle(),
-                &self.context,
                 winit_event_loop,
+                &self.resource,
                 &mut self.benchmarker,
             ))
         };
@@ -120,15 +95,15 @@ impl<
             return Ok(());
         };
 
-        let device = self.context.gpu().device();
-        let queue = self.context.gpu().queue();
+        let device = self.resource.gpu().device();
+        let queue = self.resource.gpu().queue();
 
         self.benchmarker
-            .with_gpu_driven_render(|| -> Result<(), RenderError> {
+            .with("gpu_driven_render", || -> Result<(), RenderError> {
                 self.renderer
                     .render(
-                        device,
-                        queue,
+                        &device,
+                        &queue,
                         surface_format,
                         &surface_texture
                             .texture
@@ -136,8 +111,8 @@ impl<
                         viewport_size,
                         &object,
                         self.base_color,
-                        &self.context.texture_allocator().color_texture(),
-                        &self.context.texture_allocator().stencil_texture(),
+                        &self.resource.texture_atlas().lock().texture(),
+                        &self.resource.stencil_atlas().lock().texture(),
                     )
                     .map_err(RenderError::Render)?;
 
@@ -147,7 +122,7 @@ impl<
         // clear terminal line and print benchmark info
         print!(
             "\r({:.3}) | (frame: {}) | ",
-            self.context.current_time().as_secs_f32(),
+            self.resource.current_time().as_secs_f32(),
             self.frame,
         );
         self.benchmarker.print();
@@ -162,9 +137,9 @@ impl<
     }
 
     fn handle_commands(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        for command in self.context.drain_commands() {
+        while let Ok(command) = self.resource.command_receiver().try_recv() {
             match command {
-                ui::ApplicationContextCommand::Quit => {
+                ApplicationCommand::Quit => {
                     event_loop.exit();
                 }
             }
@@ -177,14 +152,8 @@ impl<
 // TODO: Use TokioRuntime::spawn() instead of blocking on as much as possible.
 
 // winit event handler
-impl<
-    Model: Send + Sync + 'static,
-    Message: 'static,
-    B: Backend<Event> + Clone + 'static,
-    Event: Debug + Send + 'static,
-    InnerEvent: 'static,
-> winit::application::ApplicationHandler<Message>
-    for WinitInstance<Model, Message, B, Event, InnerEvent>
+impl<Message: 'static, Event: Send + 'static, B: Backend<Event> + Clone + 'static>
+    winit::application::ApplicationHandler<Message> for WinitInstance<Message, Event, B>
 {
     // MARK: resumed
 
@@ -192,13 +161,15 @@ impl<
         self.tokio_runtime.block_on(async {
             // start window
             for window_ui in self.windows.values_mut() {
-                window_ui.start_window(event_loop, &self.context).await;
+                window_ui
+                    .start_window(event_loop, self.resource.gpu())
+                    .await;
             }
 
             // call setup function
             for window_ui in self.windows.values_mut() {
                 window_ui
-                    .setup(self.tokio_runtime.handle(), &self.context)
+                    .setup(self.tokio_runtime.handle(), &self.resource)
                     .await;
             }
         });
@@ -221,7 +192,7 @@ impl<
             }
             winit::event::WindowEvent::Resized(physical_size) => {
                 if let Some(window_ui) = self.windows.get_mut(&window_id) {
-                    window_ui.resize_window(physical_size, self.context.gpu().device());
+                    window_ui.resize_window(physical_size, &self.resource.gpu().device());
                     window_ui.request_redraw();
                 }
             }
@@ -234,12 +205,10 @@ impl<
             return;
         };
 
-        let event = window_ui.window_event(event, self.tokio_runtime.handle(), &self.context);
+        let event = window_ui.window_event(event, self.tokio_runtime.handle(), &self.resource);
 
         if let Some(event) = event {
-            let backend = self.backend.clone();
-            self.tokio_runtime
-                .spawn(async move { backend.send_event(event).await });
+            self.tokio_runtime.block_on(self.backend.send_event(event));
         }
 
         self.handle_commands(event_loop);
@@ -266,11 +235,9 @@ impl<
     // MARK: user_event
 
     fn user_event(&mut self, event_loop: &winit::event_loop::ActiveEventLoop, event: Message) {
-        if let Some(window_id) = self.window_manager.message_routing(&event) {
-            if let Some(window_ui) = self.windows.get_mut(&window_id) {
-                window_ui.user_event(&event, self.tokio_runtime.handle(), &self.context);
-                window_ui.request_redraw();
-            }
+        for window_ui in self.windows.values_mut() {
+            window_ui.user_event(&event, self.tokio_runtime.handle(), &self.resource);
+            window_ui.request_redraw();
         }
 
         self.handle_commands(event_loop);

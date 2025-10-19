@@ -5,7 +5,7 @@ use nalgebra::Matrix4;
 use matcha_core::ui::widget::InvalidationHandle;
 use matcha_core::{
     device_input::DeviceInput,
-    ui::{AnyWidget, AnyWidgetFrame, WidgetContext, Background, Dom, Widget, WidgetFrame},
+    ui::{AnyWidget, AnyWidgetFrame, Background, Dom, Widget, WidgetContext, WidgetFrame},
     update_flag::UpdateNotifier,
 };
 use renderer::render_node::RenderNode;

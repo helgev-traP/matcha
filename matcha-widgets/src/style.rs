@@ -32,8 +32,7 @@ pub trait Style: Send + Sync {
     ///
     /// An array `[width, height]` representing the required size in pixels.
     /// If the style does not have a specific size requirement, it returns `None`.
-    fn required_region(&self, constraints: &Constraints, ctx: &WidgetContext)
-    -> Option<QRect>;
+    fn required_region(&self, constraints: &Constraints, ctx: &WidgetContext) -> Option<QRect>;
 
     /// Checks if a given position is inside the shape defined by this style.
     /// This is necessary for styles that have non-rectangular shapes.
@@ -59,11 +58,7 @@ pub trait Style: Send + Sync {
 }
 
 impl Style for Vec<Arc<dyn Style>> {
-    fn required_region(
-        &self,
-        constraints: &Constraints,
-        ctx: &WidgetContext,
-    ) -> Option<QRect> {
+    fn required_region(&self, constraints: &Constraints, ctx: &WidgetContext) -> Option<QRect> {
         let mut result: Option<QRect> = None;
         for style in self {
             if let Some(region) = style.required_region(constraints, ctx) {

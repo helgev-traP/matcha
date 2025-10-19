@@ -3,7 +3,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
-pub(crate) struct UpdateFlag {
+pub struct UpdateFlag {
     // default is false
     // when the flag is set to true, then dom update is triggered
     flag: Arc<AtomicBool>,

@@ -4,7 +4,10 @@ edition = "2024"
 version.workspace = true
 
 [dependencies]
+dashmap = { workspace = true }
+fxhash = { workspace = true }
 parking_lot = { workspace = true }
+tokio = { workspace = true }
 
 [lints]
 workspace = true

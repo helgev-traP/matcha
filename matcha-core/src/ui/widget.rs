@@ -3,13 +3,13 @@ use std::{any::Any, sync::Arc};
 use parking_lot::Mutex;
 use renderer::render_node::RenderNode;
 use smallvec::SmallVec;
-use utils::{back_prop_dirty::BackPropDirty, cache::Cache};
+use utils::{back_prop_dirty::BackPropDirty, cache::Cache, update_flag::UpdateNotifier};
 
 use crate::{
+    context::WidgetContext,
     device_input::DeviceInput,
     metrics::{Arrangement, Constraints, QSize},
-    ui::{ApplicationContext, Background, WidgetContext},
-    update_flag::UpdateNotifier,
+    ui::Background,
 };
 
 const SMALLVEC_INLINE_CAPACITY: usize = 16;
@@ -305,7 +305,7 @@ where
 
         // If debug requests recompute each time, clear measure entry before computing so
         // get_or_insert_with will recompute and write into the persistent cache.
-        if ctx.debug_config().disable_layout_measure_cache() {
+        if ctx.debug_config_disable_layout_measure_cache() {
             cache.measure.clear();
         }
 
@@ -342,7 +342,7 @@ where
 
         // Decide whether to recompute render each time: if so, clear persistent render cache
         // before get_or_insert_with so it gets recomputed and written into the cache.
-        if ctx.debug_config().disable_render_node_cache() {
+        if ctx.debug_config_disable_render_node_cache() {
             cache.render.clear();
         }
 
@@ -507,7 +507,7 @@ where
         }
 
         // If debug requests recompute each time, clear the layout entry so get_or_insert_with recomputes and writes.
-        if ctx.debug_config().disable_layout_arrange_cache() {
+        if ctx.debug_config_disable_layout_arrange_cache() {
             cache.layout.clear();
         }
 

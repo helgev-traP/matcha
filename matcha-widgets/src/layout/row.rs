@@ -2,8 +2,8 @@ use matcha_core::{
     device_input::DeviceInput,
     metrics::{Arrangement, Constraints},
     ui::{
-        AnyWidget, AnyWidgetFrame, WidgetContext, ApplicationContext, Background, Dom,
-        InvalidationHandle, Widget, WidgetFrame,
+        AnyWidget, AnyWidgetFrame, ApplicationContext, Background, Dom, InvalidationHandle, Widget,
+        WidgetContext, WidgetFrame,
     },
     update_flag::UpdateNotifier,
 };

@@ -314,14 +314,15 @@ mod tests {
             ..Default::default()
         });
 
-        let adaptor = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::LowPower,
-            compatible_surface: None,
-            force_fallback_adapter: true, // for testing on environments without a gpu
-        }))
-        .unwrap();
+        let adaptor =
+            futures::executor::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::LowPower,
+                compatible_surface: None,
+                force_fallback_adapter: true, // for testing on environments without a gpu
+            }))
+            .unwrap();
 
-        let (device, queue) = pollster::block_on(adaptor.request_device(
+        let (device, queue) = futures::executor::block_on(adaptor.request_device(
             &wgpu::DeviceDescriptor {
                 label: None,
                 required_features: wgpu::Features::empty(),

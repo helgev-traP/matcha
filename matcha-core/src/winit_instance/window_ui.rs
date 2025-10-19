@@ -1,38 +1,30 @@
 use core::panic;
 use std::sync::Arc;
 
+use gpu_utils::gpu::Gpu;
 use parking_lot::RwLock;
 use renderer::RenderNode;
-use utils::back_prop_dirty::BackPropDirty;
-use winit::{
-    dpi::{PhysicalPosition, PhysicalSize},
-};
+use utils::{back_prop_dirty::BackPropDirty, update_flag::UpdateFlag};
+use winit::dpi::{PhysicalPosition, PhysicalSize};
 
 use crate::{
+    context::GlobalResources,
     device_input::{
         DeviceInput, DeviceInputData, KeyboardState, MouseState,
         mouse_state::{MousePrimaryButton, MouseStateConfig},
         window_state::WindowState,
     },
     metrics::Constraints,
-    ui::{
-        AnyWidgetFrame, Background, Component, context::AllContext,
-    },
-    update_flag::UpdateFlag,
+    ui::{AnyWidgetFrame, Background, component::AnyComponent},
     window_surface::WindowSurface,
 };
 
-pub struct WindowUi<
-    Model: Send + Sync + 'static,
-    Message: 'static,
-    Event: 'static,
-    InnerEvent: 'static = Event,
-> {
+pub struct WindowUi<Message: 'static, Event: 'static> {
     // window
     window: Arc<RwLock<WindowSurface>>,
 
     // ui
-    component: Component<Model, Message, Event, InnerEvent>,
+    component: Box<dyn AnyComponent<Message, Event>>,
     widget: Option<Box<dyn AnyWidgetFrame<Event>>>,
     model_update_detecter: UpdateFlag,
 
@@ -61,11 +53,9 @@ pub enum WindowUiRenderError {
     WgpuSurfaceError(wgpu::SurfaceError),
 }
 
-impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent: 'static>
-    WindowUi<Model, Message, Event, InnerEvent>
-{
+impl<Message: 'static, Event: 'static> WindowUi<Message, Event> {
     pub fn new(
-        component: Component<Model, Message, Event, InnerEvent>,
+        component: Box<dyn AnyComponent<Message, Event>>,
         mouse_state_config: MouseStateConfig,
     ) -> Result<Self, WindowUiError> {
         Ok(Self {
@@ -99,14 +89,8 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
     }
 }
 
-impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent: 'static>
-    WindowUi<Model, Message, Event, InnerEvent>
-{
-    pub fn resize_window(
-        &self,
-        new_size: PhysicalSize<u32>,
-        device: &wgpu::Device,
-    ) {
+impl<Message: 'static, Event: 'static> WindowUi<Message, Event> {
+    pub fn resize_window(&self, new_size: PhysicalSize<u32>, device: &wgpu::Device) {
         self.window.write().set_surface_size(new_size, device);
     }
 
@@ -115,24 +99,20 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
     }
 }
 
-impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent: 'static>
-    WindowUi<Model, Message, Event, InnerEvent>
-{
+impl<Message: 'static, Event: 'static> WindowUi<Message, Event> {
     pub async fn start_window(
         &self,
         winit_event_loop: &winit::event_loop::ActiveEventLoop,
-        all_context: &AllContext,
+        gpu: &Gpu,
     ) -> Result<(), crate::window_surface::WindowSurfaceError> {
-        self.window.write().start_window(
-            winit_event_loop,
-            all_context.gpu(),
-        )
+        self.window.write().start_window(winit_event_loop, gpu)
     }
 
     // start component setup function
     // TODO: This is provisional implementation. Refactor this after organizing async execution flow.
-    pub async fn setup(&self, tokio_runtime: &tokio::runtime::Handle, all_context: &AllContext) {
-        self.component.setup(&all_context.application_context(&tokio_runtime, &self.window));
+    pub async fn setup(&self, tokio_handle: &tokio::runtime::Handle, resource: &GlobalResources) {
+        self.component
+            .setup(&resource.application_context(tokio_handle, &self.window))
     }
 
     /// Returns true if a render should be performed.
@@ -144,10 +124,10 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
 
     pub async fn render<'a>(
         &'a mut self,
-        tokio_runtime: &tokio::runtime::Handle,
-        all_context: &AllContext,
+        tokio_handle: &tokio::runtime::Handle,
         winit_event_loop: &winit::event_loop::ActiveEventLoop,
-        benchmark: &mut super::benchmark::Benchmark,
+        resource: &GlobalResources,
+        benchmark: &mut utils::benchmark::Benchmark,
     ) -> Option<RenderResult> {
         let viewport_size;
         let surface_texture;
@@ -170,7 +150,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
                     // start window
                     window.start_window(
                         winit_event_loop,
-                        all_context.gpu(),
+                        &resource.gpu(),
                     ).expect("failed to start window");
                 })
             }
@@ -191,7 +171,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
                         wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated => {
                             // reconfigure the surface
                             window.with_upgraded(|w| {
-                                w.reconfigure_surface(all_context.gpu().device());
+                                w.reconfigure_surface(&resource.gpu().device());
                             });
 
                             // call rerender event
@@ -208,7 +188,7 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
                         }
                         wgpu::SurfaceError::Other => {
                             panic!("unknown error at wgpu surface");
-                        },
+                        }
                     }
                 }
             };
@@ -226,8 +206,8 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
                 surface_texture,
                 surface_format,
                 background,
-                tokio_runtime,
-                all_context,
+                tokio_handle,
+                resource,
                 benchmark,
             )
             .await,
@@ -241,19 +221,20 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
         surface_texture: wgpu::SurfaceTexture,
         surface_format: wgpu::TextureFormat,
         background: Background<'a>,
-        tokio_runtime: &tokio::runtime::Handle,
-        all_context: &AllContext,
-        benchmark: &mut super::benchmark::Benchmark,
+        tokio_handle: &tokio::runtime::Handle,
+        resource: &GlobalResources,
+        benchmark: &mut utils::benchmark::Benchmark,
     ) -> RenderResult {
-        let ctx = all_context
-            .widget_context(tokio_runtime, &self.window);
+        let ctx = resource.widget_context(tokio_handle, &self.window);
 
         if self.widget.is_none() {
             // directly build widget tree from dom
-            let dom = benchmark.with_create_dom(self.component.view()).await;
+            let dom = benchmark
+                .with_async("create_dom", self.component.view())
+                .await;
             let widget = self
                 .widget
-                .insert(benchmark.with_create_widget(|| dom.build_widget_tree()));
+                .insert(benchmark.with("create_widget", || dom.build_widget_tree()));
 
             // set model update notifier
             self.model_update_detecter = UpdateFlag::new();
@@ -264,11 +245,13 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
             widget.update_dirty_flags(BackPropDirty::new(true), BackPropDirty::new(true));
         } else if self.model_update_detecter.is_true() {
             // Widget update is required
-            let dom = benchmark.with_create_dom(self.component.view()).await;
+            let dom = benchmark
+                .with_async("create_dom", self.component.view())
+                .await;
 
             if let Some(widget) = self.widget.as_mut()
                 && benchmark
-                    .with_update_widget(widget.update_widget_tree(&*dom))
+                    .with_async("update_widget", widget.update_widget_tree(&*dom))
                     .await
                     .is_err()
             {
@@ -291,14 +274,15 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
         let constraints: Constraints =
             Constraints::new([0.0, viewport_size[0]], [0.0, viewport_size[1]]);
 
-        let preferred_size = benchmark.with_layout_measure(|| widget.measure(&constraints, &ctx));
+        let preferred_size =
+            benchmark.with("layout_measure", || widget.measure(&constraints, &ctx));
         let final_size = [
             preferred_size[0].clamp(0.0, viewport_size[0]),
             preferred_size[1].clamp(0.0, viewport_size[1]),
         ];
 
-        benchmark.with_layout_arrange(|| widget.arrange(final_size, &ctx));
-        let render_node = benchmark.with_widget_render(|| widget.render(background, &ctx));
+        benchmark.with("layout_arrange", || widget.arrange(final_size, &ctx));
+        let render_node = benchmark.with("widget_render", || widget.render(background, &ctx));
 
         RenderResult {
             render_node,
@@ -398,16 +382,15 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
     pub fn window_event(
         &mut self,
         window_event: winit::event::WindowEvent,
-        tokio_runtime: &tokio::runtime::Handle,
-        all_context: &AllContext,
+        tokio_handle: &tokio::runtime::Handle,
+        resource: &GlobalResources,
     ) -> Option<Event> {
         // check window existence
         if self.window.read().window().is_none() {
             return None;
         }
 
-        let ctx = all_context
-            .widget_context(tokio_runtime, &self.window);
+        let ctx = resource.widget_context(tokio_handle, &self.window);
 
         let window_clone = self.window.clone();
         let get_window_size = || {
@@ -442,9 +425,16 @@ impl<Model: Send + Sync + 'static, Message: 'static, Event: 'static, InnerEvent:
         }
     }
 
-    pub fn user_event(&self, user_event: &Message, tokio_runtime: &tokio::runtime::Handle, all_context: &AllContext) {
-        let app_ctx = &all_context.application_context(&tokio_runtime, &self.window);
+    pub fn user_event(
+        &self,
+        user_event: &Message,
+        tokio_runtime: &tokio::runtime::Handle,
+        resource: &GlobalResources,
+    ) {
+        let widget_ctx = &resource.widget_context(tokio_runtime, &self.window);
 
-        self.component.update(user_event, app_ctx);
+        let app_ctx = widget_ctx.application_context();
+
+        self.component.update(user_event, &app_ctx);
     }
 }

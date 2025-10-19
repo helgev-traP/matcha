@@ -19,11 +19,7 @@ pub struct SolidBox {
 }
 
 impl Style for SolidBox {
-    fn required_region(
-        &self,
-        constraints: &Constraints,
-        _ctx: &WidgetContext,
-    ) -> Option<QRect> {
+    fn required_region(&self, constraints: &Constraints, _ctx: &WidgetContext) -> Option<QRect> {
         let max = constraints.max_size();
         if max[0] > 0.0 && max[1] > 0.0 {
             Some(QRect::new([0.0, 0.0], max))
@@ -32,12 +28,7 @@ impl Style for SolidBox {
         }
     }
 
-    fn is_inside(
-        &self,
-        position: [f32; 2],
-        boundary_size: [f32; 2],
-        _ctx: &WidgetContext,
-    ) -> bool {
+    fn is_inside(&self, position: [f32; 2], boundary_size: [f32; 2], _ctx: &WidgetContext) -> bool {
         position[0] >= 0.0
             && position[0] <= boundary_size[0]
             && position[1] >= 0.0
