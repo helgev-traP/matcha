@@ -27,11 +27,7 @@ pub struct WinitInstance<Message: 'static, Event: Send + 'static, B: Backend<Eve
     // ticker: ticker::Ticker,
 
     // --- ui ---
-    windows: std::collections::HashMap<
-        winit::window::WindowId,
-        window_ui::WindowUi<Message, Event>,
-        fxhash::FxBuildHasher,
-    >,
+    windows: Vec<window_ui::WindowUi<Message, Event>>,
 
     // --- render control ---
     base_color: wgpu::Color,
@@ -65,7 +61,7 @@ impl<Message: 'static, Event: Send + 'static, B: Backend<Event> + Clone + 'stati
         winit_event_loop: &winit::event_loop::ActiveEventLoop,
         force: bool,
     ) -> Result<(), RenderError> {
-        let Some(window_ui) = self.windows.get_mut(&window_id) else {
+        let Some(window_ui) = self.windows.get_mut(0) else {
             return Err(RenderError::WindowNotFound);
         };
 
@@ -160,14 +156,14 @@ impl<Message: 'static, Event: Send + 'static, B: Backend<Event> + Clone + 'stati
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         self.tokio_runtime.block_on(async {
             // start window
-            for window_ui in self.windows.values_mut() {
-                window_ui
+            for window_ui in self.windows.iter_mut() {
+                let _ = window_ui
                     .start_window(event_loop, self.resource.gpu())
                     .await;
             }
 
             // call setup function
-            for window_ui in self.windows.values_mut() {
+            for window_ui in self.windows.iter_mut() {
                 window_ui
                     .setup(self.tokio_runtime.handle(), &self.resource)
                     .await;
@@ -191,7 +187,7 @@ impl<Message: 'static, Event: Send + 'static, B: Backend<Event> + Clone + 'stati
                 }
             }
             winit::event::WindowEvent::Resized(physical_size) => {
-                if let Some(window_ui) = self.windows.get_mut(&window_id) {
+                if let Some(window_ui) = self.windows.get_mut(0) {
                     window_ui.resize_window(physical_size, &self.resource.gpu().device());
                     window_ui.request_redraw();
                 }
@@ -201,7 +197,7 @@ impl<Message: 'static, Event: Send + 'static, B: Backend<Event> + Clone + 'stati
 
         // convert window event to Event
 
-        let Some(window_ui) = self.windows.get_mut(&window_id) else {
+        let Some(window_ui) = self.windows.get_mut(0) else {
             return;
         };
 
@@ -225,7 +221,7 @@ impl<Message: 'static, Event: Send + 'static, B: Backend<Event> + Clone + 'stati
             winit::event::StartCause::Init => {}
             winit::event::StartCause::WaitCancelled { .. } => {}
             winit::event::StartCause::ResumeTimeReached { .. } | winit::event::StartCause::Poll => {
-                for window_ui in self.windows.values_mut() {
+                for window_ui in self.windows.iter_mut() {
                     window_ui.request_redraw();
                 }
             }
@@ -235,7 +231,7 @@ impl<Message: 'static, Event: Send + 'static, B: Backend<Event> + Clone + 'stati
     // MARK: user_event
 
     fn user_event(&mut self, event_loop: &winit::event_loop::ActiveEventLoop, event: Message) {
-        for window_ui in self.windows.values_mut() {
+        for window_ui in self.windows.iter_mut() {
             window_ui.user_event(&event, self.tokio_runtime.handle(), &self.resource);
             window_ui.request_redraw();
         }

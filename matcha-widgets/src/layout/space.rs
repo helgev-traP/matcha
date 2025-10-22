@@ -1,10 +1,9 @@
+use matcha_core::context::WidgetContext;
 use matcha_core::{
     device_input::DeviceInput,
     metrics::{Arrangement, Constraints},
     ui::{AnyWidget, AnyWidgetFrame, Background, Dom, InvalidationHandle, Widget, WidgetFrame},
 };
-use matcha_core::context::WidgetContext;
-use utils::update_flag::UpdateNotifier;
 use renderer::render_node::RenderNode;
 
 use crate::types::size::{ChildSize, Size};

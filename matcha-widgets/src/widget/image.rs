@@ -1,11 +1,13 @@
 use crate::style::Style;
+use matcha_core::context::WidgetContext;
 use matcha_core::{
     device_input::DeviceInput,
     metrics::{Arrangement, Constraints},
-    ui::{AnyWidgetFrame, Background, Dom, Widget, WidgetFrame, widget::{AnyWidget, InvalidationHandle}},
+    ui::{
+        AnyWidgetFrame, Background, Dom, Widget, WidgetFrame,
+        widget::{AnyWidget, InvalidationHandle},
+    },
 };
-use matcha_core::context::{ApplicationContext, WidgetContext};
-use utils::update_flag::UpdateNotifier;
 use renderer::render_node::RenderNode;
 
 use crate::{style, types::size::Size};
@@ -153,8 +155,7 @@ impl<T: Send + Sync + 'static> Widget<Image, T, ()> for ImageNode {
                     .draw(&mut encoder, &style_region, size, [0.0, 0.0], ctx);
 
                 ctx.queue().submit(Some(encoder.finish()));
-                render_node =
-                    render_node.with_texture(style_region, size, Matrix4::identity())
+                render_node = render_node.with_texture(style_region, size, Matrix4::identity())
             }
         }
 

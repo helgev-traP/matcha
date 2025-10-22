@@ -1,8 +1,11 @@
 use matcha_core::{
+    context::WidgetContext,
     device_input::DeviceInput,
     metrics::{Arrangement, Constraints},
-    context::WidgetContext,
-    ui::{AnyWidgetFrame, Background, Dom, Widget, WidgetFrame, widget::{AnyWidget, InvalidationHandle}},
+    ui::{
+        AnyWidgetFrame, Background, Dom, Widget, WidgetFrame,
+        widget::{AnyWidget, InvalidationHandle},
+    },
 };
 use renderer::render_node::RenderNode;
 

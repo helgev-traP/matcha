@@ -4,8 +4,8 @@ use crate::style::Style;
 use dashmap::DashMap;
 use image::EncodableLayout;
 use matcha_core::{
-    metrics::{Constraints, QRect},
     context::WidgetContext,
+    metrics::{Constraints, QRect},
 };
 use renderer::widgets_renderer::texture_copy::{RenderData, TargetData, TextureCopy};
 

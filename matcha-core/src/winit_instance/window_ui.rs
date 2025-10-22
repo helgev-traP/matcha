@@ -87,6 +87,25 @@ impl<Message: 'static, Event: 'static> WindowUi<Message, Event> {
     pub fn scroll_pixel_per_line(&self) -> f32 {
         self.mouse_state.scroll_pixel_per_line()
     }
+
+    // Window configuration delegation APIs
+    pub fn set_title(&mut self, title: &str) {
+        self.window.write().set_title(title);
+    }
+
+    pub fn init_size(&mut self, width: u32, height: u32) {
+        self.window
+            .write()
+            .request_inner_size(PhysicalSize::new(width, height));
+    }
+
+    pub fn set_maximized(&mut self, maximized: bool) {
+        self.window.write().set_maximized(maximized);
+    }
+
+    pub fn set_fullscreen(&mut self, fullscreen: bool) {
+        self.window.write().set_fullscreen(fullscreen);
+    }
 }
 
 impl<Message: 'static, Event: 'static> WindowUi<Message, Event> {

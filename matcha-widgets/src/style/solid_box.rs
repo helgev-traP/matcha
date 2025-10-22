@@ -2,8 +2,8 @@ use crate::style::Style;
 use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
 use matcha_core::{
     color::Color,
-    metrics::{Constraints, QRect},
     context::WidgetContext,
+    metrics::{Constraints, QRect},
 };
 use renderer::{
     vertex::colored_vertex::ColorVertex,

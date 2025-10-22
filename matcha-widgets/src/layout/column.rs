@@ -1,5 +1,5 @@
+use matcha_core::context::WidgetContext;
 use matcha_core::metrics::{Arrangement, Constraints};
-use matcha_core::context::{ApplicationContext, WidgetContext};
 use nalgebra::Matrix4;
 
 use matcha_core::ui::widget::InvalidationHandle;
@@ -7,7 +7,6 @@ use matcha_core::{
     device_input::DeviceInput,
     ui::{AnyWidget, AnyWidgetFrame, Background, Dom, Widget, WidgetFrame},
 };
-use utils::update_flag::UpdateNotifier;
 use renderer::render_node::RenderNode;
 
 use crate::types::flex::{AlignItems, JustifyContent};

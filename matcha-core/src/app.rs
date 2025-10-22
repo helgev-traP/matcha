@@ -71,6 +71,7 @@ where
         new_builder.full_screen = self.builder.full_screen;
         new_builder.power_preference = self.builder.power_preference;
         new_builder.base_color = self.builder.base_color;
+        new_builder.surface_preferred_format = self.builder.surface_preferred_format;
         new_builder.double_click_threshold = self.builder.double_click_threshold;
         new_builder.long_press_threshold = self.builder.long_press_threshold;
         new_builder.mouse_primary_button = self.builder.mouse_primary_button;

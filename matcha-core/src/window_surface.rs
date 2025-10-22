@@ -50,7 +50,7 @@ impl WindowSurface {
     pub fn request_inner_size(&mut self, size: PhysicalSize<u32>) {
         match self {
             WindowSurface::Window { window, .. } => {
-                window.request_inner_size(size);
+                let _ = window.request_inner_size(size);
             }
             WindowSurface::Config { size: s, .. } => {
                 *s = size;

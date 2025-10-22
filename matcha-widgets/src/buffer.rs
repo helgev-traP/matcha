@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::style::Style;
 use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
-use matcha_core::{metrics::QRect, context::WidgetContext};
+use matcha_core::{context::WidgetContext, metrics::QRect};
 use utils::cache::Cache;
 
 pub struct Buffer {

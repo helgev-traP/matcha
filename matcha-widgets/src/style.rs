@@ -7,7 +7,10 @@ pub mod viewport_clear;
 use std::sync::Arc;
 
 use gpu_utils::texture_atlas::atlas_simple::atlas::AtlasRegion;
-use matcha_core::{metrics::{Constraints, QRect}, context::WidgetContext};
+use matcha_core::{
+    context::WidgetContext,
+    metrics::{Constraints, QRect},
+};
 
 /// A trait that defines the visual appearance and drawing logic of a widget.
 ///

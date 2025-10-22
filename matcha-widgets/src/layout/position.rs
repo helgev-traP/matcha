@@ -1,12 +1,11 @@
 use nalgebra::Matrix4;
 
+use matcha_core::context::WidgetContext;
 use matcha_core::{
     device_input::DeviceInput,
     metrics::{Arrangement, Constraints},
     ui::{AnyWidget, AnyWidgetFrame, Background, Dom, InvalidationHandle, Widget, WidgetFrame},
 };
-use matcha_core::context::{ApplicationContext, WidgetContext};
-use utils::update_flag::UpdateNotifier;
 use renderer::render_node::RenderNode;
 
 // MARK: DOM

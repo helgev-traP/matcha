@@ -4,12 +4,14 @@ use crate::style::Style;
 use matcha_core::metrics::{Arrangement, Constraints};
 use matcha_core::{
     color::Color,
+    context::WidgetContext,
     device_input::{DeviceInput, DeviceInputData, ElementState, MouseInput, MouseLogicalButton},
-    context::{ApplicationContext, WidgetContext},
-    ui::{AnyWidgetFrame, Dom, Widget, WidgetFrame, widget::{AnyWidget, InvalidationHandle}, Background},
+    ui::{
+        AnyWidgetFrame, Background, Dom, Widget, WidgetFrame,
+        widget::{AnyWidget, InvalidationHandle},
+    },
 };
 use renderer::render_node::RenderNode;
-use utils::update_flag::UpdateNotifier;
 
 use crate::style::solid_box::SolidBox;
 
@@ -182,10 +184,10 @@ impl<T: Send + Sync + 'static> Widget<Button<T>, T, ()> for ButtonNode<T> {
             return msg;
         }
 
-            if let Some((content, _, arrangement)) = children.first_mut() {
-                let content_event = event.transform(arrangement.affine);
-                return content.device_input(&content_event, ctx);
-            }
+        if let Some((content, _, arrangement)) = children.first_mut() {
+            let content_event = event.transform(arrangement.affine);
+            return content.device_input(&content_event, ctx);
+        }
 
         None
     }

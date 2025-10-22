@@ -62,6 +62,9 @@ moka = { version = "0.12", features = ["sync"] }
 # error handling
 thiserror = "2.0"
 
+# log
+log = "^0.4.28"
+
 # interpolation crate
 # todo: maybe useful.
 # interpolation = "0.3.0"

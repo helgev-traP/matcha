@@ -206,9 +206,9 @@ impl Style for Text {
         let (_, buffer) = &*self.buffer.get_or_insert_with(&q_size, || {
             let size = constraints.max_size();
 
-let glyphon_shared = ctx
-            .any_resource()
-            .get_or_insert_with(|| TextShared::setup(&ctx.device(), &ctx.queue()));
+            let glyphon_shared = ctx
+                .any_resource()
+                .get_or_insert_with(|| TextShared::setup(&ctx.device(), &ctx.queue()));
 
             let mut font_system = glyphon_shared.font_system.lock();
 
@@ -272,7 +272,7 @@ let glyphon_shared = ctx
         let size = boundary_size;
         let q_size = QSize::from(size);
 
-let glyphon_shared = ctx
+        let glyphon_shared = ctx
             .any_resource()
             .get_or_insert_with(|| TextShared::setup(&ctx.device(), &ctx.queue()));
 
@@ -324,7 +324,7 @@ let glyphon_shared = ctx
         let target_size = target.size();
         // viewport resolution should match the render target (region) size so shader NDC math maps correctly
         let (_, viewport) = &mut *self
-.viewport
+            .viewport
             .get_or_insert_with(&q_size, || glyphon::Viewport::new(&ctx.device(), &cache));
         viewport.update(
             &ctx.queue(),
@@ -335,7 +335,7 @@ let glyphon_shared = ctx
         );
 
         let (_, text_renderer) = &mut *self.text_renderer.get_or_insert_with(&q_size, || {
-glyphon::TextRenderer::new(
+            glyphon::TextRenderer::new(
                 &mut text_atlas,
                 &ctx.device(),
                 wgpu::MultisampleState::default(),
@@ -361,7 +361,7 @@ glyphon::TextRenderer::new(
         };
 
         // 5) Call prepare to ensure glyphs are rasterized into glyphon's atlas and vertex buffer is populated.
-if text_renderer
+        if text_renderer
             .prepare(
                 &ctx.device(),
                 &ctx.queue(),

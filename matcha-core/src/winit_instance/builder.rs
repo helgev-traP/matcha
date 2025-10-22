@@ -216,6 +216,56 @@ impl<Message, Event: Send + 'static, B: Backend<Event>> WinitInstanceBuilder<Mes
     // --- Build ---
 
     pub fn build(self) -> Result<WinitInstance<Message, Event, B>, InitError> {
-        todo!()
+        // 1) Build Tokio runtime
+        let tokio_runtime = self
+            .runtime_builder
+            .build()
+            .map_err(|_| InitError::TokioRuntime)?;
+
+        // 2) Initialize GPU
+        let gpu = tokio_runtime
+            .block_on(gpu_utils::gpu::Gpu::new(gpu_utils::gpu::GpuDescriptor {
+                backends: wgpu::Backends::PRIMARY,
+                power_preference: self.power_preference,
+                required_features: wgpu::Features::VERTEX_WRITABLE_STORAGE | wgpu::Features::PUSH_CONSTANTS,
+                required_limits: None,
+                preferred_surface_format: self.surface_preferred_format,
+                auto_recover_enabled: false,
+            }))
+            .map_err(|_| InitError::Gpu)?;
+
+        // 3) Global resources
+        let resource = crate::context::GlobalResources::new(gpu);
+
+        // 4) Create Window UI and apply builder settings
+        let mut window_ui = super::window_ui::WindowUi::new(
+            self.component,
+            crate::device_input::mouse_state::MouseStateConfig {
+                combo_duration: self.double_click_threshold,
+                long_press_duration: self.long_press_threshold,
+                primary_button: self.mouse_primary_button,
+                pixel_per_line: self.scroll_pixel_per_line,
+            },
+        )?;
+        // Apply window configuration (effective both before and after window creation)
+        window_ui.set_title(&self.title);
+        window_ui.init_size(self.init_size.width, self.init_size.height);
+        window_ui.set_maximized(self.maximized);
+        window_ui.set_fullscreen(self.full_screen);
+
+        // 5) Renderer
+        let renderer = renderer::CoreRenderer::new(&resource.gpu().device());
+
+        // 6) Build instance (single-window Vec 管理)
+        Ok(WinitInstance {
+            tokio_runtime,
+            resource,
+            windows: vec![window_ui],
+            base_color: self.base_color.into(),
+            renderer,
+            backend: self.backend,
+            benchmarker: utils::benchmark::Benchmark::new(120),
+            frame: 0,
+        })
     }
 }

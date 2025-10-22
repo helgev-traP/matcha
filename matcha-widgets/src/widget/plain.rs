@@ -2,12 +2,14 @@ use std::sync::Arc;
 
 use crate::style::Style;
 use matcha_core::{
+    context::WidgetContext,
     device_input::DeviceInput,
     metrics::{Arrangement, Constraints},
-    context::WidgetContext,
-    ui::{AnyWidgetFrame, Background, Dom, Widget, WidgetFrame, widget::{AnyWidget, InvalidationHandle}},
+    ui::{
+        AnyWidgetFrame, Background, Dom, Widget, WidgetFrame,
+        widget::{AnyWidget, InvalidationHandle},
+    },
 };
-use utils::update_flag::UpdateNotifier;
 use renderer::render_node::RenderNode;
 
 use crate::{buffer::Buffer, types::size::Size};

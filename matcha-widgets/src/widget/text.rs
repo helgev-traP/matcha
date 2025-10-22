@@ -2,12 +2,15 @@ use std::vec;
 
 use crate::style::Style;
 
+use matcha_core::context::WidgetContext;
 use matcha_core::{
     device_input::DeviceInput,
     metrics::{Arrangement, Constraints},
-    ui::{AnyWidgetFrame, Background, Dom, Widget, WidgetFrame, widget::{AnyWidget, InvalidationHandle}},
+    ui::{
+        AnyWidgetFrame, Background, Dom, Widget, WidgetFrame,
+        widget::{AnyWidget, InvalidationHandle},
+    },
 };
-use matcha_core::context::WidgetContext;
 use renderer::render_node::RenderNode;
 
 // MARK: DOM
