@@ -1,10 +1,14 @@
 use core::panic;
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicU8, Ordering},
+};
 
 use gpu_utils::gpu::Gpu;
 use log::{debug, trace, warn};
 use parking_lot::RwLock;
 use renderer::{RenderNode, core_renderer};
+use tokio::task;
 use utils::{back_prop_dirty::BackPropDirty, update_flag::UpdateFlag};
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 
@@ -24,6 +28,8 @@ pub struct WindowUi<Message: 'static, Event: 'static> {
     // window
     window: Arc<RwLock<WindowSurface>>,
 
+    surface_guard: SurfaceLock,
+
     // ui
     component: Box<dyn AnyComponent<Message, Event>>,
     widget: tokio::sync::Mutex<Option<Box<dyn AnyWidgetFrame<Event>>>>,
@@ -41,6 +47,59 @@ pub struct WindowRenderResult {
     pub viewport_size: [f32; 2],
     pub surface_texture: wgpu::SurfaceTexture,
     pub surface_format: wgpu::TextureFormat,
+}
+
+struct SurfaceLock {
+    state: AtomicU8,
+}
+
+impl SurfaceLock {
+    const STATE_IDLE: u8 = 0;
+    const STATE_RENDERING: u8 = 1;
+    const STATE_CONFIGURING: u8 = 2;
+
+    fn new() -> Self {
+        Self {
+            state: AtomicU8::new(Self::STATE_IDLE),
+        }
+    }
+
+    async fn lock_for_render(&self) -> SurfaceLockGuard<'_> {
+        self.lock_with_state(Self::STATE_RENDERING).await
+    }
+
+    async fn lock_for_configure(&self) -> SurfaceLockGuard<'_> {
+        self.lock_with_state(Self::STATE_CONFIGURING).await
+    }
+
+    async fn lock_with_state(&self, state: u8) -> SurfaceLockGuard<'_> {
+        loop {
+            if self
+                .state
+                .compare_exchange(Self::STATE_IDLE, state, Ordering::AcqRel, Ordering::Relaxed)
+                .is_ok()
+            {
+                return SurfaceLockGuard { lock: self };
+            }
+
+            std::hint::spin_loop();
+            task::yield_now().await;
+        }
+    }
+
+    fn release(&self) {
+        self.state.store(Self::STATE_IDLE, Ordering::Release);
+    }
+}
+
+struct SurfaceLockGuard<'a> {
+    lock: &'a SurfaceLock,
+}
+
+impl Drop for SurfaceLockGuard<'_> {
+    fn drop(&mut self) {
+        self.lock.release();
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -62,6 +121,7 @@ impl<Message: 'static, Event: 'static> WindowUi<Message, Event> {
         trace!("WindowUi::new: initializing window UI");
         Ok(Self {
             window: Arc::new(RwLock::new(WindowSurface::new())),
+            surface_guard: SurfaceLock::new(),
             component,
             model_update_detector: tokio::sync::Mutex::new(UpdateFlag::new()),
             widget: tokio::sync::Mutex::new(None),
@@ -120,11 +180,12 @@ impl<Message: 'static, Event: 'static> WindowUi<Message, Event> {
         self.window.read().window_id()
     }
 
-    pub fn resize_window(&self, new_size: PhysicalSize<u32>, device: &wgpu::Device) {
+    pub async fn resize_window(&self, new_size: PhysicalSize<u32>, device: &wgpu::Device) {
         trace!(
             "WindowUi::resize_window: new_size={}x{}",
             new_size.width, new_size.height
         );
+        let _surface_guard = self.surface_guard.lock_for_configure().await;
         self.window.write().set_surface_size(new_size, device);
     }
 
@@ -141,6 +202,7 @@ impl<Message: 'static, Event: 'static> WindowUi<Message, Event> {
         gpu: &Gpu,
     ) -> Result<(), crate::window_surface::WindowSurfaceError> {
         trace!("WindowUi::start_window: initializing window surface");
+        let _surface_guard = self.surface_guard.lock_for_configure().await;
         self.window.write().start_window(winit_event_loop, gpu)
     }
 
@@ -175,16 +237,16 @@ impl<Message: 'static, Event: 'static> WindowUi<Message, Event> {
     ) {
         trace!("WindowUi::render: begin");
 
-        let mut window_guard = self.window.upgradable_read();
+        let _surface_guard = self.surface_guard.lock_for_render().await;
 
         // get surface texture, format, viewport size
-        let (surface_texture, surface_format, viewport_size) =
+        let (surface_texture, surface_format, viewport_size) = {
+            let mut window_guard = self.window.upgradable_read();
             match self.acquire_surface(&mut window_guard, resource) {
                 Some(v) => v,
                 None => return,
-            };
-
-        let window_guard = parking_lot::RwLockUpgradableReadGuard::downgrade(window_guard);
+            }
+        };
 
         let surface_texture_view = surface_texture.texture.create_view(&Default::default());
 
@@ -218,8 +280,7 @@ impl<Message: 'static, Event: 'static> WindowUi<Message, Event> {
 
         surface_texture.present();
 
-        // window_guard should be dropped after present to avoid reconfiguring surface when surface texture is in use.
-        drop(window_guard);
+        // surface_guard keeps configuration serialized with render duration.
     }
 
     // Acquire surface/format/viewport with all recovery paths encapsulated

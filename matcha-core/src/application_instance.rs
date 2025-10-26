@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
+use log::{debug, error, trace};
 use renderer::{CoreRenderer, core_renderer};
 use thiserror::Error;
-use log::{trace, debug, error};
 
 use crate::{
     backend::Backend,
@@ -64,14 +64,19 @@ impl<Message: Send + 'static, Event: Send + 'static, B: Backend<Event> + Send + 
         trace!("ApplicationInstance::start_all_windows: starting all windows");
         self.tokio_runtime.block_on(async {
             let windows = self.windows.read().await;
-            trace!("ApplicationInstance::start_all_windows: {} windows to start", windows.len());
+            trace!(
+                "ApplicationInstance::start_all_windows: {} windows to start",
+                windows.len()
+            );
             for window in &*windows {
                 trace!("ApplicationInstance::start_all_windows: starting a window");
                 let res = window
                     .start_window(winit_event_loop, self.global_resources.gpu())
                     .await;
                 if let Err(e) = res {
-                    log::error!("ApplicationInstance::start_all_windows: failed to start window: {e:?}");
+                    log::error!(
+                        "ApplicationInstance::start_all_windows: failed to start window: {e:?}"
+                    );
                 }
             }
         });
@@ -108,7 +113,9 @@ impl<Message: Send + 'static, Event: Send + 'static, B: Backend<Event> + Send + 
 
             if let winit::event::WindowEvent::Resized(physical_size) = event {
                 trace!("ApplicationInstance::window_event: resize detected {}x{}", physical_size.width, physical_size.height);
-                window.resize_window(physical_size, &self.global_resources.gpu().device());
+                window
+                    .resize_window(physical_size, &self.global_resources.gpu().device())
+                    .await;
             }
 
             let event = window
