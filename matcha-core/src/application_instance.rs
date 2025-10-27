@@ -6,7 +6,7 @@ use crate::{
     backend::Backend,
     color::Color,
     context::{ApplicationCommand, GlobalResources},
-    window_ui::WindowUi,
+    window_ui::{WindowUi, WindowUiConfig},
 };
 
 pub struct ApplicationInstance<
@@ -21,7 +21,7 @@ pub struct ApplicationInstance<
     windows: tokio::sync::RwLock<
         HashMap<winit::window::WindowId, WindowUi<Message, Event>, fxhash::FxBuildHasher>,
     >,
-    not_started_uis: tokio::sync::Mutex<Vec<WindowUi<Message, Event>>>,
+    not_started_uis: tokio::sync::Mutex<Vec<WindowUiConfig<Message, Event>>>,
 
     // todo: make this per-window?
     base_color: Color,
@@ -44,7 +44,7 @@ impl<Message: Send + 'static, Event: Send + 'static, B: Backend<Event> + Send + 
     pub(crate) fn new(
         tokio_runtime: tokio::runtime::Runtime,
         global_resources: GlobalResources,
-        windows: Vec<WindowUi<Message, Event>>,
+        windows: Vec<WindowUiConfig<Message, Event>>,
         base_color: Color,
         renderer: CoreRenderer,
         backend: Arc<B>,
@@ -80,23 +80,23 @@ impl<Message: Send + 'static, Event: Send + 'static, B: Backend<Event> + Send + 
                 "ApplicationInstance::start_all_windows: {} windows to start",
                 not_started_uis.len()
             );
-            for window in not_started_uis {
+            for window_config in not_started_uis {
                 log::trace!("ApplicationInstance::start_all_windows: starting a window");
-                let res = window
+                match window_config
                     .start_window(winit_event_loop, self.global_resources.gpu())
-                    .await;
-                match res {
-                    Ok(()) => {
-                        let window_id = window.window_id().unwrap();
+                    .await
+                {
+                    Ok(window) => {
+                        let window_id = window.window_id();
                         windows.insert(window_id, window);
                         log::info!(
                             "ApplicationInstance::start_all_windows: window id={window_id:?} started"
                         );
                     }
-                    Err(e) => {
-                        not_started_uis_guard.push(window);
+                    Err((window_config, err)) => {
+                        not_started_uis_guard.push(window_config);
                         log::error!(
-                            "ApplicationInstance::start_all_windows: failed to start window: {e}"
+                            "ApplicationInstance::start_all_windows: failed to start window: {err}"
                         );
                     }
                 }
