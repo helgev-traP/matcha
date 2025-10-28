@@ -24,7 +24,7 @@ utils = { path = "utils" }
 gpu-utils = { path = "gpu-utils" }
 
 # async runtime, utilities
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "sync", "parking_lot"] }
 async-trait = "0.1.88"
 futures = "0.3.31"
 parking_lot = { version = "0.12.3" }
