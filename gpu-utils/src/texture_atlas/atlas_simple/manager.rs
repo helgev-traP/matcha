@@ -141,8 +141,8 @@ mod tests {
             })
             .await
         {
-            Some(adapter) => adapter,
-            None => instance
+            Ok(adapter) => adapter,
+            Err(e) => instance
                 .request_adapter(&wgpu::RequestAdapterOptions {
                     power_preference: wgpu::PowerPreference::default(),
                     compatible_surface: None,
@@ -152,7 +152,7 @@ mod tests {
                 .expect("Failed to acquire wgpu adapter"),
         };
         adapter
-            .request_device(&wgpu::DeviceDescriptor::default(), None)
+            .request_device(&wgpu::DeviceDescriptor::default())
             .await
             .unwrap()
     }
@@ -275,7 +275,7 @@ mod tests {
             manager.add_format(format).unwrap();
 
             let texture = manager.allocate([32, 32], format).unwrap();
-            assert_eq!(texture.size(), [32, 32]);
+            assert_eq!(texture.texture_size(), [32, 32]);
             let margin = TextureAtlas::DEFAULT_MARGIN_PX as usize;
             assert_eq!(
                 manager.get_atlas_usage(format).unwrap(),

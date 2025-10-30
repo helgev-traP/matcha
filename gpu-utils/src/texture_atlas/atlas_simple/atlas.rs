@@ -28,7 +28,8 @@ struct RegionData {
     // interaction with the atlas
     atlas: Weak<TextureAtlas>,
     // It may be useful to store some information about the texture that will not change during atlas resizing
-    size: [u32; 2],              // size of the texture in pixels
+    texture_size: [u32; 2],      // size of the texture in pixels
+    atlas_size: [u32; 2],        // size of the atlas when the texture was allocated
     format: wgpu::TextureFormat, // format of the texture
 }
 
@@ -37,7 +38,8 @@ impl std::fmt::Debug for RegionData {
         f.debug_struct("RegionData")
             .field("region_id", &self.region_id)
             .field("atlas_id", &self.atlas_id)
-            .field("size", &self.size)
+            .field("texture_size", &self.texture_size)
+            .field("atlas_size", &self.atlas_size)
             .field("format", &self.format)
             .finish()
     }
@@ -69,15 +71,19 @@ impl AtlasRegion {
             return Err(RegionError::TextureNotFoundInAtlas);
         };
 
-        Ok((location.page_index, location.uv))
+        Ok((location.page_index, location.usable_uv_bounds))
     }
 
     pub fn area(&self) -> u32 {
-        self.inner.size[0] * self.inner.size[1]
+        self.inner.texture_size[0] * self.inner.texture_size[1]
     }
 
-    pub fn size(&self) -> [u32; 2] {
-        self.inner.size
+    pub fn texture_size(&self) -> [u32; 2] {
+        self.inner.texture_size
+    }
+
+    pub fn atlas_size(&self) -> [u32; 2] {
+        self.inner.atlas_size
     }
 
     pub fn format(&self) -> wgpu::TextureFormat {
@@ -106,10 +112,10 @@ impl AtlasRegion {
             warn!("AtlasRegion::translate_uv: region not found in atlas");
             return Err(RegionError::TextureNotFoundInAtlas);
         };
-        let x_max = location.uv.max.x;
-        let y_max = location.uv.max.y;
-        let x_min = location.uv.min.x;
-        let y_min = location.uv.min.y;
+        let x_max = location.usable_uv_bounds.max.x;
+        let y_max = location.usable_uv_bounds.max.y;
+        let x_min = location.usable_uv_bounds.min.x;
+        let y_min = location.usable_uv_bounds.min.y;
 
         // Translate the vertices to the texture area
         let translated_vertices = uvs
@@ -137,7 +143,8 @@ impl AtlasRegion {
             .format
             .block_copy_size(None)
             .ok_or(RegionError::InvalidFormatBlockCopySize)?;
-        let expected_size = self.inner.size[0] * self.inner.size[1] * bytes_per_pixel;
+        let expected_size =
+            self.inner.texture_size[0] * self.inner.texture_size[1] * bytes_per_pixel;
         if data.len() as u32 != expected_size {
             warn!(
                 "AtlasRegion::write_data: data size mismatch (expected {} bytes, got {})",
@@ -162,11 +169,11 @@ impl AtlasRegion {
             return Err(RegionError::TextureNotFoundInAtlas);
         };
 
-        let bytes_per_row = self.inner.size[0] * bytes_per_pixel;
+        let bytes_per_row = self.inner.texture_size[0] * bytes_per_pixel;
 
         let origin = wgpu::Origin3d {
-            x: location.bounds.min.x as u32,
-            y: location.bounds.min.y as u32,
+            x: location.usable_bounds.min.x as u32,
+            y: location.usable_bounds.min.y as u32,
             z: location.page_index,
         };
 
@@ -184,8 +191,8 @@ impl AtlasRegion {
                 rows_per_image: None,
             },
             wgpu::Extent3d {
-                width: self.inner.size[0],
-                height: self.inner.size[1],
+                width: self.inner.texture_size[0],
+                height: self.inner.texture_size[1],
                 depth_or_array_layers: 1,
             },
         );
@@ -226,10 +233,10 @@ impl AtlasRegion {
 
         // Set the viewport to the texture area
         render_pass.set_viewport(
-            location.bounds.min.x as f32,
-            location.bounds.min.y as f32,
-            location.bounds.width() as f32,
-            location.bounds.height() as f32,
+            location.usable_bounds.min.x as f32,
+            location.usable_bounds.min.y as f32,
+            location.usable_bounds.width() as f32,
+            location.usable_bounds.height() as f32,
             0.0,
             1.0,
         );
@@ -268,6 +275,7 @@ impl AtlasRegion {
                         load: wgpu::LoadOp::Load,
                         store: wgpu::StoreOp::Store,
                     },
+                    depth_slice: None,
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
@@ -305,6 +313,7 @@ impl AtlasRegion {
                     load: wgpu::LoadOp::Load,
                     store: wgpu::StoreOp::Store,
                 },
+                depth_slice: None,
             })],
             depth_stencil_attachment: None,
             timestamp_writes: None,
@@ -313,10 +322,10 @@ impl AtlasRegion {
 
         // Set the viewport to the usable texture area (excluding margins)
         render_pass.set_viewport(
-            location.bounds.min.x as f32,
-            location.bounds.min.y as f32,
-            location.bounds.width() as f32,
-            location.bounds.height() as f32,
+            location.usable_bounds.min.x as f32,
+            location.usable_bounds.min.y as f32,
+            location.usable_bounds.width() as f32,
+            location.usable_bounds.height() as f32,
             0.0,
             1.0,
         );
@@ -333,7 +342,7 @@ impl AtlasRegion {
             return Err(RegionError::TextureNotFoundInAtlas);
         };
 
-        Ok(location.uv)
+        Ok(location.usable_uv_bounds)
     }
 
     // pub fn with_data<Init, F>(&self, init: Init, f: F) -> Result<(), TextureError>
@@ -369,12 +378,10 @@ struct RegionId {
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct RegionLocation {
     page_index: u32,
-    /// The full allocation bounds in pixels within the atlas (half-open: [min, max) as returned by guillotiere).
+    margin: u32,
     allocation_bounds: euclid::Box2D<i32, euclid::UnknownUnit>,
-    /// The usable bounds for the texture contents, excluding the margin padding.
-    bounds: euclid::Box2D<i32, euclid::UnknownUnit>,
-    /// The bounding UV coordinates in the atlas (inclusive: computed using max - 1 for vertex mapping).
-    uv: euclid::Box2D<f32, euclid::UnknownUnit>,
+    usable_bounds: euclid::Box2D<i32, euclid::UnknownUnit>,
+    usable_uv_bounds: euclid::Box2D<f32, euclid::UnknownUnit>,
 }
 
 impl RegionLocation {
@@ -384,19 +391,17 @@ impl RegionLocation {
         page_index: usize,
         margin: u32,
     ) -> Self {
-        // guillotiere returns rectangles as half-open [min, max).
-        let margin = margin as i32;
         let bounds = if margin == 0 {
             allocation_bounds
         } else {
             euclid::Box2D::new(
                 euclid::Point2D::new(
-                    allocation_bounds.min.x + margin,
-                    allocation_bounds.min.y + margin,
+                    allocation_bounds.min.x + margin as i32,
+                    allocation_bounds.min.y + margin as i32,
                 ),
                 euclid::Point2D::new(
-                    allocation_bounds.max.x - margin,
-                    allocation_bounds.max.y - margin,
+                    allocation_bounds.max.x - margin as i32,
+                    allocation_bounds.max.y - margin as i32,
                 ),
             )
         };
@@ -421,14 +426,15 @@ impl RegionLocation {
         );
         Self {
             page_index: page_index as u32,
+            margin,
             allocation_bounds,
-            bounds,
-            uv,
+            usable_bounds: bounds,
+            usable_uv_bounds: uv,
         }
     }
 
     fn area(&self) -> u32 {
-        self.bounds.area() as u32
+        self.usable_bounds.area() as u32
     }
 
     fn allocation_area(&self) -> u32 {
@@ -441,8 +447,8 @@ impl RegionLocation {
 
     fn size(&self) -> [u32; 2] {
         [
-            (self.bounds.max.x - self.bounds.min.x) as u32,
-            (self.bounds.max.y - self.bounds.min.y) as u32,
+            (self.usable_bounds.max.x - self.usable_bounds.min.x) as u32,
+            (self.usable_bounds.max.y - self.usable_bounds.min.y) as u32,
         ]
     }
 }
@@ -629,10 +635,13 @@ impl TextureAtlas {
             });
         }
         let atlas_size = self.size();
-        if requested_size[0] > atlas_size.width || requested_size[1] > atlas_size.height {
+        if requested_size[0] + self.margin * 2 > atlas_size.width
+            || requested_size[1] + self.margin * 2 > atlas_size.height
+        {
             return Err(TextureAtlasError::AllocationFailedTooLarge {
                 requested: requested_size,
                 available: [atlas_size.width, atlas_size.height],
+                margin_needed: self.margin * 2,
             });
         }
 
@@ -653,13 +662,6 @@ impl TextureAtlas {
                 requested: requested_size,
             },
         )?;
-
-        if allocation_width > atlas_size.width || allocation_height > atlas_size.height {
-            return Err(TextureAtlasError::AllocationFailedTooLarge {
-                requested: requested_size,
-                available: [atlas_size.width, atlas_size.height],
-            });
-        }
 
         if allocation_width > i32::MAX as u32 || allocation_height > i32::MAX as u32 {
             return Err(TextureAtlasError::AllocationFailedInvalidSize {
@@ -734,7 +736,8 @@ impl TextureAtlas {
                     region_id: texture_id,
                     atlas_id: self.id,
                     atlas: self.weak_self.clone(),
-                    size: requested_size,
+                    texture_size: requested_size,
+                    atlas_size,
                     format: self.format,
                 };
                 let texture = AtlasRegion {
@@ -816,6 +819,7 @@ impl TextureAtlas {
                         load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
                         store: wgpu::StoreOp::Store,
                     },
+                    depth_slice: None,
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
@@ -930,6 +934,7 @@ pub enum TextureAtlasError {
     AllocationFailedTooLarge {
         requested: [u32; 2],
         available: [u32; 2],
+        margin_needed: u32,
     },
     #[error("Allocation failed because the requested size is invalid. requested: {requested:?}")]
     AllocationFailedInvalidSize { requested: [u32; 2] },
@@ -957,8 +962,8 @@ mod tests {
             })
             .await
         {
-            Some(adapter) => adapter,
-            None => instance
+            Ok(adapter) => adapter,
+            Err(e) => instance
                 .request_adapter(&wgpu::RequestAdapterOptions {
                     power_preference: wgpu::PowerPreference::default(),
                     compatible_surface: None,
@@ -968,7 +973,7 @@ mod tests {
                 .expect("Failed to acquire wgpu adapter"),
         };
         adapter
-            .request_device(&wgpu::DeviceDescriptor::default(), None)
+            .request_device(&wgpu::DeviceDescriptor::default())
             .await
             .unwrap()
     }
@@ -1222,7 +1227,7 @@ mod tests {
             let _texture1 = atlas.allocate(&device, &queue, [10, 10]).unwrap();
             let texture2 = atlas.allocate(&device, &queue, [17, 17]).unwrap(); // Use non-aligned size
 
-            let texture_size = texture2.size();
+            let texture_size = texture2.texture_size();
             let location = texture2.location().unwrap();
 
             // Create sample data to write
@@ -1260,8 +1265,8 @@ mod tests {
                     texture: &atlas_texture,
                     mip_level: 0,
                     origin: wgpu::Origin3d {
-                        x: location.bounds.min.x as u32,
-                        y: location.bounds.min.y as u32,
+                        x: location.usable_bounds.min.x as u32,
+                        y: location.usable_bounds.min.y as u32,
                         z: location.page_index,
                     },
                     aspect: wgpu::TextureAspect::All,
@@ -1285,7 +1290,7 @@ mod tests {
             buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
                 tx.send(result).unwrap();
             });
-            let _ = device.poll(wgpu::MaintainBase::Wait);
+            let _ = device.poll(wgpu::PollType::Wait);
             rx.recv().unwrap().unwrap();
 
             let padded_data = buffer_slice.get_mapped_range();
