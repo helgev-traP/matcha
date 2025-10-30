@@ -310,17 +310,14 @@ mod tests {
     fn get_device_queue() -> (wgpu::Device, wgpu::Queue) {
         // prepare gpu
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::PRIMARY,
+            backends: wgpu::Backends::NOOP,
             ..Default::default()
         });
 
-        let adaptor =
-            futures::executor::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::LowPower,
-                compatible_surface: None,
-                force_fallback_adapter: true, // for testing on environments without a gpu
-            }))
-            .unwrap();
+        let adaptor = instance
+            .enumerate_adapters(wgpu::Backends::NOOP)
+            .next()
+            .expect("Failed to acquire noop adapter");
 
         let (device, queue) =
             futures::executor::block_on(adaptor.request_device(&wgpu::DeviceDescriptor {
