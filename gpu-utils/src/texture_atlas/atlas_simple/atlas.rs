@@ -947,61 +947,41 @@ mod tests {
     use std::sync::Arc;
     use std::thread;
 
-    /// Sets up a WGPU device and queue for testing.
-    async fn setup_wgpu() -> (wgpu::Device, wgpu::Queue) {
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::NOOP,
-            ..Default::default()
-        });
-
-        let adapter = instance
-            .enumerate_adapters(wgpu::Backends::NOOP)
-            .next()
-            .expect("Failed to acquire noop adapter");
-
-        adapter
-            .request_device(&wgpu::DeviceDescriptor::default())
-            .await
-            .expect("Failed to request device for noop adapter")
-    }
-
     /// Ensures multiple threads can allocate regions concurrently without panicking.
-    #[test]
-    fn test_concurrent_allocations() {
-        futures::executor::block_on(async {
-            let (device, queue) = setup_wgpu().await;
-            let atlas_size = wgpu::Extent3d {
-                width: 256,
-                height: 256,
-                depth_or_array_layers: 2,
-            };
-            let atlas_format = wgpu::TextureFormat::Rgba8UnormSrgb;
-            let atlas = TextureAtlas::new(
-                &device,
-                atlas_size,
-                atlas_format,
-                TextureAtlas::DEFAULT_MARGIN_PX,
-            );
+    #[tokio::test]
+    async fn test_concurrent_allocations() {
+        let (_, _, device, queue) = crate::wgpu_utils::noop_wgpu().await;
+        let atlas_size = wgpu::Extent3d {
+            width: 256,
+            height: 256,
+            depth_or_array_layers: 2,
+        };
+        let atlas_format = wgpu::TextureFormat::Rgba8UnormSrgb;
+        let atlas = TextureAtlas::new(
+            &device,
+            atlas_size,
+            atlas_format,
+            TextureAtlas::DEFAULT_MARGIN_PX,
+        );
 
-            let mut handles = Vec::new();
-            for _ in 0..8 {
-                let atlas = Arc::clone(&atlas);
-                let device = device.clone();
-                let queue = queue.clone();
-                handles.push(thread::spawn(move || {
-                    let region = atlas
-                        .allocate(&device, &queue, [32, 32])
-                        .expect("Concurrent allocation failed");
-                    drop(region);
-                }));
-            }
+        let mut handles = Vec::new();
+        for _ in 0..8 {
+            let atlas = Arc::clone(&atlas);
+            let device = device.clone();
+            let queue = queue.clone();
+            handles.push(thread::spawn(move || {
+                let region = atlas
+                    .allocate(&device, &queue, [32, 32])
+                    .expect("Concurrent allocation failed");
+                drop(region);
+            }));
+        }
 
-            for handle in handles {
-                handle.join().expect("Thread panicked during allocation");
-            }
+        for handle in handles {
+            handle.join().expect("Thread panicked during allocation");
+        }
 
-            assert_eq!(atlas.allocation_count(), 0);
-        });
+        assert_eq!(atlas.allocation_count(), 0);
     }
 
     #[cfg(test)]
@@ -1020,68 +1000,64 @@ mod tests {
     }
 
     /// Tests if the `TextureAtlas` is initialized with the correct parameters.
-    #[test]
-    fn test_atlas_initialization() {
-        futures::executor::block_on(async {
-            let (device, _queue) = setup_wgpu().await;
-            let size = wgpu::Extent3d {
-                width: 256,
-                height: 256,
-                depth_or_array_layers: 4,
-            };
-            let format = wgpu::TextureFormat::Rgba8UnormSrgb;
-            let atlas = TextureAtlas::new(&device, size, format, TextureAtlas::DEFAULT_MARGIN_PX);
+    #[tokio::test]
+    async fn test_atlas_initialization() {
+        let (_, _, device, _) = crate::wgpu_utils::noop_wgpu().await;
+        let size = wgpu::Extent3d {
+            width: 256,
+            height: 256,
+            depth_or_array_layers: 4,
+        };
+        let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+        let atlas = TextureAtlas::new(&device, size, format, TextureAtlas::DEFAULT_MARGIN_PX);
 
-            assert_eq!(atlas.size(), size);
-            assert_eq!(atlas.format(), format);
-            assert_eq!(atlas.capacity(), 256 * 256 * 4);
-            assert_eq!(atlas.usage(), 0);
-            assert_eq!(atlas.allocation_count(), 0);
+        assert_eq!(atlas.size(), size);
+        assert_eq!(atlas.format(), format);
+        assert_eq!(atlas.capacity(), 256 * 256 * 4);
+        assert_eq!(atlas.usage(), 0);
+        assert_eq!(atlas.allocation_count(), 0);
 
-            let texture = atlas.texture();
-            assert_eq!(texture.format(), format);
+        let texture = atlas.texture();
+        assert_eq!(texture.format(), format);
 
-            let _texture_view = atlas.texture_view();
-        });
+        let _texture_view = atlas.texture_view();
     }
 
     /// Tests the basic allocation and deallocation of textures.
     /// It verifies that allocation increases usage and deallocation (on drop) decreases it.
-    #[test]
-    fn test_texture_allocation_and_deallocation() {
-        futures::executor::block_on(async {
-            let (device, queue) = setup_wgpu().await;
-            let size = wgpu::Extent3d {
-                width: 64,
-                height: 64,
-                depth_or_array_layers: 1,
-            };
-            let format = wgpu::TextureFormat::Rgba8UnormSrgb;
-            let atlas = TextureAtlas::new(&device, size, format, TextureAtlas::DEFAULT_MARGIN_PX);
-            let margin = TextureAtlas::DEFAULT_MARGIN_PX as usize;
+    #[tokio::test]
+    async fn test_texture_allocation_and_deallocation() {
+        let (_, _, device, queue) = crate::wgpu_utils::noop_wgpu().await;
+        let size = wgpu::Extent3d {
+            width: 64,
+            height: 64,
+            depth_or_array_layers: 1,
+        };
+        let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+        let atlas = TextureAtlas::new(&device, size, format, TextureAtlas::DEFAULT_MARGIN_PX);
+        let margin = TextureAtlas::DEFAULT_MARGIN_PX as usize;
 
-            // Allocate one texture
-            let texture1 = atlas.allocate(&device, &queue, [32, 32]).unwrap();
-            assert_eq!(atlas.allocation_count(), 1);
-            assert_eq!(atlas.usage(), (32 + 2 * margin) * (32 + 2 * margin));
+        // Allocate one texture
+        let texture1 = atlas.allocate(&device, &queue, [32, 32]).unwrap();
+        assert_eq!(atlas.allocation_count(), 1);
+        assert_eq!(atlas.usage(), (32 + 2 * margin) * (32 + 2 * margin));
 
-            // Allocate another texture
-            let texture2 = atlas.allocate(&device, &queue, [16, 16]).unwrap();
-            assert_eq!(atlas.allocation_count(), 2);
-            let expected_usage =
-                (32 + 2 * margin) * (32 + 2 * margin) + (16 + 2 * margin) * (16 + 2 * margin);
-            assert_eq!(atlas.usage(), expected_usage);
+        // Allocate another texture
+        let texture2 = atlas.allocate(&device, &queue, [16, 16]).unwrap();
+        assert_eq!(atlas.allocation_count(), 2);
+        let expected_usage =
+            (32 + 2 * margin) * (32 + 2 * margin) + (16 + 2 * margin) * (16 + 2 * margin);
+        assert_eq!(atlas.usage(), expected_usage);
 
-            // Deallocate one texture
-            drop(texture1);
-            assert_eq!(atlas.allocation_count(), 1);
-            assert_eq!(atlas.usage(), (16 + 2 * margin) * (16 + 2 * margin));
+        // Deallocate one texture
+        drop(texture1);
+        assert_eq!(atlas.allocation_count(), 1);
+        assert_eq!(atlas.usage(), (16 + 2 * margin) * (16 + 2 * margin));
 
-            // Deallocate the other texture
-            drop(texture2);
-            assert_eq!(atlas.allocation_count(), 0);
-            assert_eq!(atlas.usage(), 0);
-        });
+        // Deallocate the other texture
+        drop(texture2);
+        assert_eq!(atlas.allocation_count(), 0);
+        assert_eq!(atlas.usage(), 0);
     }
 
     /*
@@ -1118,180 +1094,172 @@ mod tests {
     */
 
     /// Tests if the space freed by a deallocated texture can be reused by a new allocation.
-    #[test]
-    fn test_reuse_deallocated_space() {
-        futures::executor::block_on(async {
-            let (device, queue) = setup_wgpu().await;
-            let size = wgpu::Extent3d {
-                width: 64,
-                height: 64,
-                depth_or_array_layers: 1,
-            };
-            let format = wgpu::TextureFormat::Rgba8UnormSrgb;
-            let atlas = TextureAtlas::new(&device, size, format, TextureAtlas::DEFAULT_MARGIN_PX);
+    #[tokio::test]
+    async fn test_reuse_deallocated_space() {
+        let (_, _, device, queue) = crate::wgpu_utils::noop_wgpu().await;
+        let size = wgpu::Extent3d {
+            width: 64,
+            height: 64,
+            depth_or_array_layers: 1,
+        };
+        let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+        let atlas = TextureAtlas::new(&device, size, format, TextureAtlas::DEFAULT_MARGIN_PX);
 
-            let texture1 = atlas.allocate(&device, &queue, [64, 64]).unwrap();
-            assert_eq!(atlas.allocation_count(), 1);
+        let texture1 = atlas.allocate(&device, &queue, [64, 64]).unwrap();
+        assert_eq!(atlas.allocation_count(), 1);
 
-            drop(texture1);
-            assert_eq!(atlas.allocation_count(), 0);
+        drop(texture1);
+        assert_eq!(atlas.allocation_count(), 0);
 
-            // Should be able to allocate again in the same space
-            let _texture2 = atlas.allocate(&device, &queue, [64, 64]).unwrap();
-            assert_eq!(atlas.allocation_count(), 1);
-        });
+        // Should be able to allocate again in the same space
+        let _texture2 = atlas.allocate(&device, &queue, [64, 64]).unwrap();
+        assert_eq!(atlas.allocation_count(), 1);
     }
 
     /// Tests if the UV coordinates of an allocated texture are calculated correctly.
-    #[test]
-    fn test_texture_uv() {
-        futures::executor::block_on(async {
-            let (device, queue) = setup_wgpu().await;
-            let size = wgpu::Extent3d {
-                width: 128,
-                height: 128,
-                depth_or_array_layers: 1,
-            };
-            let format = wgpu::TextureFormat::Rgba8UnormSrgb;
-            let atlas = TextureAtlas::new(&device, size, format, TextureAtlas::DEFAULT_MARGIN_PX);
+    #[tokio::test]
+    async fn test_texture_uv() {
+        let (_, _, device, queue) = crate::wgpu_utils::noop_wgpu().await;
+        let size = wgpu::Extent3d {
+            width: 128,
+            height: 128,
+            depth_or_array_layers: 1,
+        };
+        let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+        let atlas = TextureAtlas::new(&device, size, format, TextureAtlas::DEFAULT_MARGIN_PX);
 
-            let texture = atlas.allocate(&device, &queue, [32, 64]).unwrap();
-            let uv = texture.uv().unwrap();
+        let texture = atlas.allocate(&device, &queue, [32, 64]).unwrap();
+        let uv = texture.uv().unwrap();
 
-            assert!(uv.min.x >= 0.0 && uv.min.x < 1.0);
-            assert!(uv.min.y >= 0.0 && uv.min.y < 1.0);
-            assert!(uv.max.x > uv.min.x && uv.max.x <= 1.0);
-            assert!(uv.max.y > uv.min.y && uv.max.y <= 1.0);
+        assert!(uv.min.x >= 0.0 && uv.min.x < 1.0);
+        assert!(uv.min.y >= 0.0 && uv.min.y < 1.0);
+        assert!(uv.max.x > uv.min.x && uv.max.x <= 1.0);
+        assert!(uv.max.y > uv.min.y && uv.max.y <= 1.0);
 
-            let expected_uv_width = 32.0 / 128.0;
-            let expected_uv_height = 64.0 / 128.0;
-            assert!((uv.width() - expected_uv_width).abs() < f32::EPSILON);
-            assert!((uv.height() - expected_uv_height).abs() < f32::EPSILON);
-        });
+        let expected_uv_width = 32.0 / 128.0;
+        let expected_uv_height = 64.0 / 128.0;
+        assert!((uv.width() - expected_uv_width).abs() < f32::EPSILON);
+        assert!((uv.height() - expected_uv_height).abs() < f32::EPSILON);
     }
 
     /// Tests that texture methods return `TextureError::AtlasGone` after the atlas has been dropped.
-    #[test]
-    fn test_texture_error_when_atlas_gone() {
-        futures::executor::block_on(async {
-            let (device, queue) = setup_wgpu().await;
-            let size = wgpu::Extent3d {
-                width: 128,
-                height: 128,
-                depth_or_array_layers: 1,
-            };
-            let format = wgpu::TextureFormat::Rgba8UnormSrgb;
-            let atlas = TextureAtlas::new(&device, size, format, TextureAtlas::DEFAULT_MARGIN_PX);
+    #[tokio::test]
+    async fn test_texture_error_when_atlas_gone() {
+        let (_, _, device, queue) = crate::wgpu_utils::noop_wgpu().await;
+        let size = wgpu::Extent3d {
+            width: 128,
+            height: 128,
+            depth_or_array_layers: 1,
+        };
+        let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+        let atlas = TextureAtlas::new(&device, size, format, TextureAtlas::DEFAULT_MARGIN_PX);
 
-            let texture = atlas.allocate(&device, &queue, [32, 32]).unwrap();
+        let texture = atlas.allocate(&device, &queue, [32, 32]).unwrap();
 
-            drop(atlas);
+        drop(atlas);
 
-            let result = texture.uv();
-            assert!(matches!(result, Err(RegionError::AtlasGone)));
-        });
+        let result = texture.uv();
+        assert!(matches!(result, Err(RegionError::AtlasGone)));
     }
 
     /// Tests that `write_data` writes to the correct location in the atlas.
-    #[test]
-    fn test_texture_write_and_read_data() {
-        futures::executor::block_on(async {
-            let (device, queue) = setup_wgpu().await;
-            let atlas_size = wgpu::Extent3d {
-                width: 512,
-                height: 512,
-                depth_or_array_layers: 1,
-            };
-            let texture_format = wgpu::TextureFormat::R8Uint;
-            let atlas = TextureAtlas::new(
-                &device,
-                atlas_size,
-                texture_format,
-                TextureAtlas::DEFAULT_MARGIN_PX,
-            );
+    #[tokio::test]
+    async fn test_texture_write_and_read_data() {
+        let (_, _, device, queue) = crate::wgpu_utils::noop_wgpu().await;
+        let atlas_size = wgpu::Extent3d {
+            width: 512,
+            height: 512,
+            depth_or_array_layers: 1,
+        };
+        let texture_format = wgpu::TextureFormat::R8Uint;
+        let atlas = TextureAtlas::new(
+            &device,
+            atlas_size,
+            texture_format,
+            TextureAtlas::DEFAULT_MARGIN_PX,
+        );
 
-            // Allocate two textures to ensure the second one is not at the origin
-            let _texture1 = atlas.allocate(&device, &queue, [10, 10]).unwrap();
-            let texture2 = atlas.allocate(&device, &queue, [17, 17]).unwrap(); // Use non-aligned size
+        // Allocate two textures to ensure the second one is not at the origin
+        let _texture1 = atlas.allocate(&device, &queue, [10, 10]).unwrap();
+        let texture2 = atlas.allocate(&device, &queue, [17, 17]).unwrap(); // Use non-aligned size
 
-            let texture_size = texture2.texture_size();
-            let location = texture2.location().unwrap();
+        let texture_size = texture2.texture_size();
+        let location = texture2.location().unwrap();
 
-            // Create sample data to write
-            let data: Vec<u8> = (0..texture_size[0] * texture_size[1])
-                .map(|i| (i % 256) as u8)
-                .collect();
-            texture2.write_data(&queue, &data).unwrap();
+        // Create sample data to write
+        let data: Vec<u8> = (0..texture_size[0] * texture_size[1])
+            .map(|i| (i % 256) as u8)
+            .collect();
+        texture2.write_data(&queue, &data).unwrap();
 
-            // Create a buffer to read the data back, respecting alignment
-            let bytes_per_pixel = texture_format.block_copy_size(None).unwrap();
-            let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
-            let bytes_per_row_unaligned = texture_size[0] * bytes_per_pixel;
-            let padded_bytes_per_row = bytes_per_row_unaligned.div_ceil(align) * align;
-            let buffer_size = (padded_bytes_per_row * texture_size[1]) as u64;
+        // Create a buffer to read the data back, respecting alignment
+        let bytes_per_pixel = texture_format.block_copy_size(None).unwrap();
+        let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let bytes_per_row_unaligned = texture_size[0] * bytes_per_pixel;
+        let padded_bytes_per_row = bytes_per_row_unaligned.div_ceil(align) * align;
+        let buffer_size = (padded_bytes_per_row * texture_size[1]) as u64;
 
-            let buffer = device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("Readback Buffer"),
-                size: buffer_size,
-                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-                mapped_at_creation: false,
-            });
-
-            let mut encoder =
-                device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-
-            // Copy the written data from the atlas texture to the buffer
-            let copy_size = wgpu::Extent3d {
-                width: texture_size[0],
-                height: texture_size[1],
-                depth_or_array_layers: 1,
-            };
-            let atlas_texture = atlas.texture();
-            encoder.copy_texture_to_buffer(
-                wgpu::TexelCopyTextureInfo {
-                    texture: &atlas_texture,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d {
-                        x: location.usable_bounds.min.x as u32,
-                        y: location.usable_bounds.min.y as u32,
-                        z: location.page_index,
-                    },
-                    aspect: wgpu::TextureAspect::All,
-                },
-                wgpu::TexelCopyBufferInfo {
-                    buffer: &buffer,
-                    layout: wgpu::TexelCopyBufferLayout {
-                        offset: 0,
-                        bytes_per_row: Some(padded_bytes_per_row),
-                        rows_per_image: Some(texture_size[1]),
-                    },
-                },
-                copy_size,
-            );
-
-            queue.submit(Some(encoder.finish()));
-
-            // Read the buffer and verify the data
-            let buffer_slice = buffer.slice(..);
-            let (tx, rx) = std::sync::mpsc::channel();
-            buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
-                tx.send(result).unwrap();
-            });
-            let _ = device.poll(wgpu::PollType::Wait);
-            rx.recv().unwrap().unwrap();
-
-            let padded_data = buffer_slice.get_mapped_range();
-            // Compare the original data with the (potentially padded) data from the buffer
-            for y in 0..texture_size[1] {
-                let start_padded = (y * padded_bytes_per_row) as usize;
-                let end_padded = start_padded + bytes_per_row_unaligned as usize;
-                let start_original = (y * bytes_per_row_unaligned) as usize;
-                let end_original = start_original + bytes_per_row_unaligned as usize;
-                assert_eq!(
-                    &padded_data[start_padded..end_padded],
-                    &data[start_original..end_original]
-                );
-            }
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Readback Buffer"),
+            size: buffer_size,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
         });
+
+        let mut encoder =
+            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+
+        // Copy the written data from the atlas texture to the buffer
+        let copy_size = wgpu::Extent3d {
+            width: texture_size[0],
+            height: texture_size[1],
+            depth_or_array_layers: 1,
+        };
+        let atlas_texture = atlas.texture();
+        encoder.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture: &atlas_texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d {
+                    x: location.usable_bounds.min.x as u32,
+                    y: location.usable_bounds.min.y as u32,
+                    z: location.page_index,
+                },
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded_bytes_per_row),
+                    rows_per_image: Some(texture_size[1]),
+                },
+            },
+            copy_size,
+        );
+
+        queue.submit(Some(encoder.finish()));
+
+        // Read the buffer and verify the data
+        let buffer_slice = buffer.slice(..);
+        let (tx, rx) = std::sync::mpsc::channel();
+        buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
+            tx.send(result).unwrap();
+        });
+        let _ = device.poll(wgpu::PollType::Wait);
+        rx.recv().unwrap().unwrap();
+
+        let padded_data = buffer_slice.get_mapped_range();
+        // Compare the original data with the (potentially padded) data from the buffer
+        for y in 0..texture_size[1] {
+            let start_padded = (y * padded_bytes_per_row) as usize;
+            let end_padded = start_padded + bytes_per_row_unaligned as usize;
+            let start_original = (y * bytes_per_row_unaligned) as usize;
+            let end_original = start_original + bytes_per_row_unaligned as usize;
+            assert_eq!(
+                &padded_data[start_padded..end_padded],
+                &data[start_original..end_original]
+            );
+        }
     }
 }
