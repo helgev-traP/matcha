@@ -949,33 +949,20 @@ mod tests {
 
     /// Sets up a WGPU device and queue for testing.
     async fn setup_wgpu() -> (wgpu::Device, wgpu::Queue) {
-        // todo: change this to use NoopBackend when update wgpu to v25 or later
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::all(),
+            backends: wgpu::Backends::NOOP,
             ..Default::default()
         });
-        let adapter = match instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
-                compatible_surface: None,
-                force_fallback_adapter: true,
-            })
-            .await
-        {
-            Ok(adapter) => adapter,
-            Err(e) => instance
-                .request_adapter(&wgpu::RequestAdapterOptions {
-                    power_preference: wgpu::PowerPreference::default(),
-                    compatible_surface: None,
-                    force_fallback_adapter: false,
-                })
-                .await
-                .expect("Failed to acquire wgpu adapter"),
-        };
+
+        let adapter = instance
+            .enumerate_adapters(wgpu::Backends::NOOP)
+            .next()
+            .expect("Failed to acquire noop adapter");
+
         adapter
             .request_device(&wgpu::DeviceDescriptor::default())
             .await
-            .unwrap()
+            .expect("Failed to request device for noop adapter")
     }
 
     /// Ensures multiple threads can allocate regions concurrently without panicking.
