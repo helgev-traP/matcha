@@ -236,7 +236,7 @@ impl Style for Text {
                             metadata: 0,
                             cache_key_flags: glyphon::cosmic_text::CacheKeyFlags::empty(),
                             metrics_opt: None,
-                            letter_spacing_opt: None,
+                            letter_spacing_opt: Some(glyphon::cosmic_text::LetterSpacing(0.0)),
                             font_features: glyphon::cosmic_text::FontFeatures::default(),
                         },
                     )

@@ -145,15 +145,13 @@ impl Gpu {
 
         // Request device
         let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: Some("Gpu: request device"),
-                    required_features: features,
-                    required_limits: limits.clone(),
-                    memory_hints: wgpu::MemoryHints::default(),
-                    trace: wgpu::Trace::Off,
-                },
-            )
+            .request_device(&wgpu::DeviceDescriptor {
+                label: Some("Gpu: request device"),
+                required_features: features,
+                required_limits: limits.clone(),
+                memory_hints: wgpu::MemoryHints::default(),
+                trace: wgpu::Trace::Off,
+            })
             .await?;
 
         // Build Arc<Gpu> with cyclic weak reference so callbacks can upgrade to Arc<Gpu>.
