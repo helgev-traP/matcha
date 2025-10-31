@@ -1058,6 +1058,14 @@ mod tests {
         // not implemented
     }
 
+    /// atlas_pointer() mirrors position_in_atlas()'s ownership semantics:
+    /// - When the originating TextureAtlas is alive, atlas_pointer() yields Some(raw_ptr).
+    /// - After dropping the Arc<TextureAtlas> (keeping only AtlasRegion), the Weak upgrade fails and atlas_pointer() must return None.
+    #[tokio::test]
+    async fn atlas_pointer_returns_none_after_atlas_drop() {
+        // not implemented
+    }
+
     /// uv() returns the same Box2D as position_in_atlas().1 (usable_uv_bounds).
     #[tokio::test]
     async fn uv_matches_position_in_atlas_usable_uv_bounds() {
@@ -1101,6 +1109,20 @@ mod tests {
         // not implemented
     }
 
+    /// write_data() propagates AtlasGone when the backing atlas has been dropped but an AtlasRegion handle remains.
+    /// - Allocate a region, drop the TextureAtlas Arc, and attempt to write_data(); expect Err(AtlasGone).
+    #[tokio::test]
+    async fn write_data_fails_with_atlas_gone_when_atlas_dropped() {
+        // not implemented
+    }
+
+    /// write_data() surfaces TextureNotFoundInAtlas after recover() resets allocator state.
+    /// - Allocate + recover(), then calling write_data() on the stale region should return Err(TextureNotFoundInAtlas).
+    #[tokio::test]
+    async fn write_data_fails_with_texture_not_found_after_recover() {
+        // not implemented
+    }
+
     /// read_data()/copy_* are currently todo!():
     /// - Keep placeholders documenting expected future behavior (buffer/texture copy paths).
     /// - Enable later when implemented.
@@ -1120,12 +1142,27 @@ mod tests {
         // not implemented
     }
 
+    /// set_viewport() returns AtlasGone when called after the TextureAtlas is dropped, and TextureNotFoundInAtlas after recover().
+    /// - Exercise both error branches to ensure defensive error propagation for rendering paths.
+    #[tokio::test]
+    async fn set_viewport_errors_when_atlas_missing_or_region_unmapped() {
+        // not implemented
+    }
+
     /// begin_render_pass():
     /// - Clears the allocation rectangle (including margins) on the target layer,
     /// - Returns a render pass preconfigured with viewport==usable bounds.
     /// The test should record commands and (optionally later) validate via readback or debug renderer.
     #[tokio::test]
     async fn begin_render_pass_clears_allocation_and_sets_viewport() {
+        // not implemented
+    }
+
+    /// begin_render_pass() mirrors set_viewport() error semantics for stale regions.
+    /// - After dropping the atlas Arc, calling begin_render_pass() should return Err(AtlasGone).
+    /// - After recover(), calling begin_render_pass() with the pre-recover region should return Err(TextureNotFoundInAtlas).
+    #[tokio::test]
+    async fn begin_render_pass_errors_when_atlas_missing_or_region_unmapped() {
         // not implemented
     }
 
@@ -1143,6 +1180,15 @@ mod tests {
         // not implemented
     }
 
+    /// After recover(), GPU resources are freshly recreated.
+    /// - Capture Arc::as_ptr() for texture()/texture_view()/layer_texture_view(0) before recover().
+    /// - After recover(), ensure new pointers differ, max_allocation_size() resets to [0,0],
+    ///   and viewport_clear.reset() observable state (e.g., pending clears) is cleared.
+    #[tokio::test]
+    async fn recover_recreates_gpu_resources_and_resets_caches() {
+        // not implemented
+    }
+
     // ---------------------------
     // Layer views consistency
     // ---------------------------
@@ -1151,6 +1197,14 @@ mod tests {
     /// - After growth, verify the indexable range matches depth_or_array_layers.
     #[tokio::test]
     async fn layer_texture_view_index_range_matches_page_count() {
+        // not implemented
+    }
+
+    /// allocate() should guard against arithmetic overflow when applying margins.
+    /// - Request a size close to u32::MAX or large margins so that requested + 2*margin exceeds u32,
+    ///   expecting AllocationFailedInvalidSize instead of panicking or wrapping.
+    #[tokio::test]
+    async fn allocate_rejects_overflow_when_applying_margins() {
         // not implemented
     }
 }
