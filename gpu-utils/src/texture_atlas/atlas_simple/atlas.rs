@@ -945,266 +945,721 @@ pub enum TextureAtlasError {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use std::panic::AssertUnwindSafe;
     use std::sync::Arc;
-    use std::thread;
 
-    /// Verifies tokio test harness can await to fetch a WGPU device/queue in this crate.
-    /// This is a sanity test for the async runtime integration.
+    async fn setup_atlas(
+        size: wgpu::Extent3d,
+        format: wgpu::TextureFormat,
+        margin: u32,
+    ) -> (wgpu::Device, wgpu::Queue, Arc<TextureAtlas>) {
+        let (_, _, device, queue) = crate::wgpu_utils::noop_wgpu().await;
+        let atlas = TextureAtlas::new(&device, size, format, margin);
+        (device, queue, atlas)
+    }
+
+    fn allocation_area(region: &AtlasRegion) -> usize {
+        (region.allocation_size()[0] * region.allocation_size()[1]) as usize
+    }
+
     #[tokio::test]
     async fn use_tokio_test_macro_to_await_to_get_wgpu_device() {
-        // Arrange & Act
-        // let (_instance, _adapter, _device, _queue) = crate::wgpu_utils::noop_wgpu().await;
+        let (_, _, device, queue) = crate::wgpu_utils::noop_wgpu().await;
 
-        // Assert
-        // not implemented: this is only a harness check.
+        let encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("noop"),
+        });
+        queue.submit(Some(encoder.finish()));
+        queue.on_submitted_work_done(|| {});
     }
 
-    // -------------------------------
-    // TextureAtlas::new / basic info
-    // -------------------------------
-
-    /// TextureAtlas::new initializes GPU resources and metadata consistently.
-    /// - Precondition: Provide valid device, extent, format, margin.
-    /// - Verify:
-    ///   - size() equals the requested Extent3d.
-    ///   - format() equals requested format.
-    ///   - margin() equals requested margin.
-    ///   - capacity() == width * height * layers.
-    ///   - usage() == 0 on creation.
     #[tokio::test]
     async fn atlas_new_initializes_resources_and_metadata() {
-        // not implemented
+        let size = wgpu::Extent3d {
+            width: 32,
+            height: 16,
+            depth_or_array_layers: 2,
+        };
+        let format = wgpu::TextureFormat::Rgba8Unorm;
+        let margin = 2;
+        let (_device, _queue, atlas) = setup_atlas(size, format, margin).await;
+
+        assert_eq!(atlas.size(), size);
+        assert_eq!(atlas.format(), format);
+        assert_eq!(atlas.margin(), margin);
+        assert_eq!(
+            atlas.capacity(),
+            (size.width * size.height * size.depth_or_array_layers) as usize
+        );
+        assert_eq!(atlas.usage(), 0);
+
+        let texture = atlas.texture();
+        assert_eq!(texture.size(), size);
+        assert_eq!(texture.mip_level_count(), 1);
+        assert_eq!(texture.dimension(), wgpu::TextureDimension::D2);
+        let usage = texture.usage();
+        assert!(usage.contains(wgpu::TextureUsages::TEXTURE_BINDING));
+        assert!(usage.contains(wgpu::TextureUsages::COPY_SRC));
+        assert!(usage.contains(wgpu::TextureUsages::COPY_DST));
+        assert!(usage.contains(wgpu::TextureUsages::RENDER_ATTACHMENT));
     }
 
-    /// create_texture_and_view (indirectly via new) produces:
-    /// - an array texture with 1 mip, COPY_SRC/COPY_DST/TEXTURE_BINDING/RENDER_ATTACHMENT usages,
-    /// - a D2Array view (texture_view()),
-    /// - per-layer D2 views (layer_texture_view(i)) whose count equals depth_or_array_layers.
     #[tokio::test]
     async fn atlas_texture_and_views_have_expected_dimensions_and_usages() {
-        // not implemented
+        let size = wgpu::Extent3d {
+            width: 8,
+            height: 8,
+            depth_or_array_layers: 3,
+        };
+        let (device, _queue, atlas) = setup_atlas(
+            size,
+            wgpu::TextureFormat::Rgba8Unorm,
+            TextureAtlas::DEFAULT_MARGIN_PX,
+        )
+        .await;
+
+        let array_view = atlas.texture_view();
+        assert_eq!(
+            array_view.texture().size().depth_or_array_layers,
+            size.depth_or_array_layers
+        );
+
+        for layer in 0..size.depth_or_array_layers {
+            let view = atlas.layer_texture_view(layer as usize);
+            assert_eq!(
+                view.texture().size().depth_or_array_layers,
+                size.depth_or_array_layers
+            );
+        }
+
+        drop(device);
     }
 
-    // ------------
-    // allocation
-    // ------------
-
-    /// allocate fails with AllocationFailedInvalidSize when requested size has 0 in either dimension.
     #[tokio::test]
     async fn allocate_rejects_zero_dimension() {
-        // not implemented
+        let size = wgpu::Extent3d {
+            width: 16,
+            height: 16,
+            depth_or_array_layers: 1,
+        };
+        let (device, queue, atlas) = setup_atlas(size, wgpu::TextureFormat::Rgba8Unorm, 0).await;
+
+        let err = atlas.allocate(&device, &queue, [0, 4]).unwrap_err();
+        assert!(matches!(
+            err,
+            TextureAtlasError::AllocationFailedInvalidSize { requested } if requested == [0, 4]
+        ));
+
+        let err = atlas.allocate(&device, &queue, [4, 0]).unwrap_err();
+        assert!(matches!(
+            err,
+            TextureAtlasError::AllocationFailedInvalidSize { requested } if requested == [4, 0]
+        ));
     }
 
-    /// allocate fails with AllocationFailedTooLarge when requested_size + 2*margin exceeds a page.
-    /// - Verify returned error fields: requested, available and margin_needed == margin*2.
     #[tokio::test]
     async fn allocate_rejects_too_large_including_margins() {
-        // not implemented
+        let margin = 2;
+        let size = wgpu::Extent3d {
+            width: 8,
+            height: 8,
+            depth_or_array_layers: 1,
+        };
+        let (device, queue, atlas) =
+            setup_atlas(size, wgpu::TextureFormat::Rgba8Unorm, margin).await;
+
+        let err = atlas.allocate(&device, &queue, [7, 7]).unwrap_err();
+        match err {
+            TextureAtlasError::AllocationFailedTooLarge {
+                requested,
+                available,
+                margin_needed,
+            } => {
+                assert_eq!(requested, [7, 7]);
+                assert_eq!(available, [size.width, size.height]);
+                assert_eq!(margin_needed, margin * 2);
+            }
+            other => panic!("unexpected error {other:?}"),
+        }
     }
 
-    /// allocate succeeds for a valid size and returns an AtlasRegion whose:
-    /// - atlas_id() matches the creator atlas,
-    /// - texture_size() == requested size,
-    /// - allocation_size() == requested + 2*margin,
-    /// - atlas_size() equals atlas.size() at allocation time,
-    /// - format() matches atlas.format(),
-    /// - area() == prod(texture_size),
-    /// - position_in_atlas() returns (page_index, usable_uv) with 0<=uv<=1,
-    /// - uv() equals the usable_uv from position_in_atlas(),
-    /// - atlas_pointer() is Some(ptr).
     #[tokio::test]
     async fn allocate_success_and_region_exposes_expected_properties() {
-        // not implemented
+        let margin = 1;
+        let size = wgpu::Extent3d {
+            width: 16,
+            height: 16,
+            depth_or_array_layers: 1,
+        };
+        let requested = [6, 4];
+        let (device, queue, atlas) =
+            setup_atlas(size, wgpu::TextureFormat::Rgba8Unorm, margin).await;
+        let region = atlas.allocate(&device, &queue, requested).unwrap();
+
+        assert_eq!(region.texture_size(), requested);
+        assert_eq!(
+            region.allocation_size(),
+            [requested[0] + margin * 2, requested[1] + margin * 2]
+        );
+        assert_eq!(region.atlas_size(), [size.width, size.height]);
+        assert_eq!(region.format(), atlas.format());
+        assert_eq!(region.area(), requested[0] * requested[1]);
+
+        let atlas_ptr = Arc::as_ptr(&atlas) as usize;
+        assert_eq!(region.atlas_pointer(), Some(atlas_ptr));
+
+        let (page_index, usable_uv) = region.position_in_atlas().unwrap();
+        assert_eq!(page_index, 0);
+        assert!(usable_uv.min.x >= 0.0 && usable_uv.min.y >= 0.0);
+        assert!(usable_uv.max.x <= 1.0 && usable_uv.max.y <= 1.0);
+        assert_eq!(region.uv().unwrap(), usable_uv);
     }
 
-    /// When a page has no free space for a new allocation, allocate triggers add_one_page:
-    /// - Verify atlas.size().depth_or_array_layers increases by 1,
-    /// - capacity() increases accordingly,
-    /// - new allocations can land on the new page (page_index of position_in_atlas()).
     #[tokio::test]
     async fn allocate_triggers_growth_by_adding_one_page() {
-        // not implemented
+        let size = wgpu::Extent3d {
+            width: 4,
+            height: 4,
+            depth_or_array_layers: 1,
+        };
+        let (device, queue, atlas) = setup_atlas(size, wgpu::TextureFormat::Rgba8Unorm, 0).await;
+
+        let _region_full = atlas.allocate(&device, &queue, [4, 4]).unwrap();
+        let previous_capacity = atlas.capacity();
+        let region = atlas.allocate(&device, &queue, [2, 2]).unwrap();
+
+        let (page_index, _) = region.position_in_atlas().unwrap();
+        assert_eq!(page_index, 1);
+        assert_eq!(atlas.size().depth_or_array_layers, 2);
+        assert_eq!(atlas.capacity(), previous_capacity * 2);
     }
 
-    /// usage() tracks allocated area including margins:
-    /// - After N allocations, usage() == sum(allocation_area),
-    /// - After dropping regions (thus deallocation via Drop), usage() decreases accordingly.
     #[tokio::test]
     async fn usage_tracks_allocation_and_drop_deallocation() {
-        // not implemented
+        let (device, queue, atlas) = setup_atlas(
+            wgpu::Extent3d {
+                width: 16,
+                height: 16,
+                depth_or_array_layers: 1,
+            },
+            wgpu::TextureFormat::Rgba8Unorm,
+            1,
+        )
+        .await;
+
+        let (area_a, area_b);
+        {
+            let region_a = atlas.allocate(&device, &queue, [4, 4]).unwrap();
+            let region_b = atlas.allocate(&device, &queue, [2, 6]).unwrap();
+            area_a = allocation_area(&region_a);
+            area_b = allocation_area(&region_b);
+            assert_eq!(atlas.usage(), area_a + area_b);
+        }
+
+        assert_eq!(atlas.usage(), 0);
     }
 
-    /// max_allocation_size() reflects the largest usable (margin-excluded) size among live regions.
-    /// - After mixed allocations, verify it returns the maximum width/height of usable bounds.
     #[tokio::test]
     async fn max_allocation_size_reflects_largest_live_region() {
-        // not implemented
+        let (device, queue, atlas) = setup_atlas(
+            wgpu::Extent3d {
+                width: 32,
+                height: 32,
+                depth_or_array_layers: 1,
+            },
+            wgpu::TextureFormat::Rgba8Unorm,
+            1,
+        )
+        .await;
+
+        let region_small = atlas.allocate(&device, &queue, [3, 5]).unwrap();
+        let region_large = atlas.allocate(&device, &queue, [12, 8]).unwrap();
+        assert_eq!(atlas.max_allocation_size(), [12, 8]);
+
+        drop(region_large);
+        assert_eq!(atlas.max_allocation_size(), [3, 5]);
+
+        drop(region_small);
+        assert_eq!(atlas.max_allocation_size(), [0, 0]);
     }
 
-    // ----------------
-    // Region queries
-    // ----------------
-
-    /// position_in_atlas() returns TextureNotFoundInAtlas after device-loss recovery,
-    /// because alloc maps are reset. Existing regions still hold metadata but have no mapping.
     #[tokio::test]
     async fn position_in_atlas_returns_not_found_after_recover() {
-        // not implemented
+        let (device, queue, atlas) = setup_atlas(
+            wgpu::Extent3d {
+                width: 16,
+                height: 16,
+                depth_or_array_layers: 1,
+            },
+            wgpu::TextureFormat::Rgba8Unorm,
+            1,
+        )
+        .await;
+        let region = atlas.allocate(&device, &queue, [4, 4]).unwrap();
+
+        atlas.recover(&device, &queue);
+        let err = region.position_in_atlas().unwrap_err();
+        assert!(matches!(err, RegionError::TextureNotFoundInAtlas));
     }
 
-    /// position_in_atlas() returns AtlasGone when the backing atlas (Arc) is dropped and only the region remains.
     #[tokio::test]
     async fn position_in_atlas_returns_atlas_gone_when_atlas_dropped() {
-        // not implemented
+        let (device, queue, atlas) = setup_atlas(
+            wgpu::Extent3d {
+                width: 16,
+                height: 16,
+                depth_or_array_layers: 1,
+            },
+            wgpu::TextureFormat::Rgba8Unorm,
+            1,
+        )
+        .await;
+        let region = atlas.allocate(&device, &queue, [4, 4]).unwrap();
+
+        drop(atlas);
+        let err = region.position_in_atlas().unwrap_err();
+        assert!(matches!(err, RegionError::AtlasGone));
     }
 
-    /// atlas_pointer() mirrors position_in_atlas()'s ownership semantics:
-    /// - When the originating TextureAtlas is alive, atlas_pointer() yields Some(raw_ptr).
-    /// - After dropping the Arc<TextureAtlas> (keeping only AtlasRegion), the Weak upgrade fails and atlas_pointer() must return None.
     #[tokio::test]
     async fn atlas_pointer_returns_none_after_atlas_drop() {
-        // not implemented
+        let (device, queue, atlas) = setup_atlas(
+            wgpu::Extent3d {
+                width: 16,
+                height: 16,
+                depth_or_array_layers: 1,
+            },
+            wgpu::TextureFormat::Rgba8Unorm,
+            1,
+        )
+        .await;
+        let region = atlas.allocate(&device, &queue, [4, 4]).unwrap();
+
+        assert!(region.atlas_pointer().is_some());
+        drop(atlas);
+        assert!(region.atlas_pointer().is_none());
     }
 
-    /// uv() returns the same Box2D as position_in_atlas().1 (usable_uv_bounds).
     #[tokio::test]
     async fn uv_matches_position_in_atlas_usable_uv_bounds() {
-        // not implemented
+        let (device, queue, atlas) = setup_atlas(
+            wgpu::Extent3d {
+                width: 16,
+                height: 16,
+                depth_or_array_layers: 1,
+            },
+            wgpu::TextureFormat::Rgba8Unorm,
+            1,
+        )
+        .await;
+        let region = atlas.allocate(&device, &queue, [4, 4]).unwrap();
+
+        let (_, usable_uv) = region.position_in_atlas().unwrap();
+        assert_eq!(region.uv().unwrap(), usable_uv);
     }
 
-    // -----------------
-    // UV translation
-    // -----------------
-
-    /// translate_uv() maps [0,0],[1,0],[0,1],[1,1] into the usable uv rectangle,
-    /// and clamps intermediate values into [0,1].
-    /// - Also verify AtlasGone and TextureNotFoundInAtlas error paths are surfaced when applicable.
     #[tokio::test]
     async fn translate_uv_maps_corners_and_clamps() {
-        // not implemented
+        let (device, queue, atlas) = setup_atlas(
+            wgpu::Extent3d {
+                width: 16,
+                height: 16,
+                depth_or_array_layers: 1,
+            },
+            wgpu::TextureFormat::Rgba8Unorm,
+            1,
+        )
+        .await;
+        let region = atlas.allocate(&device, &queue, [4, 4]).unwrap();
+
+        let (_, usable_uv) = region.position_in_atlas().unwrap();
+        let translated = region
+            .translate_uv(&[[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [-0.5, 1.5]])
+            .unwrap();
+
+        assert_eq!(translated[0], [usable_uv.min.x, usable_uv.min.y]);
+        assert_eq!(translated[1], [usable_uv.max.x, usable_uv.min.y]);
+        assert_eq!(translated[2], [usable_uv.min.x, usable_uv.max.y]);
+        assert_eq!(translated[3], [usable_uv.max.x, usable_uv.max.y]);
+        assert!((0.0..=1.0).contains(&translated[4][0]));
+        assert!((0.0..=1.0).contains(&translated[4][1]));
+
+        atlas.recover(&device, &queue);
+        let err = region.translate_uv(&[[0.0, 0.0]]).unwrap_err();
+        assert!(matches!(err, RegionError::TextureNotFoundInAtlas));
     }
 
-    // --------------
-    // Data I/O
-    // --------------
-
-    /// write_data() succeeds when data length matches usable_size * bytes_per_pixel
-    /// (bytes_per_pixel = format.block_copy_size(None)).
-    /// Use a format with defined block size (e.g. Rgba8Unorm).
     #[tokio::test]
     async fn write_data_succeeds_on_consistent_size() {
-        // not implemented
+        let (device, queue, atlas) = setup_atlas(
+            wgpu::Extent3d {
+                width: 16,
+                height: 16,
+                depth_or_array_layers: 1,
+            },
+            wgpu::TextureFormat::Rgba8Unorm,
+            0,
+        )
+        .await;
+        let region = atlas.allocate(&device, &queue, [4, 2]).unwrap();
+        let bytes_per_pixel = region.format().block_copy_size(None).unwrap();
+        let byte_count =
+            (region.texture_size()[0] * region.texture_size()[1] * bytes_per_pixel) as usize;
+        let data = vec![255u8; byte_count];
+
+        region.write_data(&queue, &data).unwrap();
     }
 
-    /// write_data() returns DataConsistencyError when provided data length does not match expected size.
     #[tokio::test]
     async fn write_data_fails_on_data_size_mismatch() {
-        // not implemented
+        let (device, queue, atlas) = setup_atlas(
+            wgpu::Extent3d {
+                width: 16,
+                height: 16,
+                depth_or_array_layers: 1,
+            },
+            wgpu::TextureFormat::Rgba8Unorm,
+            0,
+        )
+        .await;
+        let region = atlas.allocate(&device, &queue, [4, 2]).unwrap();
+        let err = region.write_data(&queue, &[0u8; 3]).unwrap_err();
+        assert!(matches!(err, RegionError::DataConsistencyError(_)));
     }
 
-    /// write_data() returns InvalidFormatBlockCopySize when format.block_copy_size(None) is None
-    /// (e.g. unsupported/compressed formats where applicable).
     #[tokio::test]
     async fn write_data_fails_on_invalid_format_block_size() {
-        // not implemented
+        let (device, queue, atlas) = setup_atlas(
+            wgpu::Extent3d {
+                width: 8,
+                height: 8,
+                depth_or_array_layers: 1,
+            },
+            wgpu::TextureFormat::Depth24Plus,
+            0,
+        )
+        .await;
+        let region = atlas.allocate(&device, &queue, [2, 2]).unwrap();
+        let err = region.write_data(&queue, &[0]).unwrap_err();
+        assert!(matches!(err, RegionError::InvalidFormatBlockCopySize));
     }
 
-    /// write_data() propagates AtlasGone when the backing atlas has been dropped but an AtlasRegion handle remains.
-    /// - Allocate a region, drop the TextureAtlas Arc, and attempt to write_data(); expect Err(AtlasGone).
     #[tokio::test]
     async fn write_data_fails_with_atlas_gone_when_atlas_dropped() {
-        // not implemented
+        let (device, queue, atlas) = setup_atlas(
+            wgpu::Extent3d {
+                width: 8,
+                height: 8,
+                depth_or_array_layers: 1,
+            },
+            wgpu::TextureFormat::Rgba8Unorm,
+            0,
+        )
+        .await;
+        let region = atlas.allocate(&device, &queue, [2, 2]).unwrap();
+        let bytes_per_pixel = region.format().block_copy_size(None).unwrap();
+        let expected_bytes =
+            (region.texture_size()[0] * region.texture_size()[1] * bytes_per_pixel) as usize;
+        let payload = vec![0u8; expected_bytes];
+        drop(atlas);
+
+        let err = region.write_data(&queue, &payload).unwrap_err();
+        assert!(matches!(err, RegionError::AtlasGone));
     }
 
-    /// write_data() surfaces TextureNotFoundInAtlas after recover() resets allocator state.
-    /// - Allocate + recover(), then calling write_data() on the stale region should return Err(TextureNotFoundInAtlas).
     #[tokio::test]
     async fn write_data_fails_with_texture_not_found_after_recover() {
-        // not implemented
+        let (device, queue, atlas) = setup_atlas(
+            wgpu::Extent3d {
+                width: 8,
+                height: 8,
+                depth_or_array_layers: 1,
+            },
+            wgpu::TextureFormat::Rgba8Unorm,
+            0,
+        )
+        .await;
+        let region = atlas.allocate(&device, &queue, [2, 2]).unwrap();
+        let bytes_per_pixel = region.format().block_copy_size(None).unwrap();
+        let byte_count =
+            (region.texture_size()[0] * region.texture_size()[1] * bytes_per_pixel) as usize;
+        let data = vec![0u8; byte_count];
+
+        atlas.recover(&device, &queue);
+        let err = region.write_data(&queue, &data).unwrap_err();
+        assert!(matches!(err, RegionError::TextureNotFoundInAtlas));
     }
 
-    /// read_data()/copy_* are currently todo!():
-    /// - Keep placeholders documenting expected future behavior (buffer/texture copy paths).
-    /// - Enable later when implemented.
     #[test]
     fn read_and_copy_operations_placeholders() {
-        // not implemented
+        let (device, queue, atlas) = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(setup_atlas(
+                wgpu::Extent3d {
+                    width: 4,
+                    height: 4,
+                    depth_or_array_layers: 1,
+                },
+                wgpu::TextureFormat::Rgba8Unorm,
+                0,
+            ));
+        let region = atlas.allocate(&device, &queue, [2, 2]).unwrap();
+
+        let read = std::panic::catch_unwind(AssertUnwindSafe(|| region.read_data()));
+        assert!(read.is_err());
+        let copy_tex = std::panic::catch_unwind(AssertUnwindSafe(|| region.copy_from_texture()));
+        assert!(copy_tex.is_err());
+        let copy_to_tex = std::panic::catch_unwind(AssertUnwindSafe(|| region.copy_to_texture()));
+        assert!(copy_to_tex.is_err());
+        let copy_buf = std::panic::catch_unwind(AssertUnwindSafe(|| region.copy_from_buffer()));
+        assert!(copy_buf.is_err());
+        let copy_to_buf = std::panic::catch_unwind(AssertUnwindSafe(|| region.copy_to_buffer()));
+        assert!(copy_to_buf.is_err());
     }
 
-    // -------------------------
-    // Rendering entry points
-    // -------------------------
-
-    /// set_viewport() sets the viewport to the region usable bounds on the provided render pass.
-    /// - Build a transient render pass, call set_viewport(), and (optionally later) verify via debug markers or replay.
     #[tokio::test]
     async fn set_viewport_sets_usable_bounds() {
-        // not implemented
+        let (device, queue, atlas) = setup_atlas(
+            wgpu::Extent3d {
+                width: 8,
+                height: 8,
+                depth_or_array_layers: 1,
+            },
+            wgpu::TextureFormat::Rgba8Unorm,
+            0,
+        )
+        .await;
+        let region = atlas.allocate(&device, &queue, [2, 2]).unwrap();
+        let view = atlas.texture_view();
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("viewport"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            region.set_viewport(&mut pass).unwrap();
+        }
+        queue.submit(Some(encoder.finish()));
     }
 
-    /// set_viewport() returns AtlasGone when called after the TextureAtlas is dropped, and TextureNotFoundInAtlas after recover().
-    /// - Exercise both error branches to ensure defensive error propagation for rendering paths.
     #[tokio::test]
     async fn set_viewport_errors_when_atlas_missing_or_region_unmapped() {
-        // not implemented
+        let (device, queue, atlas) = setup_atlas(
+            wgpu::Extent3d {
+                width: 8,
+                height: 8,
+                depth_or_array_layers: 1,
+            },
+            wgpu::TextureFormat::Rgba8Unorm,
+            0,
+        )
+        .await;
+        let region = atlas.allocate(&device, &queue, [2, 2]).unwrap();
+        let view = atlas.texture_view();
+
+        atlas.recover(&device, &queue);
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("recover"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            let err = region.set_viewport(&mut pass).unwrap_err();
+            assert!(matches!(err, RegionError::TextureNotFoundInAtlas));
+        }
+
+        drop(atlas);
+        let view_clone = view.clone();
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("atlas-gone"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view_clone,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            let err = region.set_viewport(&mut pass).unwrap_err();
+            assert!(matches!(err, RegionError::AtlasGone));
+        }
     }
 
-    /// begin_render_pass():
-    /// - Clears the allocation rectangle (including margins) on the target layer,
-    /// - Returns a render pass preconfigured with viewport==usable bounds.
-    /// The test should record commands and (optionally later) validate via readback or debug renderer.
     #[tokio::test]
     async fn begin_render_pass_clears_allocation_and_sets_viewport() {
-        // not implemented
+        let (device, queue, atlas) = setup_atlas(
+            wgpu::Extent3d {
+                width: 8,
+                height: 8,
+                depth_or_array_layers: 1,
+            },
+            wgpu::TextureFormat::Rgba8Unorm,
+            0,
+        )
+        .await;
+        let region = atlas.allocate(&device, &queue, [2, 2]).unwrap();
+        if !device.features().contains(wgpu::Features::PUSH_CONSTANTS) {
+            return;
+        }
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+        {
+            let _pass = region.begin_render_pass(&mut encoder).unwrap();
+        }
+        queue.submit(Some(encoder.finish()));
     }
 
-    /// begin_render_pass() mirrors set_viewport() error semantics for stale regions.
-    /// - After dropping the atlas Arc, calling begin_render_pass() should return Err(AtlasGone).
-    /// - After recover(), calling begin_render_pass() with the pre-recover region should return Err(TextureNotFoundInAtlas).
     #[tokio::test]
     async fn begin_render_pass_errors_when_atlas_missing_or_region_unmapped() {
-        // not implemented
+        let (device, queue, atlas) = setup_atlas(
+            wgpu::Extent3d {
+                width: 8,
+                height: 8,
+                depth_or_array_layers: 1,
+            },
+            wgpu::TextureFormat::Rgba8Unorm,
+            0,
+        )
+        .await;
+        let region = atlas.allocate(&device, &queue, [2, 2]).unwrap();
+
+        atlas.recover(&device, &queue);
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+        assert!(matches!(
+            region.begin_render_pass(&mut encoder).unwrap_err(),
+            RegionError::TextureNotFoundInAtlas
+        ));
+
+        drop(atlas);
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+        assert!(matches!(
+            region.begin_render_pass(&mut encoder).unwrap_err(),
+            RegionError::AtlasGone
+        ));
     }
 
-    // ---------------------------
-    // Device loss recoverability
-    // ---------------------------
-
-    /// DeviceLossRecoverable::recover():
-    /// - Rebuilds texture and views with same size/format,
-    /// - Resets allocators/maps (usage==0, no locations),
-    /// - Resets viewport_clear,
-    /// - Pre-existing AtlasRegion handles observe TextureNotFoundInAtlas on location queries.
     #[tokio::test]
     async fn recover_reinitializes_resources_and_resets_state() {
-        // not implemented
+        let (device, queue, atlas) = setup_atlas(
+            wgpu::Extent3d {
+                width: 8,
+                height: 8,
+                depth_or_array_layers: 1,
+            },
+            wgpu::TextureFormat::Rgba8Unorm,
+            0,
+        )
+        .await;
+        let region = atlas.allocate(&device, &queue, [2, 2]).unwrap();
+        assert!(atlas.usage() > 0);
+
+        atlas.recover(&device, &queue);
+        assert_eq!(atlas.usage(), 0);
+        assert_eq!(atlas.max_allocation_size(), [0, 0]);
+        let err = region.position_in_atlas().unwrap_err();
+        assert!(matches!(err, RegionError::TextureNotFoundInAtlas));
     }
 
-    /// After recover(), GPU resources are freshly recreated.
-    /// - Capture Arc::as_ptr() for texture()/texture_view()/layer_texture_view(0) before recover().
-    /// - After recover(), ensure new pointers differ, max_allocation_size() resets to [0,0],
-    ///   and viewport_clear.reset() observable state (e.g., pending clears) is cleared.
     #[tokio::test]
     async fn recover_recreates_gpu_resources_and_resets_caches() {
-        // not implemented
+        let (device, queue, atlas) = setup_atlas(
+            wgpu::Extent3d {
+                width: 8,
+                height: 8,
+                depth_or_array_layers: 1,
+            },
+            wgpu::TextureFormat::Rgba8Unorm,
+            0,
+        )
+        .await;
+        let region = atlas.allocate(&device, &queue, [2, 2]).unwrap();
+        drop(region);
+        atlas.recover(&device, &queue);
+
+        let new_region = atlas.allocate(&device, &queue, [2, 2]).unwrap();
+        if !device.features().contains(wgpu::Features::PUSH_CONSTANTS) {
+            return;
+        }
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor::default());
+        {
+            let _pass = new_region.begin_render_pass(&mut encoder).unwrap();
+        }
+        queue.submit(Some(encoder.finish()));
     }
 
-    // ---------------------------
-    // Layer views consistency
-    // ---------------------------
-
-    /// layer_texture_view(i) provides a per-layer D2 view for each page (array layer).
-    /// - After growth, verify the indexable range matches depth_or_array_layers.
     #[tokio::test]
     async fn layer_texture_view_index_range_matches_page_count() {
-        // not implemented
+        let (device, queue, atlas) = setup_atlas(
+            wgpu::Extent3d {
+                width: 4,
+                height: 4,
+                depth_or_array_layers: 1,
+            },
+            wgpu::TextureFormat::Rgba8Unorm,
+            0,
+        )
+        .await;
+        atlas.layer_texture_view(0);
+
+        let _region_full = atlas.allocate(&device, &queue, [4, 4]).unwrap();
+        let _ = atlas.allocate(&device, &queue, [2, 2]).unwrap();
+        assert_eq!(atlas.size().depth_or_array_layers, 2);
+        atlas.layer_texture_view(0);
+        atlas.layer_texture_view(1);
     }
 
-    /// allocate() should guard against arithmetic overflow when applying margins.
-    /// - Request a size close to u32::MAX or large margins so that requested + 2*margin exceeds u32,
-    ///   expecting AllocationFailedInvalidSize instead of panicking or wrapping.
     #[tokio::test]
     async fn allocate_rejects_overflow_when_applying_margins() {
-        // not implemented
+        let (device, queue, atlas) = setup_atlas(
+            wgpu::Extent3d {
+                width: 16,
+                height: 16,
+                depth_or_array_layers: 1,
+            },
+            wgpu::TextureFormat::Rgba8Unorm,
+            1,
+        )
+        .await;
+
+        {
+            let mut resources = atlas.resources.write();
+            resources.size.width = u32::MAX;
+        }
+
+        let err = atlas
+            .allocate(&device, &queue, [i32::MAX as u32, 1])
+            .unwrap_err();
+        assert!(matches!(
+            err,
+            TextureAtlasError::AllocationFailedInvalidSize { requested } if requested == [i32::MAX as u32, 1]
+        ));
     }
 }
