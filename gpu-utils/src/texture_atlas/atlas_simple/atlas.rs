@@ -1392,6 +1392,10 @@ mod tests {
 
     #[test]
     fn read_and_copy_operations_placeholders() {
+        // NOTE:
+        // These methods are currently unimplemented (todo!) and are expected to panic.
+        // If they are implemented to return a Result (Err) in the future, this test must be updated/replaced.
+        // To make the intent explicit, we assert they panic by using catch_unwind.
         let (device, queue, atlas) = tokio::runtime::Runtime::new()
             .unwrap()
             .block_on(setup_atlas(
@@ -1415,6 +1419,28 @@ mod tests {
         assert!(copy_buf.is_err());
         let copy_to_buf = std::panic::catch_unwind(AssertUnwindSafe(|| region.copy_to_buffer()));
         assert!(copy_to_buf.is_err());
+    }
+
+    // Skeleton for when read/copy APIs return Result<_, RegionError> in the future.
+    // After implementation, remove #[ignore] and assert specific Err variants.
+    #[ignore]
+    #[tokio::test]
+    async fn read_and_copy_operations_return_error_when_implemented() {
+        let (device, queue, atlas) = setup_atlas(
+            wgpu::Extent3d {
+                width: 4,
+                height: 4,
+                depth_or_array_layers: 1,
+            },
+            wgpu::TextureFormat::Rgba8Unorm,
+            0,
+        )
+        .await;
+        let region = atlas.allocate(&device, &queue, [2, 2]).unwrap();
+
+        // FIXME: After implementation, check concrete Err variants
+        let _ = region; // placate lint
+        // e.g., assert!(matches!(region.read_data(), Err(RegionError::...)));
     }
 
     #[tokio::test]
@@ -1535,6 +1561,86 @@ mod tests {
             let _pass = region.begin_render_pass(&mut encoder).unwrap();
         }
         queue.submit(Some(encoder.finish()));
+    }
+
+    // Verify allocation succeeds at equality boundary (requested + 2*margin == atlas_size)
+    #[tokio::test]
+    async fn allocate_accepts_size_equal_to_atlas_including_margins() {
+        let margin = 1;
+        let size = wgpu::Extent3d {
+            width: 16,
+            height: 16,
+            depth_or_array_layers: 1,
+        };
+        let (device, queue, atlas) =
+            setup_atlas(size, wgpu::TextureFormat::Rgba8Unorm, margin).await;
+
+        // 14 + 2*1 == 16 -> exactly fits
+        let region = atlas.allocate(&device, &queue, [14, 14]).unwrap();
+        assert_eq!(region.texture_size(), [14, 14]);
+        assert_eq!(region.allocation_size(), [16, 16]);
+        let (page_index, _uv) = region.position_in_atlas().unwrap();
+        assert_eq!(page_index, 0);
+    }
+
+    // Verify translate_uv maps the midpoint linearly
+    #[tokio::test]
+    async fn translate_uv_maps_midpoint_linearly() {
+        let (device, queue, atlas) = setup_atlas(
+            wgpu::Extent3d {
+                width: 16,
+                height: 16,
+                depth_or_array_layers: 1,
+            },
+            wgpu::TextureFormat::Rgba8Unorm,
+            1,
+        )
+        .await;
+        let region = atlas.allocate(&device, &queue, [6, 4]).unwrap();
+
+        let (_, uv) = region.position_in_atlas().unwrap();
+        let mid = region.translate_uv(&[[0.5, 0.5]]).unwrap();
+        let expected = [(uv.min.x + uv.max.x) * 0.5, (uv.min.y + uv.max.y) * 0.5];
+        let got = mid[0];
+        let eps = 1e-6;
+        assert!(
+            (got[0] - expected[0]).abs() < eps,
+            "x midpoint mismatch: got={}, expected={}",
+            got[0],
+            expected[0]
+        );
+        assert!(
+            (got[1] - expected[1]).abs() < eps,
+            "y midpoint mismatch: got={}, expected={}",
+            got[1],
+            expected[1]
+        );
+    }
+
+    // Verify usage accumulates across multiple pages
+    #[tokio::test]
+    async fn usage_accumulates_across_pages() {
+        let size = wgpu::Extent3d {
+            width: 4,
+            height: 4,
+            depth_or_array_layers: 1,
+        };
+        let (device, queue, atlas) = setup_atlas(size, wgpu::TextureFormat::Rgba8Unorm, 0).await;
+
+        let r0 = atlas.allocate(&device, &queue, [4, 4]).unwrap(); // fills page 0
+        let usage_after_r0 = atlas.usage();
+        assert_eq!(usage_after_r0, allocation_area(&r0));
+
+        let r1 = atlas.allocate(&device, &queue, [1, 1]).unwrap(); // goes to page 1
+        let usage_after_r1 = atlas.usage();
+        assert_eq!(atlas.size().depth_or_array_layers, 2);
+        assert_eq!(usage_after_r1, allocation_area(&r0) + allocation_area(&r1));
+
+        drop(r0);
+        assert_eq!(atlas.usage(), allocation_area(&r1));
+
+        drop(r1);
+        assert_eq!(atlas.usage(), 0);
     }
 
     #[tokio::test]
